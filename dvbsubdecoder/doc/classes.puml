@@ -1,0 +1,158 @@
+/*****************************************************************************
+* If not stated otherwise in this file or this component's LICENSE file the
+* following copyright and licenses apply:
+*
+* Copyright 2021 Liberty Global Service B.V.#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*****************************************************************************/
+
+/**
+@startuml
+
+class UserApp {
+--
+User application
+}
+
+class UserDecInstance {
+--
+User decoder instance.
+}
+
+class Decoder {
+--
+Top level logic of the decoder
+}
+
+class DecoderClient <<interface>> {
+--
+STC provider callbacks
+Gfx memory provider callbacks
+Rendering callbacks
+}
+
+class Allocator <<interface>> {
+--
+Allocator that uses memory
+given by the user.
+}
+
+class Storage {
+--
+Storage for all data.
+}
+
+class PesBuffer {
+--
+Stores PES data
+}
+
+class Database {
+--
+Parses subtitles elements.
+}
+
+class Presenter {
+--
+Responsible for rendering
+}
+
+class Parser {
+--
+Responsible for data processing
+}
+
+class Database {
+}
+
+class PixmapAllocator {
+}
+
+class ClutObjectPool {
+}
+
+class RegionObjectPool {
+}
+
+class ObjectPool<T> {
+}
+
+class Display {
+--
+Dislay definition
+}
+
+class Page {
+--
+Current page segments
+}
+
+class Pixmap {
+--
+Region objects pixmaps
+}
+
+class Clut {
+--
+Colour lookup tables
+}
+
+class Region {
+--
+Region 
+}
+
+class Status {
+--
+Configuration
+Validity flag
+}
+
+UserApp o..> UserDecInstance
+
+UserDecInstance o..> Decoder
+UserDecInstance o..> Allocator
+UserDecInstance o..> DecoderClient
+
+Decoder *--> Storage
+Decoder *--> Parser
+Decoder *--> Presenter
+Decoder ..> DecoderClient : <<uses>>
+Decoder ..> Allocator : <<uses>>
+
+Storage *--> PesBuffer
+Storage *--> Database
+Storage *--> PixmapAllocator
+
+Parser ..> PesBuffer : <<uses>>
+Parser ..> Database : <<uses>>
+
+Presenter ..> Database : <<uses>>
+
+Database ..> PixmapAllocator : <<uses>>
+Database *--> Status
+Database *--> Display
+Database *--> Page
+Database *--> ClutObjectPool
+Database *--> RegionObjectPool
+Database *--> PixmapObjectPool
+
+RegionObjectPool --|> ObjectPool
+ClutObjectPool --|> ObjectPool
+PixmapObjectPool --|> ObjectPool
+
+RegionObjectPool *--> Region
+ClutObjectPool *--> Clut
+PixmapObjectPool *--> Pixmap
+
+@enduml
+*/

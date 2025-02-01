@@ -1,0 +1,119 @@
+/*****************************************************************************
+* If not stated otherwise in this file or this component's LICENSE file the
+* following copyright and licenses apply:
+*
+* Copyright 2021 Liberty Global Service B.V.#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*****************************************************************************/
+
+/**
+@startuml
+
+[->  Decoder : draw()
+
+Decoder  -> Presenter : draw()
+
+Presenter  -> Database : getStatus()
+Presenter <-- Database : status
+
+alt if display definition modified
+
+Presenter  -> DecoderClient : setDisplayBounds()
+Presenter <-- DecoderClient
+
+end
+
+alt force redraw requested
+
+Presenter  -> Status: removeAllObjects()
+Presenter <-- Status
+Presenter  -> DecoderClient : clear(screen rectangle)
+Presenter <-- DecoderClient
+
+end
+
+Presenter  -> Status : markAllObjectsAsRemoved()
+Presenter <-- Status
+
+Presenter  -> Database : getPage()
+Presenter <-- Database : page
+
+loop process regions
+
+Presenter  -> Page : getRegionInfo(i)
+Presenter <-- Page : regionInfo
+
+Presenter  -> Database : getRegion(regionInfo.id)
+Presenter <-- Database : region
+
+loop process objects
+
+Presenter  -> Region : getObjectInfo(j)
+Presenter <-- Region : objectInfo
+
+Presenter  -> Database : getObject(objectInfo.id)
+Presenter <-- Database : object
+
+Presenter  -> Presenter : calculateRectangle(regionInfo,\n objectInfo, object)
+
+Presenter  -> Status : markAsValid(object.version,\n objectRectangle)
+Presenter <-- Status : foundFlag
+
+alt if not foundFlag
+
+Presenter  -> Status : addObject(object.version,\n objectRectangle)
+Presenter <-- Status
+
+end
+
+end
+
+loop render objects - clearing
+
+Presenter  -> Status : getObjectStatus(i)
+Presenter <-- Status : objectStatus
+
+alt objectStatus is 'removed'
+
+Presenter  -> DecoderClient : clearRect
+Presenter <-- DecoderClient
+
+end
+
+end
+
+Presenter  -> Status : clearRemovedObjects()
+Presenter <-- Status
+
+loop render objects - drawing
+
+Presenter  -> Status : getObjectStatus(i)
+Presenter <-- Status : objectStatus
+
+alt objectStatus is 'new'
+
+Presenter  -> DecoderClient : drawRect
+Presenter <-- DecoderClient : drawRect
+
+end
+
+end
+
+Presenter  -> DecoderClient : drawFinished()
+Presenter <-- DecoderClient
+
+Decoder <-- Presenter
+
+[<-- Decoder
+
+@enduml
+*/

@@ -641,7 +641,7 @@ size_t CommandParser::handleG2G3(const uint8_t *data)
         { 0x7e,     0xe2, 0x94, 0x98       },// BOX DRAWINGS LIGHT UP AND LEFT
         { 0x7f,     0xe2, 0x94, 0x8c       },// BOX DRAWINGS LIGHT DOWN AND RIGHT
         /* G3 */
-        { 0xa0,     0xf0, 0x9f, 0x85, 0xb2 },// CC (replaced with NEGATIVE SQUARED LATIN CAPITAL LETTER C)
+        { 0xa0,     0xef, 0x84, 0x81 },// CC 
     }};
 
     for(const auto &el : code2utf8)

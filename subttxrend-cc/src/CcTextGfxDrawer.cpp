@@ -182,29 +182,29 @@ void TextGfxDrawer::setPenAttributes(PenAttributes penattrs)
     switch(penattrs.font_tag)
     {
     case PenFontStyle::CASUAL_FONT_TYPE:
-        fontName = "cinecavD casual";
+        fontName = "Cinecav Casual";
         break;
     case PenFontStyle::CURSIVE_FONT_TYPE:
-        fontName = "cinecavD script";
+        fontName = "Cinecav Script";
         break;
     case PenFontStyle::MONOSPACED_WITHOUT_SERIFS:
-        fontName = "cinecavD mono";
+        fontName = "Cinecav Mono";
         break;
     case PenFontStyle::MONOSPACED_WITH_SERIFS:
-        fontName = "cinecavD type";
+        fontName = "Cinecav Type";
         break;
     case PenFontStyle::PROPORTIONALLY_SPACED_WITHOUT_SERIFS:
-        fontName = "cinecavD sans";
+        fontName = "Cinecav Sans";
         break;
     case PenFontStyle::PROPORTIONALLY_SPACED_WITH_SERIFS:
-        fontName = "cinecavD serif";
+        fontName = "Cinecav Serif";
         break;
     case PenFontStyle::SMALL_CAPITALS:
-        fontName = "cinecavD smallcaps";
+        fontName = "Cinecav Smallcaps";
         break;
     case PenFontStyle::DEFAULT_OR_UNDEFINED:
     default:
-        fontName = "cinecavD mono";
+        fontName = "Cinecav Mono";
         break;
     }
 

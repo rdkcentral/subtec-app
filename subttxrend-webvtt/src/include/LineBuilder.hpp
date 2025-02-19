@@ -136,7 +136,7 @@ private:
     Converter       m_converter {1920, 1080};
     FontCachePtr    m_fontCache {std::make_unique<gfx::PrerenderedFontCache>()};
     
-    std::string     m_fontFamily {"cinecavD sans"};
+    std::string     m_fontFamily {"Cinecav Sans"};
     WebVTTAttributes    m_attributes;
 };
 

@@ -837,28 +837,28 @@ std::string LineBuilder::getFontFamily(WebVTTConfig config)
         switch(fontStyleAttribute)
         {
             case WebVTTAttributes::FontStyle::CASUAL_FONT_TYPE:
-                fontName = "cinecavD casual";
+                fontName = "Cinecav Casual";
                 break;
             case WebVTTAttributes::FontStyle::CURSIVE_FONT_TYPE:
-                fontName = "cinecavD script";
+                fontName = "Cinecav Script";
                 break;
             case WebVTTAttributes::FontStyle::MONOSPACED_WITHOUT_SERIFS:
-                fontName = "cinecavD mono";
+                fontName = "Cinecav Mono";
                 break;
             case WebVTTAttributes::FontStyle::MONOSPACED_WITH_SERIFS:
-                fontName = "cinecavD type";
+                fontName = "Cinecav Type";
                 break;
             case WebVTTAttributes::FontStyle::PROPORTIONALLY_SPACED_WITHOUT_SERIFS:
-                fontName = "cinecavD sans";
+                fontName = "Cinecav Sans";
                 break;
             case WebVTTAttributes::FontStyle::PROPORTIONALLY_SPACED_WITH_SERIFS:
-                fontName = "cinecavD serif";
+                fontName = "Cinecav Serif";
                 break;
             case WebVTTAttributes::FontStyle::SMALL_CAPITALS:
-                fontName = "cinecavD smallcaps";
+                fontName = "Cinecav Smallcaps";
                 break;
             case WebVTTAttributes::FontStyle::DEFAULT_OR_UNDEFINED:
-                fontName = "cinecavD mono";
+                fontName = "Cinecav Mono";
                 break;
         }
     }

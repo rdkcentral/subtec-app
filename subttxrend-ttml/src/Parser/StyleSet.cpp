@@ -27,6 +27,11 @@
 #include <string>
 #include <utility>
 #include <sstream>
+#include <fstream>
+#include <json/json.h>
+#include <subttxrend/common/Logger.hpp>
+
+#define BUILD_CFG_FILE_PATH "/var/sky/build/buildConfig.json"
 
 namespace subttxrend
 {
@@ -189,6 +194,9 @@ StyleSet::DisplayAlign parseDisplayAlign(const std::string& text)
     return displayAlign;
 }
 
+common::Logger logger("TtmlEngine", "StyleSet");
+
+
 } // namespace anonymous
 
 const ColorArgb& StyleSet::getColor() const
@@ -256,6 +264,44 @@ bool operator==(const StyleSet& lhs,
             && (lhs.m_lineHeight == rhs.m_lineHeight) && (lhs.m_textOutline == rhs.m_textOutline);
 }
 
+std::string parseRegionInfo()
+{
+    std::string key = "country";
+    std::string region = "us";
+
+    std::ifstream file(BUILD_CFG_FILE_PATH);
+    if (!file.is_open()) {
+        logger.info("%s Unable to open buildconfig.json, returning default value (%s) ", __LOGGER_FUNC__, region.c_str());
+        return region;
+    }
+
+    std::stringstream jsonString;
+    jsonString << file.rdbuf();
+    file.close();
+
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    Json::Value jsonData;
+
+    bool parsingSuccessful = parseFromStream(builder, jsonString, &jsonData, &errors);
+    if (!parsingSuccessful) {
+        logger.info("%s Error parsing JSON string:%s, returning default value (%s) ", __LOGGER_FUNC__, errors.c_str(), region.c_str());
+	return region;
+    }
+
+    if (jsonData.isMember(key)){
+        region = jsonData[key].asString();
+	logger.info("%s Parsed region info, region:%s ", __LOGGER_FUNC__, region.c_str());
+    }
+    else {
+         logger.info("%s Region info not found in buildconfig.json, returning default value (%s) ", __LOGGER_FUNC__, region.c_str());
+    }
+
+    return region;
+
+}
+
+
 void StyleSet::parseAttribute(const std::string& name,
                               const std::string& value)
 {
@@ -279,7 +325,10 @@ void StyleSet::parseAttribute(const std::string& name,
             m_fontSize = sizeResult.size;
         }
     } else if (name == "textAlign") {
-        m_textAlign = parseTextAlign(value);
+        if(parseRegionInfo() == "it")
+            logger.info("%s LLAMA-8155: Ignoring incoming textAlign property (%s) - defaulting to \"center\"", __LOGGER_FUNC__, value.c_str());
+        else
+            m_textAlign = parseTextAlign(value);
     } else if (name == "displayAlign") {
         m_displayAlign = parseDisplayAlign(value);
     } else if (name == "fontFamily") {

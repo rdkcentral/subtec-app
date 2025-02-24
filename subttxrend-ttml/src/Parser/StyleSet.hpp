@@ -72,6 +72,7 @@ public:
 private:
     void parseAttribute(const std::string& name,
                         const std::string& value);
+    std::string parseRegionInfo();
 
     gfx::ColorArgb m_color{gfx::ColorArgb::WHITE};
     gfx::ColorArgb m_backgroundColor{gfx::ColorArgb::TRANSPARENT};

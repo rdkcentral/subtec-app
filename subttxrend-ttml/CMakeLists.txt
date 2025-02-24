@@ -119,6 +119,7 @@ set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_TTML_PUBLIC_HEADERS})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} ${LIBXML2_LIBRARIES})
+target_link_libraries(${LIBRARY_NAME} jsoncpp)
 
 #
 # Install rules

@@ -264,7 +264,7 @@ bool operator==(const StyleSet& lhs,
             && (lhs.m_lineHeight == rhs.m_lineHeight) && (lhs.m_textOutline == rhs.m_textOutline);
 }
 
-std::string parseRegionInfo()
+std::string StyleSet::parseRegionInfo()
 {
     std::string key = "country";
     std::string region = "us";

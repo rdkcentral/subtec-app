@@ -83,6 +83,11 @@ WaylandBackendEgl::WaylandBackendEgl(BackendListener* listener) :
 
 WaylandBackendEgl::~WaylandBackendEgl()
 {
+    if (!eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT))
+    {
+        g_logger.error("%s - cannot set current EGL context (%d)", __func__,
+                eglGetError());
+    }
     if(m_eglContext)
     {
         eglDestroyContext(m_eglDisplay, m_eglContext);
@@ -95,6 +100,12 @@ WaylandBackendEgl::~WaylandBackendEgl()
     {
         wl_egl_window_destroy(m_eglWindow);
     }
+    if(eglTerminate(m_eglDisplay) == EGL_FALSE)
+    {
+         g_logger.error("%s - Failed to terminate egl display (%d)", __func__,
+                eglGetError());
+    }
+    eglReleaseThread();
 }
 
 bool WaylandBackendEgl::initRendering()

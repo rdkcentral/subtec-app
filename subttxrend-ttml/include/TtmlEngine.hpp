@@ -58,7 +58,7 @@ public:
      */
     virtual void init(const common::ConfigProvider* configProvider,
                       gfx::Window* gfxWindow,
-                      common::Properties const& properties) = 0;
+                      common::Properties const& properties, const std::string region) = 0;
 
     /**
      * Notifies size of related video content. Used for position and size calculations.

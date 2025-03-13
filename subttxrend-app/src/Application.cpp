@@ -62,7 +62,9 @@ void Application::runAsync()
 
     m_logger.osinfo(__LOGGER_FUNC__, " - window created ", m_gfxWindow.get(), ", initializing controller");
 
-    m_controller = std::make_unique<Controller>(m_configuration, m_gfxEngine, m_gfxWindow);
+    m_region = m_configuration.getRegionInfo();
+
+    m_controller = std::make_unique<Controller>(m_configuration, m_gfxEngine, m_gfxWindow, m_region);
 
     auto socketPath = m_configuration.getMainContextSocketPath();
     m_logger.osinfo( __LOGGER_FUNC__, " - Creating unix socket source with path='", socketPath, "'.");

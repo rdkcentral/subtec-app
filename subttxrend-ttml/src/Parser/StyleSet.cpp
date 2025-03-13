@@ -27,6 +27,7 @@
 #include <string>
 #include <utility>
 #include <sstream>
+#include <subttxrend/common/Logger.hpp>
 
 namespace subttxrend
 {
@@ -189,6 +190,9 @@ StyleSet::DisplayAlign parseDisplayAlign(const std::string& text)
     return displayAlign;
 }
 
+common::Logger logger("TtmlEngine", "StyleSet");
+
+
 } // namespace anonymous
 
 const ColorArgb& StyleSet::getColor() const
@@ -240,6 +244,10 @@ void StyleSet::setStyleId(const std::string& styleId)
 {
     m_styleId = styleId;
 }
+void StyleSet::setRegionInfo(const std::string region)
+{
+    m_region = region;
+}
 void StyleSet::merge(const Attributes& attributes)
 {
     for (const auto& attr : attributes) {
@@ -279,7 +287,10 @@ void StyleSet::parseAttribute(const std::string& name,
             m_fontSize = sizeResult.size;
         }
     } else if (name == "textAlign") {
-        m_textAlign = parseTextAlign(value);
+        if(m_region == "it")
+            logger.info("%s LLAMA-8155: Ignoring incoming textAlign property (%s) - defaulting to \"center\"", __LOGGER_FUNC__, value.c_str());
+        else
+            m_textAlign = parseTextAlign(value);
     } else if (name == "displayAlign") {
         m_displayAlign = parseDisplayAlign(value);
     } else if (name == "fontFamily") {

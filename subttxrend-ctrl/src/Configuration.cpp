@@ -25,6 +25,11 @@
 #include <subttxrend/common/Logger.hpp>
 #include <subttxrend/common/StringUtils.hpp>
 
+#include <fstream>
+#include <json/json.h>
+
+#define BUILD_CFG_FILE_PATH "/var/sky/build/buildConfig.json"
+
 namespace subttxrend
 {
 namespace app
@@ -155,6 +160,42 @@ const char* Configuration::getValue(const std::string& key) const
     }
 
     return m_configFile.getCstr(key);
+}
+
+std::string Configuration::getRegionInfo() const
+{
+    std::string key = "country";
+    std::string region = "us";
+
+    std::ifstream file(BUILD_CFG_FILE_PATH);
+    if (!file.is_open()) {
+        g_logger.error("%s Unable to open buildconfig.json, returning default value (%s) ", __func__, region.c_str());
+        return region;
+    }
+
+    std::stringstream jsonString;
+    jsonString << file.rdbuf();
+    file.close();
+
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    Json::Value jsonData;
+
+    bool parsingSuccessful = parseFromStream(builder, jsonString, &jsonData, &errors);
+    if (!parsingSuccessful) {
+        g_logger.error("%s Error parsing JSON string:%s, returning default value (%s) ", __func__, errors.c_str(), region.c_str());
+        return region;
+    }
+
+    if (jsonData.isMember(key)){
+        region = jsonData[key].asString();
+        g_logger.info("%s Parsed region info, region:%s ", __func__, region.c_str());
+    }
+    else {
+        g_logger.error("%s Region info not found in buildconfig.json, returning default value (%s) ", __func__, region.c_str()); 
+    }
+
+    return region;
 }
 
 } // namespace app

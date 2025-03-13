@@ -68,7 +68,8 @@ void TtmlEngineImpl::clear()
 
 void TtmlEngineImpl::init(const common::ConfigProvider* configProvider,
                           gfx::Window* gfxWindow,
-                          common::Properties const& properties)
+                          common::Properties const& properties,
+                          const std::string region)
 {
     m_logger.osinfo(__LOGGER_FUNC__);
 
@@ -82,7 +83,7 @@ void TtmlEngineImpl::init(const common::ConfigProvider* configProvider,
         createTimingDoc();
     }
 
-    m_parser = std::make_unique<Parser>();
+    m_parser = std::make_unique<Parser>(region);
     m_renderer = std::make_unique<TtmlRenderer>(configProvider, gfxWindow, m_dataDumper);
 
     m_docTransformer.setProperties(properties);

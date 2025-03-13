@@ -33,13 +33,14 @@ namespace app {
 TtmlController::TtmlController(const protocol::PacketChannelSpecific& dataPacket,
                                const common::ConfigProvider& config,
                                gfx::WindowPtr const& gfxWindow,
-                               common::Properties const& properties)
+                               common::Properties const& properties,
+                               const std::string region)
     : m_channel()
     , m_logger("App", "TtmlController", this)
     , m_ttmlEngine(ttmlengine::Factory::createTtmlEngine())
 {
     m_logger.ostrace(__LOGGER_FUNC__, " created");
-    m_ttmlEngine->init(&config, gfxWindow.get(), properties);
+    m_ttmlEngine->init(&config, gfxWindow.get(), properties, region);
     select(dataPacket);
 }
 

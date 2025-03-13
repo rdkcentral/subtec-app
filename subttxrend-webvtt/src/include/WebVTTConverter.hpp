@@ -130,8 +130,8 @@ private:
     inline int vhToPixels(T vh) const { return (int)(((float)m_displayHeight / 100.0f) * vh); }
 
     inline float hundredthsToV(float hundredths) const { return hundredths / 100.0f; }
-    int m_displayWidth {1920};
-    int m_displayHeight {1080};
+    int m_displayWidth {1280};
+    int m_displayHeight {720};
 
     int        m_defaultLineHeight {constants::kDefaultLineHeight};  //vh
     int        m_defaultFontHeight {constants::kDefaultFontHeight};  //vh

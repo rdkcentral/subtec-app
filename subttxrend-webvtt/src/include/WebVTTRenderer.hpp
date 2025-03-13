@@ -101,7 +101,7 @@ private:
 
     WinPtr              m_gfxPtr;
 
-    const gfx::Size     DEFAULT_SURFACE_SIZE{1920, 1080};
+    const gfx::Size     DEFAULT_SURFACE_SIZE{1280, 720};
     gfx::Size           m_surfaceSize{DEFAULT_SURFACE_SIZE};
     WebVTTConfig        m_config;
 

@@ -111,7 +111,7 @@ private:
     /** Window pointer. */
     gfx::Window* const m_gfxWindow;
 
-    const gfx::Size DEFAULT_SURFACE_SIZE{1920, 1080};
+    const gfx::Size DEFAULT_SURFACE_SIZE{1280, 720};
     gfx::Size m_surfaceSize{DEFAULT_SURFACE_SIZE};
 
     /** Value converter. */

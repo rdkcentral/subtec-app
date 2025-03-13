@@ -32,7 +32,7 @@ namespace ttmlengine
 
 namespace {
 
-const gfx::Size MAX_SURFACE_SIZE{1920, 1080};
+const gfx::Size MAX_SURFACE_SIZE{1280, 720};
 // 1x1 is special case for UI
 const gfx::Size MIN_SURFACE_SIZE{2, 2};
 

@@ -42,7 +42,7 @@ namespace
 
 common::Logger g_logger("Gfx", "WindowImpl");
 
-const gfx::Size DEFAULT_WINDOW_SIZE{1920, 1080};
+const gfx::Size DEFAULT_WINDOW_SIZE{1280, 720};
 
 class NullEngineHooks : public EngineHooks
 {

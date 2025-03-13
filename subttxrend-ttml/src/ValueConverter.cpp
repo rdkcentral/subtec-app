@@ -34,7 +34,7 @@ namespace
 common::Logger logger("TtmlEngine", "ValueConverter");
 }
 
-gfx::Size const ValueConverter::MAX_SURFACE_SIZE{1920, 1080};
+gfx::Size const ValueConverter::MAX_SURFACE_SIZE{1280, 720};
 
 gfx::Size ValueConverter::setSourceSize(gfx::Size const& sourceSize)
 {

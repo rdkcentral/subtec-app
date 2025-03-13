@@ -133,7 +133,7 @@ private:
     std::string     getFontFamily(WebVTTConfig config);
     void            getUserDefinedColorAttributes(Style &style);
 
-    Converter       m_converter {1920, 1080};
+    Converter       m_converter {1280, 720};
     FontCachePtr    m_fontCache {std::make_unique<gfx::PrerenderedFontCache>()};
     
     std::string     m_fontFamily {"Cinecav Sans"};

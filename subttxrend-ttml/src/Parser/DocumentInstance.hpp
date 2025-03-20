@@ -74,6 +74,11 @@ public:
         m_currentImageElement = std::shared_ptr<ImageElement>();
     }
 
+    void setRegionInfo(const std::string region)
+    {
+	    m_regionInfo = region;
+    }
+
     /**
      * Adds element to the document.
      *
@@ -308,6 +313,7 @@ public:
 
                                     auto styleId = content->getStyleId();
                                     textChunk.m_style.setStyleId(styleId);
+                                    textChunk.m_style.setRegionInfo(m_regionInfo);
                                     textChunk.m_style.merge(content->getStyleAttributes());
 
                                     m_logger.ostrace(__LOGGER_FUNC__, " chunk: \'", textChunk.m_text, "\'", ", style: ", textChunk.m_style.toStr());
@@ -591,6 +597,8 @@ private:
 
     /** List of found content nodes. */
     std::vector<std::shared_ptr<BodyElement> > m_content;
+
+    std::string m_regionInfo;
 
     /** Logger object. */
     mutable subttxrend::common::Logger m_logger;

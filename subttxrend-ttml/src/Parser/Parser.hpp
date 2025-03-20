@@ -44,10 +44,11 @@ public:
     /**
      * Constructor.
      */
-    Parser() :
+    Parser(const std::string region) :
             m_saxParser(*this), m_logger("TtmlEngine", "Parser")
     {
-        // noop
+
+        m_docInstance.setRegionInfo(region);
     }
 
     /**

@@ -59,6 +59,9 @@ public:
      */
     std::string getMainContextSocketPath() const;
 
+
+    std::string getRegionInfo() const;
+
     /**
      * Returns teletext configuration.
      *

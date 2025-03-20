@@ -155,6 +155,7 @@ target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDTTML_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDWEBVTT_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} pthread)
 target_link_libraries(${LIBRARY_NAME} boost_system)
+target_link_libraries(${LIBRARY_NAME} jsoncpp)
 
 #
 # Install rules

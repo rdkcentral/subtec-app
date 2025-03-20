@@ -51,7 +51,8 @@ class TtmlController final : public ControllerInterface
     TtmlController(const protocol::PacketChannelSpecific& dataPacket,
                    const common::ConfigProvider& config,
                    gfx::WindowPtr const& gfxWindow,
-                   common::Properties const& properties);
+                   common::Properties const& properties,
+                   const std::string region);
     ~TtmlController();
 
     void process() override;

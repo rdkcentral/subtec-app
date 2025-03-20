@@ -73,10 +73,11 @@ constexpr const std::chrono::milliseconds as_data_acq_timeout{2000};
 
 } /* namespace  */
 
-Controller::Controller(Configuration const& config, gfx::EnginePtr gfxEngine, gfx::WindowPtr gfxWindow)
+Controller::Controller(Configuration const& config, gfx::EnginePtr gfxEngine, gfx::WindowPtr gfxWindow, const std::string region)
     : m_config(config)
     , m_gfxEngine(gfxEngine)
     , m_gfxWindow(gfxWindow)
+    , m_region(region)
     , m_fontCache{std::make_shared<gfx::PrerenderedFontCache>()}
     , m_stcProvider()
     , m_logger("App", "Controller", this)
@@ -378,7 +379,7 @@ void Controller::processTtmlSelection(const protocol::PacketTtmlSelection& packe
         m_logger.oserror(__LOGGER_FUNC__, " exception: ", e.what());
     }
 
-    pushController(std::make_shared<TtmlController>(packet, m_config.getTtmlConfig(), m_gfxWindow, properties));
+    pushController(std::make_shared<TtmlController>(packet, m_config.getTtmlConfig(), m_gfxWindow, properties, m_region));
 }
 
 void Controller::processWebvttSelection(const protocol::PacketWebvttSelection& packet)

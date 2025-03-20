@@ -69,6 +69,8 @@ private:
     /** Application window. */
     gfx::WindowPtr m_gfxWindow;
 
+    std::string m_region;
+
     /** Subtitle and teletext control object. */
     ControllerPtr m_controller;
     common::Logger m_logger;

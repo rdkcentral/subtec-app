@@ -21,6 +21,7 @@
 #include "ObjectFactory.hpp"
 
 #include <wayland-client.h>
+#include <xdg-shell-client-protocol.h>
 
 #include "Display.hpp"
 #include "Registry.hpp"
@@ -35,6 +36,9 @@
 #if defined(WESTEROS)
 #include "SimpleShell.hpp"
 #endif
+#include "XdgWmBase.hpp"
+#include "XdgSurface.hpp"
+#include "XdgToplevel.hpp"
 
 namespace waylandcpp
 {
@@ -218,6 +222,33 @@ KeyboardPtr ObjectFactory::create(wl_keyboard* wlObject)
     VersionAwareCreator<Keyboard> creator(wlObject);
 
     creator.processType<Keyboard1>();
+
+    return creator.getPointer();
+}
+
+XdgWmBasePtr ObjectFactory::create(xdg_wm_base* wlObject)
+{
+    VersionAwareCreator<XdgWmBase> creator(wlObject);
+
+    creator.processType<XdgWmBase1>();
+
+    return creator.getPointer();
+}
+
+XdgSurfacePtr ObjectFactory::create(xdg_surface* wlObject)
+{
+    VersionAwareCreator<XdgSurface> creator(wlObject);
+
+    creator.processType<XdgSurface1>();
+
+    return creator.getPointer();
+}
+
+XdgToplevelPtr ObjectFactory::create(xdg_toplevel* wlObject)
+{
+    VersionAwareCreator<XdgToplevel> creator(wlObject);
+
+    creator.processType<XdgToplevel1>();
 
     return creator.getPointer();
 }

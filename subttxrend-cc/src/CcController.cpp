@@ -69,7 +69,7 @@ bool Controller::init(gfx::Window* gfxWindow, std::shared_ptr<gfx::PrerenderedFo
 
 void Controller::shutdown()
 {
-    logger.info("%s", __func__);
+    logger.warning("%s", __func__);
 
     stop();
 
@@ -97,7 +97,7 @@ bool Controller::addData(const protocol::PacketData& dataPacket)
 
 void Controller::setActiveService(CeaType type, std::uint32_t serviceNo)
 {
-    logger.info("%s: type %d, service %d", __func__, (int) type, (int) serviceNo);
+    logger.warning("%s: type %d, service %d", __func__, (int) type, (int) serviceNo);
 
     if((type != activeType) || (serviceNo != activeService))
     {

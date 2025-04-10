@@ -58,7 +58,7 @@ CcSubController::CcSubController(protocol::PacketChannelSpecific const& packet, 
     , m_logger("App", "CcSubController")
     , m_fontCache{fontCache}
 {
-    m_logger.osinfo(__LOGGER_FUNC__, " created");
+    m_logger.oswarning(__LOGGER_FUNC__, " created");
     if (!m_controller.init(gfxWindow.get(), m_fontCache)) {
         m_logger.oserror(__LOGGER_FUNC__, " - init failed");
     }
@@ -95,7 +95,7 @@ void CcSubController::deactivate()
 
 void CcSubController::mute(bool muted)
 {
-    m_logger.osinfo(__LOGGER_FUNC__, " (", muted, ")");
+    m_logger.oswarning(__LOGGER_FUNC__, " (", muted, ")");
     if (muted) {
         m_controller.mute();
     } else {

@@ -178,7 +178,7 @@ public:
                                          LIBXML_PARSE_TERMINATION_MARKER);
         if (parseResult != 0)
         {
-            m_logger.oserror(__LOGGER_FUNC__, " error parsing chunk: ", parseResult);
+            m_logger.osinfo(__LOGGER_FUNC__, " error parsing chunk: ", parseResult);
         }
     }
 

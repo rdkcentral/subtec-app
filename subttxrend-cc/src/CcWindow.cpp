@@ -38,7 +38,7 @@ namespace
 //
 
 ScreenInfo screenInfo708 = {1280, 720, 1050, 600, 210, 75, {{15, 24}, {30, 48}, {25, 40}, {8, 12}}};
-ScreenInfo screenInfo608 = {1280, 720, 800, 600, 32, 15, {{15, 24}, {30, 48}, {25, 40}, {8,12}}};
+ScreenInfo screenInfo608 = {1280, 720, 1050, 600, 32, 15,  {{15, 24}, {30, 48}, {25, 40}, {8, 12}}};
 static const int HorizontalMargin = 5;
 }
 

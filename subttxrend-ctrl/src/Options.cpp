@@ -24,7 +24,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 Options::Options(int argc,
@@ -327,5 +327,5 @@ void Options::setValue(const Entry& entry,
     m_values[entry.m_key] = value;
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend

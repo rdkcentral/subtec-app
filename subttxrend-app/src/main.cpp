@@ -23,10 +23,10 @@
 #include <cstdlib>
 
 #include "Application.hpp"
-#include "Options.hpp"
+#include <subttxrend/ctrl/Options.hpp>
 
 using subttxrend::app::Application;
-using subttxrend::app::Options;
+using subttxrend::ctrl::Options;
 
 auto registerSignalListener()
 {

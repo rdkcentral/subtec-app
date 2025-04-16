@@ -41,6 +41,7 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 # Packages to use
 #
 find_package(LibGlib REQUIRED)
+find_package(LibSubTtxRendCtrl REQUIRED)
 find_package(LibSubTtxRendCommon REQUIRED)
 find_package(LibSubTtxRendProtocol REQUIRED)
 find_package(LibSubTtxRendSockSrc REQUIRED)
@@ -58,6 +59,7 @@ find_package(LibSubTtxRendWebvtt REQUIRED)
 #
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 include_directories(${LIBGLIB_INCLUDE_DIRS})
+include_directories(${LIBSUBTTXRENDCTRL_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDCOMMON_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDPROTOCOL_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDSOCKSRC_INCLUDE_DIRS})
@@ -107,16 +109,6 @@ endif(DOXYGEN_FOUND)
 #
 set(SUBTTXREND_APP_SOURCES
     src/main.cpp
-    src/Configuration.cpp
-    src/DvbSubController.cpp
-    src/Options.cpp
-    src/PesFinder.cpp
-    src/TtxController.cpp
-    src/TtmlController.cpp
-    src/WebvttController.cpp
-    src/StcProvider.cpp
-    src/ScteSubController.cpp
-    src/CcSubController.cpp
     src/Controller.cpp
     src/Application.cpp
 )
@@ -128,6 +120,7 @@ set(APP_NAME "subttxrend-app")
 add_executable(${APP_NAME} ${SUBTTXREND_APP_SOURCES})
 set_property(TARGET ${APP_NAME} PROPERTY CXX_STANDARD 14)
 target_link_libraries(${APP_NAME} ${LIBGLIB_LIBRARIES})
+target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDCTRL_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDPROTOCOL_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDSOCKSRC_LIBRARIES})

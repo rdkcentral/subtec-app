@@ -30,7 +30,7 @@ using subttxrend::webvttengine::WebVTTAttributes;
 using subttxrend::protocol::PacketSetCCAttributes;
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 WebvttController::WebvttController(const protocol::PacketChannelSpecific& dataPacket,
                                const common::ConfigProvider& config,
@@ -174,6 +174,6 @@ void WebvttController::processSetCCAttributesPacket(const PacketSetCCAttributes&
     m_webvttEngine->setAttributes(attributes);
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 

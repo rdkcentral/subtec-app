@@ -82,7 +82,7 @@ public:
      * @return
      *      Handle value.
      */
-    operator T()
+    operator T() const
     {
         return m_handle;
     }

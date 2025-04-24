@@ -101,14 +101,18 @@ bool WaylandBackend::checkRequiredBaseInterfaces() const
         g_logger.info("%s - Found compositor", __func__);
     }
 
-    if (!m_shell)
+    if (m_shell)
     {
-        g_logger.error("%s - Can't find shell", __func__);
-        return false;
+	g_logger.info("%s - Found shell", __func__);
+    }
+    else if (m_xdgWmBase)
+    {
+        g_logger.info("%s - Found XDG", __func__);
     }
     else
     {
-        g_logger.info("%s - Found shm", __func__);
+        g_logger.error("%s - Can't find shell or XDG", __func__);
+        return false;
     }
 
     return true;
@@ -127,23 +131,57 @@ bool WaylandBackend::createSurface()
         g_logger.info("%s - Created surface", __func__);
     }
 
-    m_shellSurface = m_shell->getShellSurface<waylandcpp::ShellSurface1>(
-            m_surface);
-    if (!m_shellSurface)
+    if (m_shell)
     {
-        g_logger.error("%s - Can't create shell surface", __func__);
-        return false;
+        m_shellSurface = m_shell->getShellSurface<waylandcpp::ShellSurface1>(
+                m_surface);
+        if (!m_shellSurface)
+        {
+            g_logger.error("%s - Can't create shell surface", __func__);
+            return false;
+        }
+        else
+        {
+            g_logger.info("%s - Created shell surface", __func__);
+        }
+        m_shellSurface->setTopLevel();
+//        m_shellSurface->setFullScreen();
+#ifdef PC_BUILD
+        m_shellSurface->setMaximized(nullptr);
+#endif
+        m_shellSurface->setListener(this);
+    }
+    else if (m_xdgWmBase)
+    {
+        m_xdgSurface = m_xdgWmBase->getXdgSurface<waylandcpp::XdgSurface1>(m_surface);
+        if (!m_xdgSurface)
+        {
+            g_logger.error("%s - Can't create XDG surface", __func__);
+            return false;
+        }
+        else
+        {
+            g_logger.info("%s - Created XDG surface", __func__);
+        }
+        m_xdgSurface->setListener(this);
+
+        m_xdgToplevel = m_xdgSurface->getToplevel<waylandcpp::XdgToplevel1>();
+        if (!m_xdgToplevel)
+        {
+            g_logger.error("%s - Can't create XDG toplevel", __func__);
+            return false;
+        }
+        else
+        {
+            g_logger.info("%s - Created XDG toplevel", __func__);
+        }
+        m_xdgToplevel->setListener(this);
     }
     else
     {
-        g_logger.info("%s - Created shell surface", __func__);
+            g_logger.error("%s - No shell or XDG", __func__);
+            return false;
     }
-    m_shellSurface->setTopLevel();
-//    m_shellSurface->setFullScreen();
-#ifdef PC_BUILD
-    m_shellSurface->setMaximized(nullptr);
-#endif
-    m_shellSurface->setListener(this);
 
     return true;
 }
@@ -288,6 +326,19 @@ void WaylandBackend::global(waylandcpp::RegistryPtr /*registry*/,
             seat->setListener(this);
         }
     }
+    else if (interface == "xdg_wm_base")
+    {
+        m_xdgWmBase = m_registry->bind<waylandcpp::XdgWmBase1>(name);
+        if (m_xdgWmBase)
+        {
+            g_logger.info("%s - xdg_wm_base added: name=%u", __func__, name);
+            m_xdgWmBase->setListener(this);
+        }
+	else
+	{
+            g_logger.error("%s - Failed to bind xdg_wm_base: name:%u", __func__, name);
+	}
+    }
 #if defined(WESTEROS)
     else if (interface == "wl_simple_shell")
     {
@@ -353,6 +404,33 @@ void WaylandBackend::ping(waylandcpp::ShellSurfacePtr /*shellSurface*/,
 void WaylandBackend::popupDone(waylandcpp::ShellSurfacePtr /*shellSurface*/)
 {
     g_logger.info("%s", __func__);
+}
+
+void WaylandBackend::ping(waylandcpp::XdgWmBasePtr /*wmBase*/,
+                          uint32_t serial)
+{
+//  g_logger.info("%s - XDG Pinged and ponged", __func__);
+    m_xdgWmBase->pong(serial);
+}
+
+void WaylandBackend::configure(waylandcpp::XdgSurfacePtr object,
+                               uint32_t serial)
+{
+    g_logger.info("%s - XDG configured and acked", __func__);
+    m_xdgSurface->ackConfigure(serial);
+}
+
+void WaylandBackend::configure(waylandcpp::XdgToplevelPtr object,
+                               int32_t width,
+                               int32_t height,
+                               std::vector<waylandcpp::XdgToplevelState> &states)
+{
+    g_logger.info("%s - width= %d height= %d", __func__, width, height);
+
+    if ((width > 0) && (height > 0))
+    {
+        surfaceResizeRequested(Size{ width, height });
+    }
 }
 
 #if defined(WESTEROS)

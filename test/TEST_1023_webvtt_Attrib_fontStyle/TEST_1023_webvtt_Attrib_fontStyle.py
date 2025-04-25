@@ -42,7 +42,7 @@ font_file_list = [
 def test_1023():
     print("test_1023".ljust(50), "Test Started")
 
-    assert check_font_files(font_file_list), "Font files are not installed in your system ! This test will fail. Copy fonts from fonts.tar of the test folder to /usr/share/fonts/ to continue ! "
+    assert check_font_files(font_file_list), "Font files are not installed in your system ! This test will fail. Copy fonts to /usr/share/fonts/ to continue ! "
 
     subtec_copy_path = "./output_files/" + get_log_filename()
     get_last_read_position(subtec_log_path)

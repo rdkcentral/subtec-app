@@ -22,6 +22,12 @@ capture708.hex - sample hexadecimal data of 708 closed captions currently
 expected in the format of "dataLength localPts data" to be placed 
 in input_files folder.
 
+Required fonts must be available in /usr/share/fonts folder. 
+Currently fonts need to be copied manually to this path for this test to pass. 
+Fonts can be found in same path in devices or we can use below command :
+
+	git clone ssh://gerrit.teamccp.com:29418/rdk/components/cpc/fonts/generic
+
 ## Run test using script:
 
 From the *subtec-app/test/* folder run:

@@ -68,6 +68,12 @@ Each test will output log files to a subdirectory 'output_files' E.G
 
     .../test/TEST_1001_webvtt_SelectionPacket/output_files
 
+## Font style tests
+
+Currently fonts need to be copied manually to /usr/share/fonts for these tests to pass. Fonts can be found in same path in devices or we can use below command :
+
+	git clone ssh://gerrit.teamccp.com:29418/rdk/components/cpc/fonts/generic
+
 ## Invoking pytest directly
 Once required python modules have been installed (E.G via an invocation of ./run_l2_tests) 
 then pytest can be used to run individual tests, or all tests. No .xml or .json results file will be produced when invoked this way.

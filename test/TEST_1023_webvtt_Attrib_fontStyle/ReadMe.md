@@ -11,8 +11,11 @@ to be done manually by checking that font style is updated during test.
 Subtec dependencies installed with *install_subtec_dependencies.sh* script
 and subtec running.
 
-Required fonts must be available in /usr/share/fonts folder. fonts.tar with the
-latest fonts is placed in the test folder for reference.
+Required fonts must be available in /usr/share/fonts folder. 
+Currently fonts need to be copied manually to this path for this test to pass. 
+Fonts can be found in same path in devices or we can use below command :
+
+	git clone ssh://gerrit.teamccp.com:29418/rdk/components/cpc/fonts/generic
 
 test_fontStyle*.vtt - sample input vtt files associated with corresponding
 font style to be placed in input_files folder.

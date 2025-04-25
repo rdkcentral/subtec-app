@@ -27,10 +27,22 @@ os.chdir(script_dir)
 
 subtec_log_path = script_dir + "/../" + "/subtec_console_common.log"
 
+font_file_list = [
+'/usr/share/fonts/Cinecav_Mono.ttf',
+'/usr/share/fonts/Cinecav_Type.ttf',
+'/usr/share/fonts/Cinecav_Serif.ttf',
+'/usr/share/fonts/Cinecav_Sans.ttf',
+'/usr/share/fonts/Cinecav_Casual.ttf',
+'/usr/share/fonts/Cinecav_Script.ttf',
+'/usr/share/fonts/Cinecav_Sc.ttf'
+]
+
 @pytest.mark.cc_708
 @pytest.mark.attributes
 def test_1056():
     print("test_1056".ljust(50), "Test Started")
+
+    assert check_font_files(font_file_list), "Font files are not installed in your system ! This test will fail. Copy fonts to /usr/share/fonts/ to continue ! "
 
     subtec_copy_path = "./output_files/" + get_log_filename()
     get_last_read_position(subtec_log_path)

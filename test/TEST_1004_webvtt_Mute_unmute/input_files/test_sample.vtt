@@ -1,0 +1,32 @@
+WEBVTT
+
+REGION
+id:fred
+width:40%
+lines:3
+regionanchor:0%,100%
+viewportanchor:10%,90%
+scroll:up
+
+REGION
+id:bill
+width:40%
+lines:3
+regionanchor:100%,100%
+viewportanchor:90%,90%
+scroll:up
+
+00:00:00.000 --> 00:00:05.000
+abcdefghijklm
+
+00:00:05.000 --> 00:00:10.000
+This text is added to test mute packet - 5-10 seconds
+
+00:00:11.000 --> 00:00:15.000
+This text is added to test mute packet - 11-15 seconds
+
+00:00:16.000 --> 00:00:20.000
+This text is added to test mute packet - 15-20 seconds
+
+00:00:21.000 --> 00:00:25.000
+This text is added to test unmute packet - 21-25 seconds

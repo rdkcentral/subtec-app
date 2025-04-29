@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<tt xml:lang="en" xmlns="http://www.w3.org/ns/ttml" xmlns:tt="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" ttp:timeBase="media" >
+<head>
+  <styling>
+   <style xml:id="s0" tts:backgroundColor="#000000FF" tts:textAlign="left" tts:color="white" tts:fontSize="1c" tts:fontFamily="proportionalSansSerif" />
+   <style xml:id="transparentspace" tts:backgroundColor="#000000FF" tts:textAlign="left" tts:color="white" tts:fontSize="1c" tts:fontFamily="proportionalSansSerif" />
+  </styling>
+  <layout>
+   <region xml:id="_239eb0_r0" tts:origin="17.50% 6.32%" tts:extent="82.50% 17.01%" />
+   <region xml:id="_239eb0_r1" tts:origin="17.50% 0.00%" tts:extent="82.50% 17.01%" />
+  </layout>
+</head>
+<body>
+  <div xml:lang="en">
+   <p xml:id="c239eb0_00" xml:space="preserve" begin="00:00:00" end="00:00:05" region="_239eb0_r0" ><span style="transparentspace">    </span><span style="s0">Test font color</span><span style="transparentspace">     </span><br/><span style="transparentspace">    </span><span style="s0">White</span><span style="transparentspace">   </span></p>
+  </div>
+</body>
+</tt>

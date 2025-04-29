@@ -38,7 +38,7 @@ TtmlController::TtmlController(const protocol::PacketChannelSpecific& dataPacket
     , m_logger("App", "TtmlController", this)
     , m_ttmlEngine(ttmlengine::Factory::createTtmlEngine())
 {
-    m_logger.ostrace(__LOGGER_FUNC__, " created");
+    m_logger.oswarning(__LOGGER_FUNC__, " created");
     m_ttmlEngine->init(&config, gfxWindow.get(), properties);
     select(dataPacket);
 }
@@ -62,7 +62,7 @@ void TtmlController::select(std::uint32_t channelId, std::uint32_t width, std::u
 
 TtmlController::~TtmlController()
 {
-    m_logger.osinfo(__LOGGER_FUNC__);
+    m_logger.oswarning(__LOGGER_FUNC__);
     m_ttmlEngine->stop();
     m_channel.reset();
 }

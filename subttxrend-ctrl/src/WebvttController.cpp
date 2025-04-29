@@ -39,7 +39,7 @@ WebvttController::WebvttController(const protocol::PacketChannelSpecific& dataPa
     , m_logger("App", "WebvttController", this)
     , m_webvttEngine(webvttengine::Factory::createWebvttEngine())
 {
-    m_logger.ostrace(__LOGGER_FUNC__, " created");
+    m_logger.oswarning(__LOGGER_FUNC__, " created");
     m_webvttEngine->init(&config, gfxWindow);
     select(dataPacket);
 }
@@ -63,7 +63,7 @@ void WebvttController::select(std::uint32_t channelId, std::uint32_t width, std:
 
 WebvttController::~WebvttController()
 {
-    m_logger.osinfo(__LOGGER_FUNC__);
+    m_logger.oswarning(__LOGGER_FUNC__);
     m_webvttEngine->stop();
     m_channel.reset();
 }

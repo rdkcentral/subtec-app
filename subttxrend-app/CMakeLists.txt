@@ -141,6 +141,7 @@ target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDTTML_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDWEBVTT_LIBRARIES})
 target_link_libraries(${APP_NAME} pthread)
 target_link_libraries(${APP_NAME} boost_system)
+target_link_libraries(${APP_NAME} jsoncpp)
 
 #
 # Install rules

@@ -83,7 +83,8 @@ class Controller : private common::NonCopyable,
     Controller(
             Configuration const& config,
             gfx::EnginePtr gfxEngine,
-            gfx::WindowPtr gfxWindow);
+            gfx::WindowPtr gfxWindow,
+            const std::string region);
     // clang-format on
 
     /**
@@ -324,6 +325,8 @@ private:
 
     gfx::EnginePtr m_gfxEngine;
     gfx::WindowPtr m_gfxWindow;
+
+    std::string m_region;
 
     /** Processes timestamp messages and provides stc value. */
     StcProvider m_stcProvider;

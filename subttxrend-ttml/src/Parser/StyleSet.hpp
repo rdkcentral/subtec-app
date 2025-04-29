@@ -63,6 +63,7 @@ public:
 
     void setStyleId(const std::string& styleId);
     void merge(const Attributes& attributes);
+    void setRegionInfo(const std::string region);
 
     std::string toStr();
 
@@ -82,6 +83,7 @@ private:
     DomainValue m_lineHeight{DomainValue::Type::PERCENTAGE_HUNDREDTHS, 100*100};
     Outline m_textOutline;
     std::string m_styleId;
+    std::string m_region;
 };
 
 std::ostream& operator<<(std::ostream& out, const StyleSet::TextAlign textAlign);

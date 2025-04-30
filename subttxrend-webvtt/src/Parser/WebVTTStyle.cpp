@@ -40,7 +40,7 @@ const gfx::ColorArgb        Style::kTransparent ( 0, 0, 0, 0 );
 const gfx::ColorArgb        Style::kDefaultTextColour(kWhite);
 const gfx::ColorArgb        Style::kDefaultBgColour(kBlack);
 
-const std::string           Style::kDefaultFontFamilyString {"cinecavD sans"};
+const std::string           Style::kDefaultFontFamilyString {"Cinecav Sans"};
 
 const Style::FontStyleType     Style::kDefaultFontStyle {FontStyleType::kNormal};
 

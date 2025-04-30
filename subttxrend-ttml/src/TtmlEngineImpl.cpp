@@ -199,7 +199,7 @@ void TtmlEngineImpl::addData(const std::uint8_t* buffer,
 
     if (preParseTimeLineSize == m_timeline.size())
     {
-        m_logger.oswarning("no data added, empty document received?");
+        m_logger.osinfo("no data added, empty document received?");
     }
 
 //#define VERBOSE_DEBUGGING

@@ -44,6 +44,10 @@ struct wl_keyboard;
 struct wl_simple_shell;
 #endif
 
+struct xdg_wm_base;
+struct xdg_surface;
+struct xdg_toplevel;
+
 struct wl_interface;
 struct wl_callback;
 
@@ -70,6 +74,10 @@ class Keyboard;
 #if defined(WESTEROS)
 class SimpleShell;
 #endif
+
+class XdgWmBase;
+class XdgSurface;
+class XdgToplevel;
 
 /* == pointers == */
 
@@ -116,6 +124,15 @@ typedef std::shared_ptr<Seat> SeatPtr;
 
 /** Pointer - Keyboard. */
 typedef std::shared_ptr<Keyboard> KeyboardPtr;
+
+/** Pointer - XDG wm base. */
+typedef std::shared_ptr<XdgWmBase> XdgWmBasePtr;
+
+/** Pointer - XDG surface. */
+typedef std::shared_ptr<XdgSurface> XdgSurfacePtr;
+
+/** Pointer - XDG toplevel. */
+typedef std::shared_ptr<XdgToplevel> XdgToplevelPtr;
 
 } // namespace waylandcpp
 

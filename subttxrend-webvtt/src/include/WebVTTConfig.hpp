@@ -57,7 +57,7 @@ struct WebVTTConfig {
         screenPadding =         getConfigFractional(configProvider, "SCREEN.PADDING", constants::kScreenPaddingVmH, 100);
         horizontalPaddingEm =   getConfigFractional(configProvider, "FONT.HPAD_EM", constants::kDefaultHorizPaddingEmTenths, 10);
         verticalPaddingEm =     getConfigFractional(configProvider, "FONT.VPAD_EM", constants::kDefaultVerticalPaddingEmTenths, 10);
-        fontFamily =            configProvider->get("FONT.FAMILY", "cinecavD sans");
+        fontFamily =            configProvider->get("FONT.FAMILY", "Cinecav Sans");
         textColour =            configProvider->get("FONT.COLOUR", "WHITE");
         bgColour =              configProvider->get("BG.COLOUR", "BLACK");
     }
@@ -67,7 +67,7 @@ struct WebVTTConfig {
     int screenPadding {constants::kScreenPaddingVmH};
     float horizontalPaddingEm {constants::kDefaultHorizPaddingEmTenths};
     float verticalPaddingEm {constants::kDefaultVerticalPaddingEmTenths};
-    std::string fontFamily {"cinecavD sans"};
+    std::string fontFamily {"Cinecav Sans"};
     std::string textColour {"WHITE"};
     std::string bgColour {"BLACK"};
 };

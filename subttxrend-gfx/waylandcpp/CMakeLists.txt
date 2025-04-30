@@ -32,6 +32,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/../cmake
 find_package(LibSubTtxRendCommon REQUIRED)
 find_package(LibWaylandClient REQUIRED)
 find_package(LibXkbCommon REQUIRED)
+find_package(WaylandProtocols REQUIRED)
 
 #
 # Include directories
@@ -39,9 +40,25 @@ find_package(LibXkbCommon REQUIRED)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/waylandcpp-client)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/waylandcpp-utils)
+include_directories(${CMAKE_BINARY_DIR})
 include_directories(${LIBSUBTTXRENDCOMMON_INCLUDE_DIRS})
 include_directories(${LIBWAYLANDCLIENT_INCLUDE_DIRS})
 include_directories(${LIBXKBCOMMON_INCLUDE_DIRS})
+
+#
+# Generate the XDG shell protocol source
+#
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/xdg-shell-protocol.c
+    COMMAND wayland-scanner private-code ${WaylandProtocols_pkgdatadir}/stable/xdg-shell/xdg-shell.xml ${CMAKE_BINARY_DIR}/xdg-shell-protocol.c
+)
+
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/xdg-shell-client-protocol.h
+    COMMAND wayland-scanner client-header ${WaylandProtocols_pkgdatadir}/stable/xdg-shell/xdg-shell.xml ${CMAKE_BINARY_DIR}/xdg-shell-client-protocol.h
+)
+
+add_custom_target(genhdr DEPENDS ${CMAKE_BINARY_DIR}/xdg-shell-client-protocol.h)
 
 #
 # Sources to compile
@@ -63,6 +80,9 @@ set(DVBGRAPHICSENGINE_SOURCES
     src/waylandcpp-client/Shm.cpp
     src/waylandcpp-client/ShmPool.cpp
     src/waylandcpp-client/Surface.cpp
+    src/waylandcpp-client/XdgSurface.cpp
+    src/waylandcpp-client/XdgToplevel.cpp
+    src/waylandcpp-client/XdgWmBase.cpp
 
     src/waylandcpp-utils/Epoll.cpp
     src/waylandcpp-utils/EpollDisplayHandler.cpp
@@ -70,6 +90,8 @@ set(DVBGRAPHICSENGINE_SOURCES
     src/waylandcpp-utils/EpollDisplayLoop.cpp
     src/waylandcpp-utils/KeymapFactory.cpp
     src/waylandcpp-utils/KeymapXkbV1.cpp
+
+    ${CMAKE_BINARY_DIR}/xdg-shell-protocol.c
     )
 
 if(WITH_WESTEROS)
@@ -85,3 +107,4 @@ set_property(TARGET waylandcpp PROPERTY CXX_STANDARD 14)
 target_link_libraries(waylandcpp ${LIBSUBTTXRENDCOMMON_LIBRARIES})
 target_link_libraries(waylandcpp ${LIBWAYLANDCLIENT_LIBRARIES})
 target_link_libraries(waylandcpp ${LIBXKBCOMMON_LIBRARIES})
+add_dependencies(waylandcpp genhdr)

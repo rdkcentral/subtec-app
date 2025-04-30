@@ -246,7 +246,7 @@ void WebvttEngineImpl::addData(const std::uint8_t* buffer,
         
         if (preParseTimeLineSize == m_timeline.size())
         {
-            g_logger.oswarning("no data added, empty document received?");
+            g_logger.osinfo("no data added, empty document received?");
         }
     }
 }

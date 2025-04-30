@@ -35,6 +35,9 @@
 #include "waylandcpp-client/Display.hpp"
 #include "waylandcpp-client/Compositor.hpp"
 #include "waylandcpp-client/Shell.hpp"
+#include "waylandcpp-client/XdgWmBase.hpp"
+#include "waylandcpp-client/XdgSurface.hpp"
+#include "waylandcpp-client/XdgToplevel.hpp"
 #include "waylandcpp-utils/Keymap.hpp"
 #include "WaylandBackendLoop.hpp"
 #if defined(WESTEROS)
@@ -59,6 +62,9 @@ class WaylandBackend : public Backend,
                        private waylandcpp::OutputListener,
                        private waylandcpp::SeatListener,
                        private waylandcpp::KeyboardListener,
+                       private waylandcpp::XdgWmBaseListener,
+                       private waylandcpp::XdgSurfaceListener,
+                       private waylandcpp::XdgToplevelListener,
                        private WaylandBackendLoopListener
 {
 public:
@@ -340,6 +346,20 @@ private:
     virtual void popupDone(waylandcpp::ShellSurfacePtr object) override;
 
     /** @copydoc waylandcpp::OutputListener::geometry */
+    virtual void ping(waylandcpp::XdgWmBasePtr object,
+                      uint32_t serial) override;
+
+    /** @copydoc waylandcpp::XdgSurfaceListener::configure */
+    virtual void configure(waylandcpp::XdgSurfacePtr object,
+                           uint32_t serial) override;
+
+    /** @copydoc waylandcpp::XdgToplevelListener::configure */
+    virtual void configure(waylandcpp::XdgToplevelPtr object,
+                           int32_t width,
+                           int32_t height,
+                           std::vector<waylandcpp::XdgToplevelState> &states) override;
+
+    /** @copydoc waylandcpp::OutputListener::geometry */
     virtual void geometry(waylandcpp::OutputPtr object,
                           int32_t x,
                           int32_t y,
@@ -510,6 +530,15 @@ private:
 
     /** Wayland interfaces - seats. */
     std::map<uint32_t, SeatEntry> m_seats;
+
+    /** Wayland interface - XDG wm base. */
+    waylandcpp::XdgWmBase1::Ptr m_xdgWmBase;
+
+    /** Wayland interface - XDG surface. */
+    waylandcpp::XdgSurface1::Ptr m_xdgSurface;
+
+    /** Wayland interface - XDG toplevel. */
+    waylandcpp::XdgToplevel1::Ptr m_xdgToplevel;
 
     /** Wayland display loop. */
     std::unique_ptr<WaylandBackendLoop> m_loop;

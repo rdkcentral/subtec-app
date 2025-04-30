@@ -45,18 +45,25 @@ typedef enum
     RDK_LOG_INFO,
     RDK_LOG_DEBUG,
 
-    RDK_LOG_TRACE1,
-    RDK_LOG_TRACE2,
-    RDK_LOG_TRACE3,
-    RDK_LOG_TRACE4,
-    RDK_LOG_TRACE5,
-    RDK_LOG_TRACE6,
-    RDK_LOG_TRACE7,
-    RDK_LOG_TRACE8,
-    RDK_LOG_TRACE9,
+    RDK_LOG_TRACE,
 
     ENUM_RDK_LOG_COUNT
 } rdk_LogLevel;
+
+/**
+ * Updated as per rdk_logger to allow compatibility of subttxrend-common/test written using loglevels RDK_LOG_TRACE1..RDK_LOG_TRACE9 and function rdk_dbg_enabled
+ */
+#define RDK_LOG_TRACE1 RDK_LOG_TRACE
+#define RDK_LOG_TRACE2 RDK_LOG_TRACE
+#define RDK_LOG_TRACE3 RDK_LOG_TRACE
+#define RDK_LOG_TRACE4 RDK_LOG_TRACE
+#define RDK_LOG_TRACE5 RDK_LOG_TRACE
+#define RDK_LOG_TRACE6 RDK_LOG_TRACE
+#define RDK_LOG_TRACE7 RDK_LOG_TRACE
+#define RDK_LOG_TRACE8 RDK_LOG_TRACE
+#define RDK_LOG_TRACE9 RDK_LOG_TRACE
+
+#define rdk_dbg_enabled rdk_logger_is_logLevel_enabled
 
 rdk_Error rdk_logger_init(const char* debugConfigFile);
 

@@ -188,6 +188,40 @@ public:
      */
     static SimpleShellPtr create(wl_simple_shell* wlObject);
 #endif
+
+    /**
+     * Creates object for wayland native object.
+     *
+     * @param wlObject
+     *      Wayland XDG wm base native object.
+     *
+     * @return
+     *      Created object or null on error.
+     */
+    static XdgWmBasePtr create(xdg_wm_base* wlObject);
+
+    /**
+     * Creates object for wayland native object.
+     *
+     * @param wlObject
+     *      Wayland XDG surface native object.
+     *
+     * @return
+     *      Created object or null on error.
+     */
+    static XdgSurfacePtr create(xdg_surface* wlObject);
+
+    /**
+     * Creates object for wayland native object.
+     *
+     * @param wlObject
+     *      Wayland XDG toplevel native object.
+     *
+     * @return
+     *      Created object or null on error.
+     */
+    static XdgToplevelPtr create(xdg_toplevel* wlObject);
+
 };
 
 } // namespace waylandcpp

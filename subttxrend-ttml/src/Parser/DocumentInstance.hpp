@@ -70,6 +70,7 @@ public:
         {
             m_parsedBodyElementsStack.pop();
         }
+        // We do not clear the override style attributes
 
         m_currentImageElement = std::shared_ptr<ImageElement>();
     }
@@ -146,6 +147,17 @@ public:
         {
             return nullptr;
         }
+    }
+
+    /**
+     * Sets styling override attributes.
+     *
+     * @param styleAttributes
+     *      The styling override attributes.
+     */
+    void setStyleOverrideAttributes(const Attributes& styleAttributes)
+    {
+        m_overrideStyleAttributes = styleAttributes;
     }
 
     /**
@@ -542,6 +554,9 @@ private:
             //finally merge style attributes from element
             mergeAttributes(styleAttrs, content->getStyleAttributes());
 
+            // and at last merge style attributes from override-styling
+            mergeAttributes(styleAttrs, m_overrideStyleAttributes);
+
             content->set(std::move(styleAttrs));
 
             std::ostringstream stream;
@@ -591,6 +606,9 @@ private:
 
     /** List of found content nodes. */
     std::vector<std::shared_ptr<BodyElement> > m_content;
+
+    /** The styling attributes to use as overrides for all other styles */
+    Attributes m_overrideStyleAttributes;
 
     /** Logger object. */
     mutable subttxrend::common::Logger m_logger;

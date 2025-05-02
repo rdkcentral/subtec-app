@@ -70,6 +70,8 @@ class TtmlController final : public ControllerInterface
     void pause() override;
     void resume() override;
 
+    void setCustomTtmlStyling(const std::string& styling);
+
   private:
     bool wantsData(std::uint32_t channelId) const;
     void select(std::uint32_t channelId, std::uint32_t width, std::uint32_t height);

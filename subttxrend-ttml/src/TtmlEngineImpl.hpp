@@ -97,6 +97,8 @@ public:
     /** @copydoc TtmlEngine::setSubtitleInfo */
     virtual void setSubtitleInfo(const std::string& contentType, const std::string& subsInfo) override;
 
+    /** @copydoc TtmlEngine::setCustomTtmlStyling */
+    virtual void setCustomTtmlStyling(const std::string& styling);
 
 private:
 

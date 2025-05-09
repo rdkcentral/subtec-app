@@ -45,7 +45,7 @@ public:
      */
     PageDisplayable()
     {
-        invalidate();
+        internalInvalidate();
     }
 
     /**
@@ -164,20 +164,7 @@ public:
     /** @copydoc Page::invalidate */
     virtual void invalidate() override
     {
-        m_header.setValid(false);
-        for (auto& displayableRow : m_displayableRows)
-        {
-            displayableRow.setValid(false);
-        }
-        m_editorialLinks.setValid(false);
-        for (auto& x26Packet : m_packetsX26)
-        {
-            x26Packet.setValid(false);
-        }
-        for (auto& x28Packet : m_packetsX28)
-        {
-            x28Packet.setValid(false);
-        }
+        internalInvalidate();
     }
 
 protected:
@@ -255,6 +242,25 @@ protected:
         }
 
         return nullptr;
+    }
+
+private:
+    void internalInvalidate()
+    {
+        m_header.setValid(false);
+        for (auto& displayableRow : m_displayableRows)
+        {
+            displayableRow.setValid(false);
+        }
+        m_editorialLinks.setValid(false);
+        for (auto& x26Packet : m_packetsX26)
+        {
+            x26Packet.setValid(false);
+        }
+        for (auto& x28Packet : m_packetsX28)
+        {
+            x28Packet.setValid(false);
+        }
     }
 
 private:

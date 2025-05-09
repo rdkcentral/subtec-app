@@ -183,12 +183,6 @@ private:
     std::int32_t getMargin(IntermediateDocument::TextLine const& line);
 
 private:
-    /** Text rectangle vertical margin. */
-    static constexpr int BACKGROUND_RECT_MARGIN = 10;
-
-    /** Default font to use if loading requested font failed. */
-    static const std::string FALLBACK_FONT_NAME;
-
     /** Logger object. */
     subttxrend::common::Logger m_logger;
 

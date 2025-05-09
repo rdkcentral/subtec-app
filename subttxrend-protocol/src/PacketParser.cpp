@@ -38,6 +38,7 @@
 #include "PacketInvalid.hpp"
 #include "PacketData.hpp"
 #include "PacketPause.hpp"
+#include "PacketFlush.hpp"
 #include "PacketResume.hpp"
 #include "PacketMute.hpp"
 #include "PacketUnmute.hpp"
@@ -65,6 +66,7 @@ PacketParser::PacketParser()
     addParsablePacket(std::make_unique<PacketTtmlTimestamp>());
     addParsablePacket(std::make_unique<PacketWebvttSelection>());
     addParsablePacket(std::make_unique<PacketWebvttTimestamp>());
+    addParsablePacket(std::make_unique<PacketFlush>());
     addParsablePacket(std::make_unique<PacketPause>());
     addParsablePacket(std::make_unique<PacketResume>());
     addParsablePacket(std::make_unique<PacketMute>());

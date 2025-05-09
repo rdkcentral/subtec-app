@@ -61,6 +61,7 @@ class ControllerInterface : private common::NonCopyable
 
     virtual void processTimestamp(const protocol::Packet& ){}
     virtual void processInfo(const protocol::Packet& ){}
+    virtual void flush() {}
     virtual void pause() {}
     virtual void resume() {}
     virtual void processSetCCAttributesPacket(const protocol::PacketSetCCAttributes&){}
@@ -94,7 +95,7 @@ class MutexedController final : public ControllerInterface
         std::lock_guard<std::mutex> lock{mutex};
         controller.activate();
     }
-    virtual void deactivate() override 
+    virtual void deactivate() override
     {
         std::lock_guard<std::mutex> lock{mutex};
         controller.deactivate();
@@ -116,6 +117,12 @@ class MutexedController final : public ControllerInterface
     {
         std::lock_guard<std::mutex> lock{mutex};
         controller.processTimestamp(packet);
+    }
+
+    void flush() override
+    {
+        std::lock_guard<std::mutex> lock{mutex};
+        controller.flush();
     }
 
     void pause() override

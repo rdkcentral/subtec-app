@@ -122,6 +122,15 @@ void TtmlEngineImpl::stop()
     m_renderer->hide();
 }
 
+void TtmlEngineImpl::flush()
+{
+    m_logger.osinfo("flush received");
+    std::lock_guard<std::mutex> lock{m_mutex};
+    m_timeline.clear();
+    m_shownDocuments.clear();
+    clear();
+}
+
 void TtmlEngineImpl::pause()
 {
     m_logger.osdebug("pause received");

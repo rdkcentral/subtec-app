@@ -50,6 +50,7 @@
 #include <subttxrend/protocol/PacketTtmlTimestamp.hpp>
 #include <subttxrend/protocol/PacketWebvttSelection.hpp>
 #include <subttxrend/protocol/PacketWebvttTimestamp.hpp>
+#include <subttxrend/protocol/PacketFlush.hpp>
 #include <subttxrend/protocol/PacketPause.hpp>
 #include <subttxrend/protocol/PacketResume.hpp>
 #include <subttxrend/protocol/PacketMute.hpp>
@@ -266,6 +267,13 @@ private:
      */
     void processWebvttTimestamp(const protocol::PacketWebvttTimestamp& timestampPacket);
 
+    /**
+     * Processes flush packet.
+     *
+     * @param packet
+     *      flush packet.
+     */
+    void processFlushPacket(const protocol::PacketChannelSpecific& packet);
     /**
      * Processes pause packet.
      *

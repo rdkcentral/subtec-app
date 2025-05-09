@@ -78,6 +78,7 @@ set(SUBTTXREND_PROTOCOL_PUBLIC_HEADERS
     
     include/PacketData.hpp
     include/PacketTimestamp.hpp
+    include/PacketFlush.hpp
     include/PacketPause.hpp
     include/PacketResume.hpp
     include/PacketMute.hpp

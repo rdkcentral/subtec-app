@@ -239,6 +239,10 @@ void Controller::doOnPacketReceived(UniqueLock& lock, const protocol::Packet& pa
             processWebvttTimestamp(static_cast<protocol::PacketWebvttTimestamp const&>(packet));
             break;
         }
+        case protocol::Packet::Type::FLUSH: {
+            processFlushPacket(static_cast<protocol::PacketFlush const&>(packet));
+            break;
+        }
         case protocol::Packet::Type::PAUSE: {
             processPausePacket(static_cast<protocol::PacketPause const&>(packet));
             break;
@@ -456,6 +460,14 @@ void Controller::processWebvttTimestamp(const protocol::PacketWebvttTimestamp& p
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
     forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::processTimestamp);
+}
+
+void Controller::processFlushPacket(const protocol::PacketChannelSpecific& packet)
+{
+    auto timing = m_logger.timing(__LOGGER_FUNC__);
+    forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::flush);
+    m_dataqueue.clear();
+    m_renderCond.notify_one();
 }
 
 void Controller::processPausePacket(const protocol::PacketChannelSpecific& packet)

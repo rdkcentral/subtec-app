@@ -78,8 +78,8 @@ int main(int argc,
         app.runAsync();
         std::cerr << "subttxrend-app started" << std::endl;
 
-        auto exitRequested = exitListener.get();
-        std::cerr << "subttxrend-app signaled to exit" << std::endl;
+        auto signalNum = exitListener.get();
+        std::cerr << "subttxrend-app signaled (" << signalNum << ") to exit" << std::endl;
         app.quit();
 
         rv = EXIT_SUCCESS;

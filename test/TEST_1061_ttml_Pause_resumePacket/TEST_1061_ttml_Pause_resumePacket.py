@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 import os
-
+import time
 from utils import *
 import pytest
 
@@ -38,7 +38,8 @@ def test_1061():
     run_test_prereq(script_dir)
 
     # wait for end of test
-    wait_for_log_string(subtec_log_path, "processLoop no active controller, clearing the data queue")
+    wait_for_log_string(subtec_log_path, "resume received")
+    time.sleep(2)
     copy_log_file(subtec_log_path, subtec_copy_path)
 
     log_sequence = [ 

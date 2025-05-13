@@ -22,6 +22,7 @@ import time
 import glob
 import inspect
 import shutil
+import re
 
 # Global - since subtec is not restarted for every test, we keep track of last
 # read position in log file to use to validate next tests.
@@ -78,7 +79,7 @@ def debug_log(string_to_print):
 
     formatter_str = f"{info_str:50}" # left align, pad with spaces
 
-    print (f"{formatter_str} {string_to_print}")
+    print(f"{formatter_str} {string_to_print}")
 
 def start_subtec(script_path, subtec_log_path = "subtec_console_common.log"):
     """
@@ -144,6 +145,8 @@ def is_process_running(process_name):
     except Exception as e:
         debug_log(f"Error finding or killing process: {e}")
 
+    return False
+
 def find_and_kill_process(process_name):
     """
     Finds process id of a given process and kills it
@@ -196,15 +199,15 @@ def check_and_restart_subtec():
     for name in process_names:
         if not is_process_running(name):
             all_running = False
-    
+
     if not all_running:
         # Kill both processes if either is not running, then restart
         cleanup_subtec()
 
         start_subtec("../../subttxrend-app/x86_builder", "../subtec_console_common.log")
-        
+
         # wait to be sure subtec has started
-        assert wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 220, 1), "Subtec not started, check !"
+        assert wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 500, 1), "Subtec not started, check !"
 
 def cleanup_subtec():
     """
@@ -223,6 +226,46 @@ def cleanup_subtec():
     process_names = ["build.sh", "subttxrend-app"]
     for name in process_names:
         find_and_kill_process(name)
+
+def calculate_webvtt_font_size (log_file_path, font_height):
+    """
+    Calculates webvtt font size
+
+    This function checks the display height set during run time by
+    parsing the log, and uses that display height to calculate font size
+    similar to the logic in WebVTTConverter.hpp to validate font size.
+
+    Args:
+        log_file_path (str) : File name and full path to log file to use
+        font_height (int) : kFontHeight value for each font size
+
+    Returns:
+        vh_to_pixels_result (int) : calculated font size
+    """
+    # Check in first 512kb, as the string we are looking for is present
+    # within first few hundred lines of log
+    chunk_size = 524288
+    pattern = r"\[WebvttEngine::LineBuilder\] getOutputLines - line added rect:rect:\[(\d+);(\d+)\]\[(\d+)x(\d+)\] position:"
+
+    # Open the log file for reading
+    with open(log_file_path, 'r+', errors='ignore') as file:
+        # Move to last read position, as every test appends logs to
+        # the same console log file. This is done to avoid parsing the whole
+        # log file for every test.
+        file.seek(last_read_position)
+
+        content = file.read(chunk_size)
+        match = re.search(pattern, content)
+        if match:
+            extracted_height = int(match.group(2)) + int(match.group(4))
+
+            hundredths_to_v_result = float(font_height) / 100.0
+            display_height_float = float(extracted_height)
+            vh_to_pixels_float = (display_height_float / 100.0) * hundredths_to_v_result
+            vh_to_pixels_result = int(vh_to_pixels_float)
+            debug_log(f"Calculated font size {vh_to_pixels_result} for font height {font_height}")
+
+            return vh_to_pixels_result
 
 def monitor_log_for_sequence(log_file_path, sequence, chunk_size = 524288):
     """
@@ -245,7 +288,6 @@ def monitor_log_for_sequence(log_file_path, sequence, chunk_size = 524288):
         True : if the entire sequence has been found in right order
         False : if one of the expected strings has not been found in log file.
     """
-    global last_read_position
     # Initialize an index to track the position in the sequence
     sequence_index = 0
     remaining_line = ""
@@ -268,7 +310,7 @@ def monitor_log_for_sequence(log_file_path, sequence, chunk_size = 524288):
                     sequence_index += 1
                     if sequence_index == len(sequence):
                         return True
-                break; #end of file
+                break  #end of file
 
             # Find complete lines, and store partial line at end of chunk in remaining_line 
             lines = (remaining_line + content).splitlines(keepends=False)
@@ -279,7 +321,7 @@ def monitor_log_for_sequence(log_file_path, sequence, chunk_size = 524288):
             # Process complete lines in the buffer
             for line in current_lines_to_process:
                 # Check if the current line contains the current string in the sequence
-                if sequence_index < len(sequence) and sequence[sequence_index] in line :
+                if sequence_index < len(sequence) and sequence[sequence_index] in line:
                     # Move to the next string in the sequence
                     sequence_index += 1
                     # If the entire sequence has been found, print a success message
@@ -318,7 +360,6 @@ def check_logs_between_strings(log_file_path, sequence, marker_string1, marker_s
                 start_index is less than end_index or if any expected log
                 strings from sequence are not found in logs.   
     """
-    global last_read_position
     # Open the log file for reading
     with open(log_file_path, 'r+', errors='ignore') as file:
         # Move to last read position, as every test appends logs to
@@ -368,7 +409,7 @@ def check_logs_between_strings(log_file_path, sequence, marker_string1, marker_s
             if not string2_occurrences:
                 debug_log(f"\"{marker_string2}\" found number of times : {len(string2_occurrences)} ")
                 return False
-            
+
             # set end_index to last occurrence of second string
             end_index = string2_occurrences[len(string2_occurrences) - 1]
 
@@ -404,8 +445,6 @@ def validate_string_absence(log_file_path, strings_to_exclude, chunk_size=524288
         True: if none of the strings in strings_to_exclude are found
               in the log file, False otherwise.
     """
-    global last_read_position
-
     remaining_line = ""
     found_unwanted = set()  # Use a set to efficiently track found unwanted strings
 
@@ -501,7 +540,6 @@ def get_last_read_position(log_file):
                 last_read_position = file.tell()
         except IOError as e:
             debug_log(f"Error reading log file: {e}")
-            return False
     else:
         # Update the last read position (which is now start of file)
         last_read_position = 0
@@ -523,7 +561,6 @@ def wait_for_log_string(log_file, search_string, timeout=15, check_interval=3):
         True : if log is found within given Timeout period
     """
     counter = 0
-    global last_read_position
 
     while counter < timeout:
         try:
@@ -537,11 +574,11 @@ def wait_for_log_string(log_file, search_string, timeout=15, check_interval=3):
                 if search_string in new_lines:
                     debug_log(f"Found expected string - {search_string}")
                     return True
-        
+
         except IOError as e:
             debug_log(f"Error reading log file: {e}")
             return False
-        
+
         time.sleep(check_interval)
         counter += check_interval
     debug_log(f"Timeout: '{search_string}' not found in log file in '{counter}' seconds")
@@ -591,6 +628,7 @@ def find_cpp_src_files(file_path):
         debug_log("No .cpp file found.")
     else:
         debug_log(f"More than one .cpp file found at {file_path}")
+    return None
 
 def run_test_prereq(script_dir, include_paths=["../libsubtec"]):
     """
@@ -618,7 +656,7 @@ def run_test_prereq(script_dir, include_paths=["../libsubtec"]):
 
     # Run binary file
     if executable:
-        if (False == run_executable(executable, None)):
+        if run_executable(executable, None) is False:
             assert False, "Failed to execute C program"
     else:
         assert False, "Failed to compile C program"
@@ -657,12 +695,12 @@ def compile_cpp(file_path, include_paths=["../libsubtec"], library_paths=None, l
     construct_utils_cpp_path = "../utils/utils.cpp"
     # Base compile command
     compile_command = ["g++", file_path, construct_utils_cpp_path, "-o", binary_name]
-    
+
     # Add include paths if provided
     if include_paths:
         for path in include_paths:
             compile_command.extend(["-I", path])
-    
+
     compile_command.extend(["-I", "../subtecparser"])
     compile_command.extend(["-I", "../utils"])
 
@@ -672,7 +710,7 @@ def compile_cpp(file_path, include_paths=["../libsubtec"], library_paths=None, l
 
     for path in library_paths:
         compile_command.extend(["-L", path])
-    
+
     # Add libraries if provided
     if libraries:
         for lib in libraries:
@@ -740,7 +778,6 @@ def run_executable(executable_path, ld_library_path=None):
     except Exception as e:
         debug_log(f"Unexpected error for test case cpp : {e}")
         return False
-    
 
 """
     Example flow of how these functions are invoked when executing two sample tests as below :

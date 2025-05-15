@@ -35,6 +35,7 @@
 #include <ctime>
 #include <iomanip>
 #include <memory>
+#include <sstream>
 
 #include <sys/stat.h>
 

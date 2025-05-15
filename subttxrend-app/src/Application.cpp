@@ -98,6 +98,13 @@ void Application::quit()
 
     common::LoggerManager::getInstance()->deinit();
 }
+ 
+#ifdef __APPLE__
+void Application::startBlockingApplicationWindow()
+{
+    m_gfxEngine->startBlockingApplicationWindow();
+}
+#endif
 
 } // namespace app
 } // namespace subttxrend

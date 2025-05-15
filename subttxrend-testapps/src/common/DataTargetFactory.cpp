@@ -17,7 +17,7 @@
 * limitations under the License.
 *****************************************************************************/
 
-
+#include <stdexcept>
 #include "DataTargetFactory.hpp"
 
 #include "Ipv4SocketTarget.hpp"

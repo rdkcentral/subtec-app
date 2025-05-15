@@ -93,6 +93,11 @@ public:
     /** @copydoc Backend::stop() */
     virtual void stop() override final;
 
+#ifdef __APPLE__
+    /** @copydoc Backend::startBlockingApplicationWindow() */
+    void startBlockingApplicationWindow() override final {};
+#endif
+
     /**
      * Requests render.
      *

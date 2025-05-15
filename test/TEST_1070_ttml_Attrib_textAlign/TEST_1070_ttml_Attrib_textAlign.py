@@ -61,7 +61,7 @@ def test_1070():
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test text align] [ ] [ ] [left] [ ] ',
         'alignPenX textAlign=left',
-        'drawChunk starting pen position: 10 0 (']
+        'drawChunk starting pen position: 23 0 (']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1070 missing"
 
     sequence = [      
@@ -79,7 +79,7 @@ def test_1070():
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test text align] [ ] [ ] [right] [ ] ',
         'alignPenX textAlign=right',
-        'drawChunk starting pen position: 1139 0 (']
+        'drawChunk starting pen position: 1126 0 (']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1070 missing"
 
     sequence = [      

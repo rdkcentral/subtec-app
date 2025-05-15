@@ -89,7 +89,7 @@ public:
         return block;
     }
 
-    virtual void gfxFree(void* block)
+    virtual void gfxFree(void* block) override
     {
         if (block)
         {

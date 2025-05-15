@@ -22,7 +22,7 @@
 #define _SUBTTXREND_GFX_PRERENDEREDFONT_HPP_
 
 #include <set>
-#include <uchar.h>
+#include <codecvt>
 #include <memory>
 #include <vector>
 #include <map>

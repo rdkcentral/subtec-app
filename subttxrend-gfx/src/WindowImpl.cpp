@@ -26,7 +26,7 @@
 #include "FontStripImpl.hpp"
 #include "ColorizedPixmap.hpp"
 
-#include <uchar.h> // newer compilers would have <cuchar>
+#include <codecvt> // newer compilers would have <cuchar>
 
 #include <cassert>
 #include <cmath>

@@ -21,6 +21,7 @@
 #ifndef TTXDECODER_DATABASE_HPP_
 #define TTXDECODER_DATABASE_HPP_
 
+#include <cstdint>
 #include "Types.hpp"
 #include "PageId.hpp"
 #include "PageMagazine.hpp"

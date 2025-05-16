@@ -31,7 +31,7 @@
 #include <subttxrend/common/ConfigProvider.hpp>
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 class ControllerInterface : private common::NonCopyable
 {
@@ -61,6 +61,7 @@ class ControllerInterface : private common::NonCopyable
 
     virtual void processTimestamp(const protocol::Packet& ){}
     virtual void processInfo(const protocol::Packet& ){}
+    virtual void flush() {}
     virtual void pause() {}
     virtual void resume() {}
     virtual void processSetCCAttributesPacket(const protocol::PacketSetCCAttributes&){}
@@ -94,7 +95,7 @@ class MutexedController final : public ControllerInterface
         std::lock_guard<std::mutex> lock{mutex};
         controller.activate();
     }
-    virtual void deactivate() override 
+    virtual void deactivate() override
     {
         std::lock_guard<std::mutex> lock{mutex};
         controller.deactivate();
@@ -118,6 +119,12 @@ class MutexedController final : public ControllerInterface
         controller.processTimestamp(packet);
     }
 
+    void flush() override
+    {
+        std::lock_guard<std::mutex> lock{mutex};
+        controller.flush();
+    }
+
     void pause() override
     {
         std::lock_guard<std::mutex> lock{mutex};
@@ -139,5 +146,5 @@ class MutexedController final : public ControllerInterface
     Ctrl controller;
     std::mutex mutable mutex;
 };
-} /* namespace app */
+} /* namespace ctrl */
 } /* namespace subttxrend */

@@ -70,6 +70,10 @@ public:
 
     virtual void detach(WindowPtr window) override;
 
+#ifdef __APPLE__
+    virtual void startBlockingApplicationWindow() override;
+#endif
+
 private:
     /** Mutex type. */
     using Mutex = std::recursive_mutex;

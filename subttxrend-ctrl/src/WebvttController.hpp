@@ -33,7 +33,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 /**
@@ -86,5 +86,5 @@ class WebvttController final : public ControllerInterface
     std::unique_ptr<webvttengine::WebvttEngine> m_webvttEngine;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend

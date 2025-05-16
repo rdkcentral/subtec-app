@@ -28,12 +28,12 @@
 #include <subttxrend/protocol/PacketTtmlInfo.hpp>
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 TtmlController::TtmlController(const protocol::PacketChannelSpecific& dataPacket,
                                const common::ConfigProvider& config,
                                gfx::WindowPtr const& gfxWindow,
-                               common::Properties const& properties)
+                               ipp2::Properties const& properties)
     : m_channel()
     , m_logger("App", "TtmlController", this)
     , m_ttmlEngine(ttmlengine::Factory::createTtmlEngine())
@@ -129,6 +129,11 @@ void TtmlController::processInfo(const std::string& contentType, const std::stri
     m_ttmlEngine->setSubtitleInfo(contentType, subsInfo);
 }
 
+void TtmlController::flush()
+{
+    m_ttmlEngine->flush();
+}
+
 void TtmlController::pause()
 {
     m_ttmlEngine->pause();
@@ -148,6 +153,6 @@ void TtmlController::mute(bool m)
     }
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 

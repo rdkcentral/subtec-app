@@ -22,12 +22,13 @@
 #define ONEMW_SRC_AV_SUBTTXREND_APP_SRC_PESFINDER_HPP_
 
 #include <cstdint>
+#include <cstddef>
 
 #include <subttxrend/common/Logger.hpp>
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 /**
@@ -84,7 +85,7 @@ private:
     common::Logger m_logger;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /* ONEMW_SRC_AV_SUBTTXREND_APP_SRC_PESFINDER_HPP_ */

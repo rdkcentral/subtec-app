@@ -333,8 +333,9 @@ std::string StyleSet::toStr()
     std::ostringstream str;
 
     str << "[" << m_styleId << "]: " << "font: " << m_color << ", " << m_fontFamily << ", " << m_fontSize
-        << ", bg: " << m_backgroundColor  << ", text: " << m_textAlign << ", display: " << m_displayAlign
-        << ", outline: " << m_textOutline.getColor() << ", " << m_textOutline.getThickness();
+        << ", bg: " << m_backgroundColor  << ", lineH: " << m_lineHeight << ", text: " << m_textAlign
+        << ", display: " << m_displayAlign << ", outline: " << m_textOutline.getColor() << ", "
+        << m_textOutline.getThickness();
     return str.str();
 }
 

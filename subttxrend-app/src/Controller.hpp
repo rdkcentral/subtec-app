@@ -26,16 +26,16 @@
 #include <deque>
 #include <thread>
 
-#include "ControllerInterface.hpp"
-#include "Configuration.hpp"
-#include "StcProvider.hpp"
+#include <subttxrend/ctrl/ControllerInterface.hpp>
+#include <subttxrend/ctrl/Configuration.hpp>
+#include <subttxrend/ctrl/StcProvider.hpp>
 
 #include <subttxrend/common/NonCopyable.hpp>
 #include <subttxrend/common/ConfigProvider.hpp>
 #include <subttxrend/common/Logger.hpp>
-#include <subttxrend/common/AsClient.hpp>
-#include <subttxrend/common/AsListener.hpp>
-#include <subttxrend/common/WsEndpoint.hpp>
+#include <ipp2/clients/AsClient.h>
+#include <ipp2/clients/AsListener.h>
+#include <ipp2/clients/WsEndpoint.h>
 
 #include <subttxrend/socksrc/PacketReceiver.hpp>
 
@@ -50,6 +50,7 @@
 #include <subttxrend/protocol/PacketTtmlTimestamp.hpp>
 #include <subttxrend/protocol/PacketWebvttSelection.hpp>
 #include <subttxrend/protocol/PacketWebvttTimestamp.hpp>
+#include <subttxrend/protocol/PacketFlush.hpp>
 #include <subttxrend/protocol/PacketPause.hpp>
 #include <subttxrend/protocol/PacketResume.hpp>
 #include <subttxrend/protocol/PacketMute.hpp>
@@ -81,7 +82,7 @@ class Controller : private common::NonCopyable,
      */
     // clang-format off
     Controller(
-            Configuration const& config,
+            ctrl::Configuration const& config,
             gfx::EnginePtr gfxEngine,
             gfx::WindowPtr gfxWindow);
     // clang-format on
@@ -98,7 +99,7 @@ class Controller : private common::NonCopyable,
      */
     void init(gfx::Window *gfxWindow,
               const gfx::EnginePtr &gfxEngine,
-              const Configuration &config);
+              const ctrl::Configuration &config);
 
     void startAsync();
 
@@ -267,6 +268,13 @@ private:
     void processWebvttTimestamp(const protocol::PacketWebvttTimestamp& timestampPacket);
 
     /**
+     * Processes flush packet.
+     *
+     * @param packet
+     *      flush packet.
+     */
+    void processFlushPacket(const protocol::PacketChannelSpecific& packet);
+    /**
      * Processes pause packet.
      *
      * @param packet
@@ -311,24 +319,24 @@ private:
     void selectTeletextSubtitles(std::uint32_t channelId, std::uint32_t magazineNbr, std::uint32_t pageNumber);
 
     void deactivateController();
-    void pushController(std::shared_ptr<ControllerInterface> controller);
+    void pushController(std::shared_ptr<ctrl::ControllerInterface> controller);
     void popNullController();
-    std::shared_ptr<ControllerInterface> topController();
+    std::shared_ptr<ctrl::ControllerInterface> topController();
 
     bool isRenderingActive() const;
     bool isDataQueued() const;
 
     void processLoop();
 
-    Configuration const& m_config;
+    ctrl::Configuration const& m_config;
 
     gfx::EnginePtr m_gfxEngine;
     gfx::WindowPtr m_gfxWindow;
 
     /** Processes timestamp messages and provides stc value. */
-    StcProvider m_stcProvider;
+    ctrl::StcProvider m_stcProvider;
 
-    std::vector<std::shared_ptr<ControllerInterface>> m_activeControllers;
+    std::vector<std::shared_ptr<ctrl::ControllerInterface>> m_activeControllers;
 
     /** Logger object. */
     common::Logger m_logger;
@@ -349,9 +357,9 @@ private:
     bool m_inuse{false};
     std::shared_ptr<gfx::PrerenderedFontCache> m_fontCache;
 
-    std::unique_ptr<common::AsListener> m_asLstnr;
-    std::unique_ptr<common::WsEndpoint> m_endpoint;
-    std::unique_ptr<common::AsClient> m_asClient;
+    std::unique_ptr<ipp2::AsListener> m_asLstnr;
+    std::unique_ptr<ipp2::WsEndpoint> m_endpoint;
+    std::unique_ptr<ipp2::AsClient> m_asClient;
 };
 
 using ControllerPtr = std::unique_ptr<Controller>;

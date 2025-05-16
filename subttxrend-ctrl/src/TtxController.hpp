@@ -41,7 +41,7 @@ namespace common {
 class ConfigProvider;
 }
 
-namespace app {
+namespace ctrl {
 
 using dbus::SubtitleStatus;
 using dbus::TeletextStatus;
@@ -213,7 +213,7 @@ class TtxController final : public ControllerInterface, private ttxt::TimeSource
     common::Logger m_logger;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /* _SUBTTXREND_APP_TTXCONTROLLER_HPP_ */

@@ -29,10 +29,9 @@
 
 namespace subttxrend {
 namespace webvttengine {
-namespace {
-common::Logger g_logger_config("WebvttEngine", "WebVTTConfig");
+extern common::Logger g_logger_config;
 
-double getConfigFractional(const common::ConfigProvider* configProvider, const std::string &key, int defaultValue, int fraction) {
+inline double getConfigFractional(const common::ConfigProvider* configProvider, const std::string &key, int defaultValue, int fraction) {
     const std::string defString = std::to_string((double)defaultValue / (double)fraction);
     const std::string confString = configProvider->get(key, defString);
 
@@ -47,7 +46,6 @@ double getConfigFractional(const common::ConfigProvider* configProvider, const s
     }
 
     return defaultValue;
-}
 }
     
 struct WebVTTConfig {

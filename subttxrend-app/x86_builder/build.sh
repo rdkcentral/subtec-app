@@ -41,8 +41,10 @@ function build_project_cmake {
 
     cmake \
         -DCMAKE_INSTALL_PREFIX=$3/usr/local \
+        -DCMAKE_MODULE_PATH=$3/usr/local/share/cmake/Modules \
         -DCMAKE_BUILD_TYPE=Debug \
         -DCMAKE_FIND_ROOT_PATH=$3 \
+        -DCMAKE_INSTALL_NAME_DIR=$3/usr/local/lib \
         -DCMAKE_CXX_FLAGS="-DPC_BUILD" \
         $4 \
         $1
@@ -146,7 +148,12 @@ function build_tests {
     mkdir -p $2
     pushd $2
 
-    cmake -DCMAKE_INSTALL_PREFIX=$3/usr/local -DCMAKE_BUILD_TYPE=Debug -DCMAKE_FIND_ROOT_PATH=$3 $4 $1
+    cmake -DCMAKE_INSTALL_PREFIX=$3/usr/local \
+          -DCMAKE_MODULE_PATH=$3/usr/local/share/cmake/Modules \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_FIND_ROOT_PATH=$3 \
+          $4 \
+          $1
     make $PARALLEL_JOBS_OPT
 
     if cat Makefile | egrep "\binstall\b" 2> /dev/null
@@ -239,7 +246,11 @@ RDK_PATCHES_DIR=$ONEMW_ROOT_DIR/meta-lgi-om-common/meta-rdk/recipes-extended/
 #
 # export path for .pc for pkg-config
 #
+if [[ "$OSTYPE" == "darwin"* ]]; then
+export PKG_CONFIG_PATH+=$INSTALL_DIR/usr/lib/pkgconfig/:$INSTALL_DIR/usr/local/lib/pkgconfig/:/opt/homebrew/lib/pkgconfig
+else
 export PKG_CONFIG_PATH+=$INSTALL_DIR/usr/lib/pkgconfig/:$INSTALL_DIR/usr/local/lib/pkgconfig/
+fi
 
 if [ "$COMMAND" == "full" ] ; then
 
@@ -255,6 +266,7 @@ rm -rf build
 elif [ "$COMMAND" == "build" ] ; then
 
 build_project_cmake     $BASE_DIR/src/rdklogger                     build/rdklogger                     $INSTALL_DIR    ""
+build_project_cmake     $AV_PROJECTS_DIR/websocket-ipplayer2-utils  build/websocket-ipplayer2-utils     $INSTALL_DIR    "-DBUILD_PC=1"
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-common          build/subttxrend-common             $INSTALL_DIR    -DBUILD_RDK_REFERENCE=1
 build_project_cmake     $AV_PROJECTS_DIR/ttxdecoder                 build/ttxdecoder                    $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/dvbsubdecoder              build/dvbsubdecoder                 $INSTALL_DIR    ""
@@ -265,9 +277,10 @@ build_project_cmake     $AV_PROJECTS_DIR/subttxrend-gfx             build/subttx
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-dvbsub          build/subttxrend-dvbsub             $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ttxt            build/subttxrend-ttxt               $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ttml            build/subttxrend-ttml               $INSTALL_DIR    -DBUILD_RDK_REFERENCE=1
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-webvtt            build/subttxrend-webvtt               $INSTALL_DIR    ""
+build_project_cmake     $AV_PROJECTS_DIR/subttxrend-webvtt          build/subttxrend-webvtt             $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-scte            build/subttxrend-scte               $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-cc              build/subttxrend-cc                 $INSTALL_DIR    ""
+build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ctrl            build/subttxrend-ctrl               $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-app             build/subttxrend-app                $INSTALL_DIR    -DINSTALL_CONFIG_FILE=OFF
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-testapps        build/subttxrend-testapps           $INSTALL_DIR    ""
 
@@ -352,6 +365,7 @@ elif [ "$COMMAND" == "doc" ] ; then
 $0 fast
 
 build_doc_cmake     build/subttxrend-app
+build_doc_cmake     build/subttxrend-ctrl
 build_doc_cmake     build/subttxrend-common
 build_doc_cmake     build/subttxrend-dbus
 build_doc_cmake     build/subttxrend-protocol
@@ -363,6 +377,7 @@ build_doc_cmake     build/subttxrend-ttml
 build_doc_cmake     build/ttxdecoder
 build_doc_cmake     build/dvbsubdecoder
 build_doc_aggregate build/documentation $BASE_DIR/src/doc \
+    $BASE_DIR/build/subttxrend-ctrl \
     $BASE_DIR/build/subttxrend-app \
     $BASE_DIR/build/subttxrend-common \
     $BASE_DIR/build/subttxrend-dbus \

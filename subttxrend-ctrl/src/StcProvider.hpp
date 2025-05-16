@@ -28,7 +28,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 /**
  * Process timestamp messages and provides current stc value on request.
@@ -106,7 +106,7 @@ private:
     mutable std::mutex m_stcDataMutex;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /* AV_SUBTTXREND_APP_STCPROVIDER_HPP */

@@ -27,7 +27,7 @@
 
 #include <subttxrend/common/NonCopyable.hpp>
 #include <subttxrend/common/Logger.hpp>
-#include <subttxrend/common/Properties.hpp>
+#include <ipp2/Properties.h>
 #include <subttxrend/gfx/Window.hpp>
 
 #include <subttxrend/ttmlengine/TtmlEngine.hpp>
@@ -36,7 +36,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 /**
@@ -51,7 +51,7 @@ class TtmlController final : public ControllerInterface
     TtmlController(const protocol::PacketChannelSpecific& dataPacket,
                    const common::ConfigProvider& config,
                    gfx::WindowPtr const& gfxWindow,
-                   common::Properties const& properties);
+                   ipp2::Properties const& properties);
     ~TtmlController();
 
     void process() override;
@@ -67,6 +67,7 @@ class TtmlController final : public ControllerInterface
     void mute(bool muted) override;
     bool wantsData(protocol::PacketChannelSpecific const& packet) const override;
 
+    void flush() override;
     void pause() override;
     void resume() override;
 
@@ -90,7 +91,7 @@ class TtmlController final : public ControllerInterface
     std::unique_ptr<ttmlengine::TtmlEngine> m_ttmlEngine;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /* SUBTTXREND_APP_TTMLCONTROLLER_HPP */

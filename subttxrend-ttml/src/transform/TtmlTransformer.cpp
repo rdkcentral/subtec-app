@@ -29,7 +29,7 @@ void TtmlTransformer::setSubtitleInfo(const std::string& contentType, const std:
 {
 }
 
-void TtmlTransformer::setProperties(common::Properties const& properties)
+void TtmlTransformer::setProperties(ipp2::Properties const& properties)
 {
 }
 

@@ -36,14 +36,14 @@ class TtmlAsClient::Impl final
     {
     }
 
-    AsHelpers getHelpers()
+    ipp2::AsHelpers getHelpers()
     {
-        return AsHelpers{};
+        return ipp2::AsHelpers{};
     }
 
-    Properties getData(std::chrono::milliseconds timeout)
+    ipp2::Properties getData(std::chrono::milliseconds timeout)
     {
-        return Properties{};
+        return ipp2::Properties{};
     }
 };
 
@@ -54,11 +54,11 @@ TtmlAsClient::TtmlAsClient()
 }
 TtmlAsClient::~TtmlAsClient() = default;
 
-Properties TtmlAsClient::getData(std::chrono::milliseconds timeout)
+ipp2::Properties TtmlAsClient::getData(std::chrono::milliseconds timeout)
 {
     return impl->getData(timeout);
 }
-AsHelpers TtmlAsClient::getHelpers()
+ipp2::AsHelpers TtmlAsClient::getHelpers()
 {
     return impl->getHelpers();
 }

@@ -68,7 +68,7 @@ void TtmlEngineImpl::clear()
 
 void TtmlEngineImpl::init(const common::ConfigProvider* configProvider,
                           gfx::Window* gfxWindow,
-                          common::Properties const& properties)
+                          ipp2::Properties const& properties)
 {
     m_logger.osinfo(__LOGGER_FUNC__);
 
@@ -120,6 +120,15 @@ void TtmlEngineImpl::stop()
     std::lock_guard<std::mutex> lock{m_mutex};
     clear();
     m_renderer->hide();
+}
+
+void TtmlEngineImpl::flush()
+{
+    m_logger.osinfo("flush received");
+    std::lock_guard<std::mutex> lock{m_mutex};
+    m_timeline.clear();
+    m_shownDocuments.clear();
+    clear();
 }
 
 void TtmlEngineImpl::pause()

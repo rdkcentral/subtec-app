@@ -59,7 +59,7 @@ public:
     /** @copydoc TtmlEngine::init */
     virtual void init(const common::ConfigProvider* configProvider,
                       gfx::Window*  gfxEngine,
-                      common::Properties const& properties) override;
+                      ipp2::Properties const& properties) override;
 
     /** @copydoc TtmlEngine::setRelatedVideoSize */
     virtual void setRelatedVideoSize(gfx::Size relatedVideoSize) override;
@@ -69,6 +69,9 @@ public:
 
     /** @copydoc TtmlEngine::stop */
     virtual void stop() override;
+
+    /** @copydoc TtmlEngine::flush */
+    virtual void flush() override;
 
     /** @copydoc TtmlEngine::pause */
     virtual void pause() override;
@@ -164,7 +167,7 @@ private:
     bool m_useTtmlFromFile{false};
 
     /** Ordered list of subtitles. */
-    std::mutex m_mutex;
+    mutable std::mutex m_mutex;
     std::list<IntermediateDocument> m_timeline;
     std::list<IntermediateDocument> m_shownDocuments;
 

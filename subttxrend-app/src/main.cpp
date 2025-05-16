@@ -23,10 +23,10 @@
 #include <cstdlib>
 
 #include "Application.hpp"
-#include "Options.hpp"
+#include <subttxrend/ctrl/Options.hpp>
 
 using subttxrend::app::Application;
-using subttxrend::app::Options;
+using subttxrend::ctrl::Options;
 
 auto registerSignalListener()
 {
@@ -52,8 +52,9 @@ auto registerSignalListener()
 int main(int argc,
          char* argv[])
 {
+#ifndef __APPLE__
     auto exitListener = registerSignalListener();
-
+#endif
     int rv = EXIT_FAILURE;
 
     try {
@@ -78,10 +79,13 @@ int main(int argc,
         app.runAsync();
         std::cerr << "subttxrend-app started" << std::endl;
 
-        auto exitRequested = exitListener.get();
-        std::cerr << "subttxrend-app signaled to exit" << std::endl;
+#ifndef __APPLE__
+        auto signalNum = exitListener.get();
+        std::cerr << "subttxrend-app signaled (" << signalNum << ") to exit" << std::endl;
+#else // __APPLE__
+        app.startBlockingApplicationWindow();
         app.quit();
-
+#endif
         rv = EXIT_SUCCESS;
     }
     catch (std::exception const& e)

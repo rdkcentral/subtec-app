@@ -20,6 +20,7 @@
 
 #include <memory>
 #include <map>
+#include <string>
 
 #include <subttxrend/gfx/ColorArgb.hpp>
 

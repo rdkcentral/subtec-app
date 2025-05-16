@@ -97,6 +97,8 @@ public:
 
         /** Force newline flag. */
         bool m_forceNewline = false;
+
+        XmlSpace m_whitespaceHandling = XmlSpace::DEFAULT;
     };
 
     struct ImageChunk

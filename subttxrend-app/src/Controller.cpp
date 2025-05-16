@@ -20,17 +20,18 @@
 
 #include "Controller.hpp"
 
-#include "DvbSubController.hpp"
-#include "CcSubController.hpp"
-#include "Configuration.hpp"
-#include "TtxController.hpp"
-#include "TtmlController.hpp"
-#include "WebvttController.hpp"
-#include "ScteSubController.hpp"
+#include <subttxrend/ctrl/DvbSubController.hpp>
+#include <subttxrend/ctrl/CcSubController.hpp>
+#include <subttxrend/ctrl/Configuration.hpp>
+#include <subttxrend/ctrl/TtxController.hpp>
+#include <subttxrend/ctrl/TtmlController.hpp>
+#include <subttxrend/ctrl/WebvttController.hpp>
+#include <subttxrend/ctrl/ScteSubController.hpp>
 
+#include "ipp2/Logger.h"
 #include <subttxrend/common/TtmlAsClient.hpp>
-#include <subttxrend/common/WsConnection.hpp>
-#include <subttxrend/common/Properties.hpp>
+#include <ipp2/clients/WsConnection.h>
+#include <ipp2/Properties.h>
 
 #include <chrono>
 
@@ -40,8 +41,10 @@ namespace app {
 
 namespace  {
 
+DEFINE_DEFAULT_CAT("SUBTTX.CNTRL");
+
 template <class Ctrls, class Packet, class Argument>
-void forAllControllers(Ctrls const& ctrls, Packet const& packet, Argument arg, void (ControllerInterface::*function)(Argument)) {
+void forAllControllers(Ctrls const& ctrls, Packet const& packet, Argument arg, void (ctrl::ControllerInterface::*function)(Argument)) {
     for (auto const& ctrl: ctrls) {
         if (ctrl && ctrl->wantsData(packet)) {
             ((*ctrl).*function)(arg);
@@ -50,7 +53,7 @@ void forAllControllers(Ctrls const& ctrls, Packet const& packet, Argument arg, v
 }
 
 template <class Ctrls, class Packet, class Argument>
-void forAllControllers(Ctrls const& ctrls, Packet const& packet, void (ControllerInterface::*function)(Argument))
+void forAllControllers(Ctrls const& ctrls, Packet const& packet, void (ctrl::ControllerInterface::*function)(Argument))
 {
     for (auto const& ctrl: ctrls) {
         if (ctrl && ctrl->wantsData(packet)) {
@@ -60,7 +63,7 @@ void forAllControllers(Ctrls const& ctrls, Packet const& packet, void (Controlle
 }
 
 template <class Ctrls, class Packet>
-void forAllControllers(Ctrls const& ctrls, Packet const& packet, void (ControllerInterface::*function)()) {
+void forAllControllers(Ctrls const& ctrls, Packet const& packet, void (ctrl::ControllerInterface::*function)()) {
     for (auto const& ctrl: ctrls) {
         if (ctrl && ctrl->wantsData(packet)) {
             ((*ctrl).*function)();
@@ -68,25 +71,23 @@ void forAllControllers(Ctrls const& ctrls, Packet const& packet, void (Controlle
     }
 }
 
-constexpr const std::chrono::milliseconds connection_status_check_timeout{1000};
 constexpr const std::chrono::milliseconds as_data_acq_timeout{2000};
 
 } /* namespace  */
 
-Controller::Controller(Configuration const& config, gfx::EnginePtr gfxEngine, gfx::WindowPtr gfxWindow)
+Controller::Controller(ctrl::Configuration const& config, gfx::EnginePtr gfxEngine, gfx::WindowPtr gfxWindow)
     : m_config(config)
     , m_gfxEngine(gfxEngine)
     , m_gfxWindow(gfxWindow)
     , m_fontCache{std::make_shared<gfx::PrerenderedFontCache>()}
     , m_stcProvider()
     , m_logger("App", "Controller", this)
-    , m_endpoint{std::make_unique<common::WsEndpoint>()}
+    , m_endpoint{std::make_unique<ipp2::WsEndpoint>()}
 {
-    m_asClient = std::make_unique<common::AsClient>(connection_status_check_timeout,
-               std::make_unique<common::WsConnection>("subttxrend-app", *m_endpoint));
+    m_asClient = std::make_unique<ipp2::AsClient>(DEFAULT_CAT, std::make_unique<ipp2::WsConnection>("subttxrend-app", *m_endpoint));
     m_asLstnr = std::make_unique<common::TtmlAsClient>();
 
-    common::AsHelpers helpers;
+    ipp2::AsHelpers helpers;
     auto tmp = m_asLstnr->getHelpers();
     helpers.insert(helpers.end(), tmp.begin(), tmp.end());
     m_asClient->setup(std::move(helpers));
@@ -148,7 +149,7 @@ std::chrono::milliseconds Controller::processData()
         }
     }
     {
-        std::shared_ptr<ControllerInterface> controller;
+        std::shared_ptr<ctrl::ControllerInterface> controller;
         {
             LockGuard lock{m_mutex};
             m_inuse = true;
@@ -237,6 +238,10 @@ void Controller::doOnPacketReceived(UniqueLock& lock, const protocol::Packet& pa
         }
         case protocol::Packet::Type::WEBVTT_TIMESTAMP: {
             processWebvttTimestamp(static_cast<protocol::PacketWebvttTimestamp const&>(packet));
+            break;
+        }
+        case protocol::Packet::Type::FLUSH: {
+            processFlushPacket(static_cast<protocol::PacketFlush const&>(packet));
             break;
         }
         case protocol::Packet::Type::PAUSE: {
@@ -330,7 +335,7 @@ void Controller::processDvbSubtitleSelection(const protocol::PacketSubtitleSelec
     auto timing = m_logger.timing(__LOGGER_FUNC__);
     m_logger.osinfo("Selecting DVB Subtitles: ", packet.getChannelId());
     deactivateController();
-    pushController(std::make_shared<MutexedController<DvbSubController>>(packet, m_gfxWindow, m_gfxEngine, m_stcProvider));
+    pushController(std::make_shared<ctrl::MutexedController<ctrl::DvbSubController>>(packet, m_gfxWindow, m_gfxEngine, m_stcProvider));
 }
 
 void Controller::processScteSubtitleSelection(const protocol::PacketSubtitleSelection& packet)
@@ -338,7 +343,7 @@ void Controller::processScteSubtitleSelection(const protocol::PacketSubtitleSele
     auto timing = m_logger.timing(__LOGGER_FUNC__);
     m_logger.osinfo("Selecting SCTE Subtitles: ", packet.getChannelId());
     deactivateController();
-    pushController(std::make_shared<MutexedController<ScteSubController>>(packet, m_gfxWindow, m_stcProvider));
+    pushController(std::make_shared<ctrl::MutexedController<ctrl::ScteSubController>>(packet, m_gfxWindow, m_stcProvider));
 }
 
 void Controller::processCcSubtitleSelection(const protocol::PacketSubtitleSelection& packet)
@@ -346,7 +351,7 @@ void Controller::processCcSubtitleSelection(const protocol::PacketSubtitleSelect
     auto timing = m_logger.timing(__LOGGER_FUNC__);
     m_logger.osinfo("Selecting CC Subtitles: ", packet.getChannelId());
     deactivateController();
-    pushController(std::make_shared<MutexedController<CcSubController>>(packet, m_gfxWindow, m_fontCache));
+    pushController(std::make_shared<ctrl::MutexedController<ctrl::CcSubController>>(packet, m_gfxWindow, m_fontCache));
 }
 
 void Controller::processTtxSubtitleSelection(const protocol::PacketSubtitleSelection& packet)
@@ -354,7 +359,7 @@ void Controller::processTtxSubtitleSelection(const protocol::PacketSubtitleSelec
     auto timing = m_logger.timing(__LOGGER_FUNC__);
     m_logger.osinfo("Selecting TTX Subtitles: ", packet.getChannelId());
     deactivateController();
-    pushController(std::make_shared<MutexedController<TtxController>>(packet, m_config.getTeletextConfig(), m_gfxWindow, m_gfxEngine, m_stcProvider));
+    pushController(std::make_shared<ctrl::MutexedController<ctrl::TtxController>>(packet, m_config.getTeletextConfig(), m_gfxWindow, m_gfxEngine, m_stcProvider));
 }
 
 void Controller::processTeletextSelection(const protocol::PacketTeletextSelection& packet)
@@ -362,7 +367,7 @@ void Controller::processTeletextSelection(const protocol::PacketTeletextSelectio
     auto timing = m_logger.timing(__LOGGER_FUNC__);
     m_logger.osinfo("Selecting TTX: ", packet.getChannelId());
     deactivateController();
-    pushController(std::make_shared<MutexedController<TtxController>>(packet, m_config.getTeletextConfig(), m_gfxWindow, m_gfxEngine, m_stcProvider));
+    pushController(std::make_shared<ctrl::MutexedController<ctrl::TtxController>>(packet, m_config.getTeletextConfig(), m_gfxWindow, m_gfxEngine, m_stcProvider));
 }
 
 void Controller::processTtmlSelection(const protocol::PacketTtmlSelection& packet)
@@ -371,14 +376,14 @@ void Controller::processTtmlSelection(const protocol::PacketTtmlSelection& packe
     m_logger.osinfo("Selecting TTML Subtitles: ", packet.getChannelId());
     deactivateController();
 
-    common::Properties properties;
+    ipp2::Properties properties;
     try {
         properties = m_asLstnr->getData(as_data_acq_timeout);
     } catch (std::exception const& e) {
         m_logger.oserror(__LOGGER_FUNC__, " exception: ", e.what());
     }
 
-    pushController(std::make_shared<TtmlController>(packet, m_config.getTtmlConfig(), m_gfxWindow, properties));
+    pushController(std::make_shared<ctrl::TtmlController>(packet, m_config.getTtmlConfig(), m_gfxWindow, properties));
 }
 
 void Controller::processWebvttSelection(const protocol::PacketWebvttSelection& packet)
@@ -386,7 +391,7 @@ void Controller::processWebvttSelection(const protocol::PacketWebvttSelection& p
     auto timing = m_logger.timing(__LOGGER_FUNC__);
     m_logger.osinfo("Selecting WebVTT Subtitles: ", packet.getChannelId());
     deactivateController();
-    pushController(std::make_shared<WebvttController>(packet, m_config.getWebvttConfig(), m_gfxWindow));
+    pushController(std::make_shared<ctrl::WebvttController>(packet, m_config.getWebvttConfig(), m_gfxWindow));
 }
 
 using namespace std::string_literals;
@@ -443,46 +448,54 @@ void Controller::processDataPacket(const protocol::PacketData& packet)
 void Controller::processTtmlTimestamp(const protocol::PacketTtmlTimestamp& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, &ControllerInterface::processTimestamp);
+    forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::processTimestamp);
 }
 
 void Controller::processTtmlInfoPacket(const protocol::PacketTtmlInfo& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, &ControllerInterface::processInfo);
+    forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::processInfo);
 }
 
 void Controller::processWebvttTimestamp(const protocol::PacketWebvttTimestamp& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, &ControllerInterface::processTimestamp);
+    forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::processTimestamp);
+}
+
+void Controller::processFlushPacket(const protocol::PacketChannelSpecific& packet)
+{
+    auto timing = m_logger.timing(__LOGGER_FUNC__);
+    forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::flush);
+    m_dataqueue.clear();
+    m_renderCond.notify_one();
 }
 
 void Controller::processPausePacket(const protocol::PacketChannelSpecific& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, &ControllerInterface::pause);
+    forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::pause);
 }
 
 void Controller::processResumePacket(const protocol::PacketChannelSpecific& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, &ControllerInterface::resume);
+    forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::resume);
 }
 
 void Controller::processMutePacket(const protocol::PacketMute& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, true, &ControllerInterface::mute);
+    forAllControllers(m_activeControllers, packet, true, &ctrl::ControllerInterface::mute);
 }
 
 void Controller::processUnmutePacket(const protocol::PacketUnmute& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, false, &ControllerInterface::mute);
+    forAllControllers(m_activeControllers, packet, false, &ctrl::ControllerInterface::mute);
 }
 
-void Controller::pushController(std::shared_ptr<ControllerInterface> controller)
+void Controller::pushController(std::shared_ptr<ctrl::ControllerInterface> controller)
 {
     m_activeControllers.emplace_back(std::move(controller));
 }
@@ -515,9 +528,9 @@ void Controller::popNullController()
     }
 }
 
-std::shared_ptr<ControllerInterface> Controller::topController()
+std::shared_ptr<ctrl::ControllerInterface> Controller::topController()
 {
-    std::shared_ptr<ControllerInterface> controller;
+    std::shared_ptr<ctrl::ControllerInterface> controller;
     if (!m_activeControllers.empty()) {
         controller = m_activeControllers.back();
     }
@@ -563,7 +576,7 @@ void Controller::processLoop()
 void Controller::processSetCCAttributes(const protocol::PacketSetCCAttributes& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, &ControllerInterface::processSetCCAttributesPacket);
+    forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::processSetCCAttributesPacket);
 }
 
 } // namespace app

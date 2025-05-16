@@ -86,6 +86,7 @@ set(SUBTTXREND_WEBVTT_PUBLIC_HEADERS
 set(SUBTTXREND_WEBVTT_SOURCES
      src/Factory.cpp
      src/WebvttEngineImpl.cpp
+     src/WebVTTConfig.cpp
      src/WebVTTRenderer.cpp
      src/LineBuilder.cpp
      src/Parser/WebVTTCue.cpp

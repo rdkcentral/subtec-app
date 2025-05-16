@@ -79,6 +79,7 @@ add_cppunit_test(StyleSet_Test
 add_cppunit_test(DocumentInstance_Test
                  DocumentInstance_test.cpp
                  ../src/Parser/AttributeHandlers.cpp
+                 ../src/Parser/DocumentInstance.cpp
                  ../src/Parser/Outline.cpp
                  ../src/Parser/StyleSet.cpp
                  ../src/Parser/Utils.cpp

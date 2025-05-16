@@ -96,6 +96,8 @@ set(SUBTTXREND_TTML_SOURCES
      src/Parser/Parser.cpp
      src/Parser/StyleSet.cpp
      src/Parser/Utils.cpp
+     src/Parser/XmlLibSaxParserWrapper.cpp
+     src/Parser/DocumentInstance.cpp
      src/DataDumper.cpp
      src/TtmlEngineImpl.cpp
      src/TtmlRenderer.cpp

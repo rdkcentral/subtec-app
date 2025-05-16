@@ -27,7 +27,7 @@
 
 #include <subttxrend/common/NonCopyable.hpp>
 #include <subttxrend/common/Logger.hpp>
-#include <subttxrend/common/Properties.hpp>
+#include <ipp2/Properties.h>
 #include <subttxrend/gfx/Window.hpp>
 
 #include <subttxrend/ttmlengine/TtmlEngine.hpp>
@@ -51,7 +51,7 @@ class TtmlController final : public ControllerInterface
     TtmlController(const protocol::PacketChannelSpecific& dataPacket,
                    const common::ConfigProvider& config,
                    gfx::WindowPtr const& gfxWindow,
-                   common::Properties const& properties);
+                   ipp2::Properties const& properties);
     ~TtmlController();
 
     void process() override;

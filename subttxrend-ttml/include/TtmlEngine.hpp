@@ -26,7 +26,7 @@
 #include <string>
 
 #include <subttxrend/common/ConfigProvider.hpp>
-#include <subttxrend/common/Properties.hpp>
+#include <ipp2/Properties.h>
 #include <subttxrend/gfx/Engine.hpp>
 
 namespace subttxrend
@@ -58,7 +58,7 @@ public:
      */
     virtual void init(const common::ConfigProvider* configProvider,
                       gfx::Window* gfxWindow,
-                      common::Properties const& properties) = 0;
+                      ipp2::Properties const& properties) = 0;
 
     /**
      * Notifies size of related video content. Used for position and size calculations.

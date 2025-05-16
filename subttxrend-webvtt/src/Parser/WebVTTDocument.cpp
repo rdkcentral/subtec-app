@@ -278,7 +278,7 @@ void WebVTTDocument::checkValidWebVTTHeader(std::istream& ifile) {
     }
 
     if (line.substr(0, 6) != "WEBVTT" ||
-        line.length() > 6 && !std::isspace(line[6])) {
+        (line.length() > 6 && !std::isspace(line[6])) ) {
         throw InvalidCueException("Bad WEBVTT header");
     }
 }

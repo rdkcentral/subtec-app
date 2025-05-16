@@ -24,7 +24,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 #
 # Directory with modules
 #
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/modules/" "${CMAKE_MODULE_PATH}/websocket-ipplayer2-utils")
 
 #
 # Packages to use

@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 #include "Parser/IntermediateDocument.hpp"
-#include <subttxrend/common/Properties.hpp>
+#include <ipp2/Properties.h>
 
 namespace subttxrend
 {
@@ -53,7 +53,7 @@ struct SubtitleInfo
 class TtmlTransformer final
 {
 public:
-    void setProperties(common::Properties const& properties);
+    void setProperties(ipp2::Properties const& properties);
     void setSubtitleInfo(const std::string& contentType, const std::string& subsInfo);
     void transform(IntermediateDocument& doc);
 

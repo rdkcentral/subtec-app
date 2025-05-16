@@ -28,9 +28,10 @@
 #include <subttxrend/ctrl/WebvttController.hpp>
 #include <subttxrend/ctrl/ScteSubController.hpp>
 
+#include "ipp2/Logger.h"
 #include <subttxrend/common/TtmlAsClient.hpp>
-#include <subttxrend/common/WsConnection.hpp>
-#include <subttxrend/common/Properties.hpp>
+#include <ipp2/clients/WsConnection.h>
+#include <ipp2/Properties.h>
 
 #include <chrono>
 
@@ -39,6 +40,8 @@ namespace app {
 
 
 namespace  {
+
+DEFINE_DEFAULT_CAT("SUBTTX.CNTRL");
 
 template <class Ctrls, class Packet, class Argument>
 void forAllControllers(Ctrls const& ctrls, Packet const& packet, Argument arg, void (ctrl::ControllerInterface::*function)(Argument)) {
@@ -68,7 +71,6 @@ void forAllControllers(Ctrls const& ctrls, Packet const& packet, void (ctrl::Con
     }
 }
 
-constexpr const std::chrono::milliseconds connection_status_check_timeout{1000};
 constexpr const std::chrono::milliseconds as_data_acq_timeout{2000};
 
 } /* namespace  */
@@ -80,13 +82,12 @@ Controller::Controller(ctrl::Configuration const& config, gfx::EnginePtr gfxEngi
     , m_fontCache{std::make_shared<gfx::PrerenderedFontCache>()}
     , m_stcProvider()
     , m_logger("App", "Controller", this)
-    , m_endpoint{std::make_unique<common::WsEndpoint>()}
+    , m_endpoint{std::make_unique<ipp2::WsEndpoint>()}
 {
-    m_asClient = std::make_unique<common::AsClient>(connection_status_check_timeout,
-               std::make_unique<common::WsConnection>("subttxrend-app", *m_endpoint));
+    m_asClient = std::make_unique<ipp2::AsClient>(DEFAULT_CAT, std::make_unique<ipp2::WsConnection>("subttxrend-app", *m_endpoint));
     m_asLstnr = std::make_unique<common::TtmlAsClient>();
 
-    common::AsHelpers helpers;
+    ipp2::AsHelpers helpers;
     auto tmp = m_asLstnr->getHelpers();
     helpers.insert(helpers.end(), tmp.begin(), tmp.end());
     m_asClient->setup(std::move(helpers));
@@ -375,7 +376,7 @@ void Controller::processTtmlSelection(const protocol::PacketTtmlSelection& packe
     m_logger.osinfo("Selecting TTML Subtitles: ", packet.getChannelId());
     deactivateController();
 
-    common::Properties properties;
+    ipp2::Properties properties;
     try {
         properties = m_asLstnr->getData(as_data_acq_timeout);
     } catch (std::exception const& e) {

@@ -41,6 +41,7 @@ function build_project_cmake {
 
     cmake \
         -DCMAKE_INSTALL_PREFIX=$3/usr/local \
+        -DCMAKE_MODULE_PATH=$3/usr/local/share/cmake/Modules \
         -DCMAKE_BUILD_TYPE=Debug \
         -DCMAKE_FIND_ROOT_PATH=$3 \
         -DCMAKE_INSTALL_NAME_DIR=$3/usr/local/lib \
@@ -147,7 +148,12 @@ function build_tests {
     mkdir -p $2
     pushd $2
 
-    cmake -DCMAKE_INSTALL_PREFIX=$3/usr/local -DCMAKE_BUILD_TYPE=Debug -DCMAKE_FIND_ROOT_PATH=$3 $4 $1
+    cmake -DCMAKE_INSTALL_PREFIX=$3/usr/local \
+          -DCMAKE_MODULE_PATH=$3/usr/local/share/cmake/Modules \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_FIND_ROOT_PATH=$3 \
+          $4 \
+          $1
     make $PARALLEL_JOBS_OPT
 
     if cat Makefile | egrep "\binstall\b" 2> /dev/null
@@ -260,6 +266,7 @@ rm -rf build
 elif [ "$COMMAND" == "build" ] ; then
 
 build_project_cmake     $BASE_DIR/src/rdklogger                     build/rdklogger                     $INSTALL_DIR    ""
+build_project_cmake     $AV_PROJECTS_DIR/websocket-ipplayer2-utils  build/websocket-ipplayer2-utils     $INSTALL_DIR    "-DBUILD_PC=1"
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-common          build/subttxrend-common             $INSTALL_DIR    -DBUILD_RDK_REFERENCE=1
 build_project_cmake     $AV_PROJECTS_DIR/ttxdecoder                 build/ttxdecoder                    $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/dvbsubdecoder              build/dvbsubdecoder                 $INSTALL_DIR    ""
@@ -270,7 +277,7 @@ build_project_cmake     $AV_PROJECTS_DIR/subttxrend-gfx             build/subttx
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-dvbsub          build/subttxrend-dvbsub             $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ttxt            build/subttxrend-ttxt               $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ttml            build/subttxrend-ttml               $INSTALL_DIR    -DBUILD_RDK_REFERENCE=1
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-webvtt            build/subttxrend-webvtt               $INSTALL_DIR    ""
+build_project_cmake     $AV_PROJECTS_DIR/subttxrend-webvtt          build/subttxrend-webvtt             $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-scte            build/subttxrend-scte               $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-cc              build/subttxrend-cc                 $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ctrl            build/subttxrend-ctrl               $INSTALL_DIR    ""

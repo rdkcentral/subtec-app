@@ -22,7 +22,7 @@ cmake_minimum_required (VERSION 3.2)
 #
 # Directory with modules
 #
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/" "${CMAKE_MODULE_PATH}/websocket-ipplayer2-utils")
 
 #
 # Configuration variables
@@ -55,6 +55,7 @@ find_package(LibSubTtxRendCc REQUIRED)
 find_package(LibSubTtxRendTtxt REQUIRED)
 find_package(LibSubTtxRendTtml REQUIRED)
 find_package(LibSubTtxRendWebvtt REQUIRED)
+find_package(Ipp2Utils REQUIRED CONFIG)
 
 #
 # Include directories
@@ -136,6 +137,7 @@ target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDTTML_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDWEBVTT_LIBRARIES})
 target_link_libraries(${APP_NAME} pthread)
 target_link_libraries(${APP_NAME} boost_system)
+target_link_libraries(${APP_NAME} Ipp2Utils::ipp2utils)
 
 #
 # Install rules

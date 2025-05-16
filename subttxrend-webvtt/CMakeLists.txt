@@ -22,7 +22,7 @@ cmake_minimum_required (VERSION 3.2)
 #
 # Directory with modules
 #
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/" "${CMAKE_MODULE_PATH}/websocket-ipplayer2-utils")
 
 #
 # Extra compiler / linker options
@@ -86,6 +86,7 @@ set(SUBTTXREND_WEBVTT_PUBLIC_HEADERS
 set(SUBTTXREND_WEBVTT_SOURCES
      src/Factory.cpp
      src/WebvttEngineImpl.cpp
+     src/WebVTTConfig.cpp
      src/WebVTTRenderer.cpp
      src/LineBuilder.cpp
      src/Parser/WebVTTCue.cpp

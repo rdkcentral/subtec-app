@@ -33,9 +33,9 @@
 #include <subttxrend/common/NonCopyable.hpp>
 #include <subttxrend/common/ConfigProvider.hpp>
 #include <subttxrend/common/Logger.hpp>
-#include <subttxrend/common/AsClient.hpp>
-#include <subttxrend/common/AsListener.hpp>
-#include <subttxrend/common/WsEndpoint.hpp>
+#include <ipp2/clients/AsClient.h>
+#include <ipp2/clients/AsListener.h>
+#include <ipp2/clients/WsEndpoint.h>
 
 #include <subttxrend/socksrc/PacketReceiver.hpp>
 
@@ -357,9 +357,9 @@ private:
     bool m_inuse{false};
     std::shared_ptr<gfx::PrerenderedFontCache> m_fontCache;
 
-    std::unique_ptr<common::AsListener> m_asLstnr;
-    std::unique_ptr<common::WsEndpoint> m_endpoint;
-    std::unique_ptr<common::AsClient> m_asClient;
+    std::unique_ptr<ipp2::AsListener> m_asLstnr;
+    std::unique_ptr<ipp2::WsEndpoint> m_endpoint;
+    std::unique_ptr<ipp2::AsClient> m_asClient;
 };
 
 using ControllerPtr = std::unique_ptr<Controller>;

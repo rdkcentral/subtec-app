@@ -33,7 +33,7 @@ namespace ctrl {
 TtmlController::TtmlController(const protocol::PacketChannelSpecific& dataPacket,
                                const common::ConfigProvider& config,
                                gfx::WindowPtr const& gfxWindow,
-                               common::Properties const& properties)
+                               ipp2::Properties const& properties)
     : m_channel()
     , m_logger("App", "TtmlController", this)
     , m_ttmlEngine(ttmlengine::Factory::createTtmlEngine())

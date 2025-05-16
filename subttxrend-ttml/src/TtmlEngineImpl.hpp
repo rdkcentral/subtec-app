@@ -59,7 +59,7 @@ public:
     /** @copydoc TtmlEngine::init */
     virtual void init(const common::ConfigProvider* configProvider,
                       gfx::Window*  gfxEngine,
-                      common::Properties const& properties) override;
+                      ipp2::Properties const& properties) override;
 
     /** @copydoc TtmlEngine::setRelatedVideoSize */
     virtual void setRelatedVideoSize(gfx::Size relatedVideoSize) override;

@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "AsListener.hpp"
-#include "Properties.hpp"
+#include "ipp2/clients/AsListener.h"
+#include "ipp2/Properties.h"
 #include <memory>
 
 
@@ -38,14 +38,14 @@ enum class TtmlProperty
 
 std::ostream& operator<<(std::ostream& out, TtmlProperty prop);
 
-class TtmlAsClient final : public AsListener
+class TtmlAsClient final : public ipp2::AsListener
 {
   public:
     TtmlAsClient();
     ~TtmlAsClient();
 
-    AsHelpers getHelpers() override;
-    Properties getData(std::chrono::milliseconds timeout) override;
+    ipp2::AsHelpers getHelpers() override;
+    ipp2::Properties getData(std::chrono::milliseconds timeout) override;
 
   private:
     class Impl;

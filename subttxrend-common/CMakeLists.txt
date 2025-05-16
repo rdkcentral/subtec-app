@@ -22,7 +22,7 @@ cmake_minimum_required (VERSION 3.2)
 #
 # Directory with modules
 #
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/" "${CMAKE_MODULE_PATH}/websocket-ipplayer2-utils")
 
 #
 # Extra compiler / linker options
@@ -35,7 +35,7 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 # Packages to use
 #
 find_package(RdkLogger REQUIRED)
-find_package(LibWebsocketPP REQUIRED)
+find_package(Ipp2Utils REQUIRED CONFIG)
 
 #
 # Include directories
@@ -88,13 +88,7 @@ set(SUBTTXREND_COMMON_PUBLIC_HEADERS
     include/PrefixConfigProvider.hpp
     include/StringUtils.hpp
     include/DataBuffer.hpp
-    include/AsClient.hpp
-    include/AsListener.hpp
-    include/Properties.hpp
     include/TtmlAsClient.hpp
-    include/Utils.hpp
-    include/WsConnection.hpp
-    include/WsEndpoint.hpp
     )
 
 #
@@ -109,22 +103,13 @@ set(SUBTTXREND_COMMON_SOURCES
     src/LoggerBackendStd.cpp
     src/LoggerManagerImpl.cpp
     src/StringUtils.cpp
-    src/utils/JsonData.cpp
-    src/utils/Properties.cpp
-    src/utils/Utils.cpp
     )
     
 if(BUILD_RDK_REFERENCE)
-    set(SUBTTXREND_COMMON_SOURCES ${SUBTTXREND_COMMON_SOURCES} src/clients-generic/AsClient.cpp)
     set(SUBTTXREND_COMMON_SOURCES ${SUBTTXREND_COMMON_SOURCES} src/clients-generic/TtmlAsClient.cpp)
-    set(SUBTTXREND_COMMON_SOURCES ${SUBTTXREND_COMMON_SOURCES} src/clients-generic/WsConnection.cpp)
-    set(SUBTTXREND_COMMON_SOURCES ${SUBTTXREND_COMMON_SOURCES} src/clients-generic/WsEndpoint.cpp)
 else(BUILD_RDK_REFERENCE)
-     set(SUBTTXREND_COMMON_SOURCES ${SUBTTXREND_COMMON_SOURCES} src/clients-lgi/AsClient.cpp)
      set(SUBTTXREND_COMMON_SOURCES ${SUBTTXREND_COMMON_SOURCES} src/clients-lgi/TtmlAsClient.cpp)
      set(SUBTTXREND_COMMON_SOURCES ${SUBTTXREND_COMMON_SOURCES} src/clients-lgi/AsHelpers.cpp)
-     set(SUBTTXREND_COMMON_SOURCES ${SUBTTXREND_COMMON_SOURCES} src/clients-lgi/WsConnection.cpp)
-     set(SUBTTXREND_COMMON_SOURCES ${SUBTTXREND_COMMON_SOURCES} src/clients-lgi/WsEndpoint.cpp)
 endif(BUILD_RDK_REFERENCE)
 
 #
@@ -139,6 +124,7 @@ set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_COMMON_P
 target_link_libraries(${LIBRARY_NAME} ${LIBRDKLOGGER_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} boost_system)
 target_link_libraries(${LIBRARY_NAME} pthread)
+target_link_libraries(${LIBRARY_NAME} Ipp2Utils::ipp2utils)
 
 #
 # Install rules

@@ -68,7 +68,7 @@ void TtmlEngineImpl::clear()
 
 void TtmlEngineImpl::init(const common::ConfigProvider* configProvider,
                           gfx::Window* gfxWindow,
-                          common::Properties const& properties)
+                          ipp2::Properties const& properties)
 {
     m_logger.osinfo(__LOGGER_FUNC__);
 

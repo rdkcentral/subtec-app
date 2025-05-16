@@ -24,7 +24,7 @@ cmake_minimum_required (VERSION 3.2)
 #
 # Directory with modules
 #
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/modules/" "${CMAKE_MODULE_PATH}/websocket-ipplayer2-utils")
 
 #
 # Packages to use
@@ -79,6 +79,7 @@ add_cppunit_test(StyleSet_Test
 add_cppunit_test(DocumentInstance_Test
                  DocumentInstance_test.cpp
                  ../src/Parser/AttributeHandlers.cpp
+                 ../src/Parser/DocumentInstance.cpp
                  ../src/Parser/Outline.cpp
                  ../src/Parser/StyleSet.cpp
                  ../src/Parser/Utils.cpp

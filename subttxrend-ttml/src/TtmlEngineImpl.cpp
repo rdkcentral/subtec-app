@@ -252,6 +252,21 @@ void TtmlEngineImpl::setSubtitleInfo(const std::string& contentType, const std::
     m_docTransformer.setSubtitleInfo(contentType, subsInfo);
 }
 
+void TtmlEngineImpl::setCustomTtmlStyling(const std::string& styling)
+{
+    m_logger.osinfo(__LOGGER_FUNC__, " styling = ", styling);
+    assert(m_parser);
+    // Input has the form "key:value;key:value"
+    // We parse this out to be a set of properties, then pass those to the parser to keep in its DocumentInstance
+    common::Properties styleProperties;
+    paramsToProperties(styleProperties, styling);
+    Attributes styleAttributes;
+    styleProperties.forEach([&](const std::string& k, const std::string& v){ styleAttributes.emplace(k, v); });
+
+    std::lock_guard<std::mutex> lock{m_mutex};
+    m_parser->setStyleOverrideAttributes(styleAttributes);
+}
+
 void TtmlEngineImpl::process()
 {
     bool needUpdate = false;

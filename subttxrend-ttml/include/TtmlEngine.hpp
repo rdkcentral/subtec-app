@@ -143,6 +143,15 @@ public:
      */
     virtual void setSubtitleInfo(const std::string& contentType, const std::string& subsInfo) = 0;
 
+    /**
+     * Set Custom Styling.
+     * The styling will be applied as the last styling to any item, overriding other styles.
+     *
+     * @param styling
+     *      A list of styling attributes and values in the format "key:value;key:value"
+     */
+    virtual void setCustomTtmlStyling(const std::string& styling) = 0;
+
 };
 
 } // namespace ttmlengine

@@ -139,6 +139,11 @@ void TtmlController::resume()
     m_ttmlEngine->resume();
 }
 
+void TtmlController::setCustomTtmlStyling(const std::string& styling)
+{
+    m_ttmlEngine->setCustomTtmlStyling(styling);
+}
+
 void TtmlController::mute(bool m)
 {
     if (m) {

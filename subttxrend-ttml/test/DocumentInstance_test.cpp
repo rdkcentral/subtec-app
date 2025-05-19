@@ -32,6 +32,7 @@ CPPUNIT_TEST_SUITE( DocumentInstanceTest );
     CPPUNIT_TEST(styleInheritanceRegionStyleOverStyle);
     CPPUNIT_TEST(styleInheritanceRegionOverRegionStyle);
     CPPUNIT_TEST(styleInheritanceElementOverRegion);
+    CPPUNIT_TEST(styleInheritanceOverrideOverElement);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -402,6 +403,64 @@ public:
       CPPUNIT_ASSERT(textChunk.m_text == "text");
 
       CPPUNIT_ASSERT(textChunk.m_style.getTextAlign() == StyleSet::TextAlign::CENTER);
+    }
+
+    void styleInheritanceOverrideOverElement()
+    {
+      DocumentInstance doc{};
+
+      CPPUNIT_ASSERT(doc.generateTimeline().empty());
+
+      Attributes attr{
+        {"textAlign", "left"},
+        {"color",     "blue"}
+      };
+      doc.setStyleOverrideAttributes(attr);
+
+      doc.startElement("tt");
+      auto style1 = doc.startElement("style");
+      style1->parseAttribute("", "id", "style1");
+      style1->parseAttribute("tts", "textAlign", "right");
+      doc.endElement();
+
+      auto style2 = doc.startElement("style");
+      style2->parseAttribute("", "id", "style2");
+      style2->parseAttribute("tts", "textAlign", "end");
+      doc.endElement();
+
+      auto region = doc.startElement("region");
+      region->parseAttribute("","id", "region1");
+      region->parseAttribute("", "style", "style2");
+      doc.endElement();
+
+      auto div = doc.startElement("div");
+      div->parseAttribute("", "style", "style1");
+      div->parseAttribute("", "region", "region1");
+      div->parseAttribute("tts", "textAlign", "center");
+      div->parseAttribute("", "begin", "00:00:00");
+      div->parseAttribute("", "end", "00:00:10");
+      div->appendText("text");
+      doc.endElement();
+
+      doc.endElement(); //tt
+
+      auto timeline = doc.generateTimeline();
+      CPPUNIT_ASSERT_EQUAL(1, timeline.size());
+
+      auto firstDoc = timeline.front();
+      CPPUNIT_ASSERT_EQUAL(1, firstDoc.m_entites.size());
+
+      auto firstEntity = firstDoc.m_entites[0];
+      CPPUNIT_ASSERT_EQUAL(1, firstEntity.m_textLines.size());
+
+      auto firstLine = firstEntity.m_textLines[0];
+      CPPUNIT_ASSERT_EQUAL(1, firstLine.size());
+
+      auto textChunk = firstLine[0];
+      CPPUNIT_ASSERT_EQUAL("text", textChunk.m_text);
+
+      CPPUNIT_ASSERT_EQUAL(StyleSet::TextAlign::LEFT, textChunk.m_style.getTextAlign());
+      CPPUNIT_ASSERT_EQUAL(gfx::ColorArgb::BLUE, textChunk.m_style.getColor());
     }
 };
 

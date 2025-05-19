@@ -34,7 +34,7 @@
 #include "ControllerInterface.hpp"
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 /**
  * Controller class for Closed Captions.
@@ -74,7 +74,7 @@ class CcSubController final : public ControllerInterface
     std::uint32_t m_channelId{};
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /* _SUBTTXREND_APP_SCTESUBCONTROLLER_HPP_ */

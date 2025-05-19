@@ -27,7 +27,7 @@
 #include <subttxrend/protocol/PacketSubtitleSelection.hpp>
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 TtxController::TtxController(protocol::PacketChannelSpecific const& packet,common::ConfigProvider const& config,
                              const gfx::WindowPtr& gfxWindow,
@@ -335,5 +335,5 @@ std::uint32_t TtxController::getStc()
     }
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend

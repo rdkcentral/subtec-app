@@ -31,7 +31,7 @@
 #include <subttxrend/common/ConfigProvider.hpp>
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 class ControllerInterface : private common::NonCopyable
 {
@@ -139,5 +139,5 @@ class MutexedController final : public ControllerInterface
     Ctrl controller;
     std::mutex mutable mutex;
 };
-} /* namespace app */
+} /* namespace ctrl */
 } /* namespace subttxrend */

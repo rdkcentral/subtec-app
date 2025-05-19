@@ -36,7 +36,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 /**
@@ -92,7 +92,7 @@ class TtmlController final : public ControllerInterface
     std::unique_ptr<ttmlengine::TtmlEngine> m_ttmlEngine;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /* SUBTTXREND_APP_TTMLCONTROLLER_HPP */

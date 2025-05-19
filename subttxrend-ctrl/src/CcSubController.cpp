@@ -25,7 +25,7 @@
 #include <cassert>
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 CcSubController::~CcSubController()
 {
@@ -118,6 +118,6 @@ void CcSubController::setTextForPreview(const std::string& text)
     m_controller.setTextForPreview(text);
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 

@@ -31,8 +31,6 @@
 #include <subttxrend/gfx/Engine.hpp>
 
 #include "Controller.hpp"
-#include "Options.hpp"
-#include "Configuration.hpp"
 
 namespace subttxrend
 {
@@ -46,7 +44,7 @@ class Application : private common::NonCopyable
 {
 public:
 
-    Application(const Options& options);
+    Application(const ctrl::Options& options);
     virtual ~Application() = default;
 
     void runAsync();
@@ -55,7 +53,7 @@ public:
 private:
 
     /** Application configuration. */
-    Configuration m_configuration;
+    ctrl::Configuration m_configuration;
 
     /** Unix socket path to use. */
     const std::string m_socketPath;

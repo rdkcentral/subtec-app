@@ -26,7 +26,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 /**
@@ -118,7 +118,7 @@ private:
     std::uint32_t m_id;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /* _SUBTTXREND_APP_CHANNEL_HPP_ */

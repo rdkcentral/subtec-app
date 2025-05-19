@@ -27,7 +27,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 /**
@@ -338,7 +338,7 @@ private:
     std::map<Key, std::string> m_values;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /*SUBTTXREND_APP_OPTIONS_HPP_*/

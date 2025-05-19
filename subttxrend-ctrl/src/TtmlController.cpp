@@ -28,7 +28,7 @@
 #include <subttxrend/protocol/PacketTtmlInfo.hpp>
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 TtmlController::TtmlController(const protocol::PacketChannelSpecific& dataPacket,
                                const common::ConfigProvider& config,
@@ -148,6 +148,6 @@ void TtmlController::mute(bool m)
     }
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 

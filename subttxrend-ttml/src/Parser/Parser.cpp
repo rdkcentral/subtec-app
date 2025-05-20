@@ -113,6 +113,13 @@ std::list<IntermediateDocument> Parser::parse(const std::uint8_t* buffer, std::s
     return list;
 }
 
+void Parser::setStyleOverrideAttributes(const Attributes& styleAttributes)
+{
+    m_logger.ostrace(__LOGGER_FUNC__, " sets ", styleAttributes.size(), " attributes");
+
+    m_docInstance.setStyleOverrideAttributes(styleAttributes);
+}
+
 void Parser::onStartDocument()
 {
     m_logger.ostrace(__LOGGER_FUNC__);

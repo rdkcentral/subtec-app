@@ -75,6 +75,15 @@ public:
         m_timeline.clear();
     }
 
+    /**
+     * Sets override styling attributes.
+     * These will be applied last, i.e. have highest priority.
+     *
+     * @param styleAttributes
+     *      Contains the desired attributes.
+     */
+    void setStyleOverrideAttributes(const Attributes& styleAttributes);
+
 private:
 
     /** @copydoc SaxCallbacks::onStartDocument */

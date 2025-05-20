@@ -27,7 +27,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 class Options;
@@ -149,7 +149,7 @@ private:
     common::PrefixConfigProvider m_webvttConfigProvider;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /*SUBTTXREND_APP_CONFIGURATION_HPP_*/

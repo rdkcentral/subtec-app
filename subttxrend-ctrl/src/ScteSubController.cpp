@@ -24,7 +24,7 @@
 #include "StcProvider.hpp"
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 ScteSubController::ScteSubController(const protocol::PacketChannelSpecific& packet,
                                      gfx::WindowPtr const& gfxWindow,
@@ -114,6 +114,6 @@ bool ScteSubController::wantsData(uint32_t channelType) const
     return false;
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 

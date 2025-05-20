@@ -26,9 +26,9 @@
 #include <deque>
 #include <thread>
 
-#include "ControllerInterface.hpp"
-#include "Configuration.hpp"
-#include "StcProvider.hpp"
+#include <subttxrend/ctrl/ControllerInterface.hpp>
+#include <subttxrend/ctrl/Configuration.hpp>
+#include <subttxrend/ctrl/StcProvider.hpp>
 
 #include <subttxrend/common/NonCopyable.hpp>
 #include <subttxrend/common/ConfigProvider.hpp>
@@ -81,7 +81,7 @@ class Controller : private common::NonCopyable,
      */
     // clang-format off
     Controller(
-            Configuration const& config,
+            ctrl::Configuration const& config,
             gfx::EnginePtr gfxEngine,
             gfx::WindowPtr gfxWindow);
     // clang-format on
@@ -98,7 +98,7 @@ class Controller : private common::NonCopyable,
      */
     void init(gfx::Window *gfxWindow,
               const gfx::EnginePtr &gfxEngine,
-              const Configuration &config);
+              const ctrl::Configuration &config);
 
     void startAsync();
 
@@ -311,24 +311,24 @@ private:
     void selectTeletextSubtitles(std::uint32_t channelId, std::uint32_t magazineNbr, std::uint32_t pageNumber);
 
     void deactivateController();
-    void pushController(std::shared_ptr<ControllerInterface> controller);
+    void pushController(std::shared_ptr<ctrl::ControllerInterface> controller);
     void popNullController();
-    std::shared_ptr<ControllerInterface> topController();
+    std::shared_ptr<ctrl::ControllerInterface> topController();
 
     bool isRenderingActive() const;
     bool isDataQueued() const;
 
     void processLoop();
 
-    Configuration const& m_config;
+    ctrl::Configuration const& m_config;
 
     gfx::EnginePtr m_gfxEngine;
     gfx::WindowPtr m_gfxWindow;
 
     /** Processes timestamp messages and provides stc value. */
-    StcProvider m_stcProvider;
+    ctrl::StcProvider m_stcProvider;
 
-    std::vector<std::shared_ptr<ControllerInterface>> m_activeControllers;
+    std::vector<std::shared_ptr<ctrl::ControllerInterface>> m_activeControllers;
 
     /** Logger object. */
     common::Logger m_logger;

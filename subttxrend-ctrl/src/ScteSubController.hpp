@@ -36,7 +36,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 class StcProvider;
@@ -98,7 +98,7 @@ private:
     common::Logger m_logger;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /* _SUBTTXREND_APP_SCTESUBCONTROLLER_HPP_ */

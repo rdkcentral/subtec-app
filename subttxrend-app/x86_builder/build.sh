@@ -268,6 +268,7 @@ build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ttml            build/subttx
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-webvtt            build/subttxrend-webvtt               $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-scte            build/subttxrend-scte               $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-cc              build/subttxrend-cc                 $INSTALL_DIR    ""
+build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ctrl            build/subttxrend-ctrl               $INSTALL_DIR    ""
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-app             build/subttxrend-app                $INSTALL_DIR    -DINSTALL_CONFIG_FILE=OFF
 build_project_cmake     $AV_PROJECTS_DIR/subttxrend-testapps        build/subttxrend-testapps           $INSTALL_DIR    ""
 
@@ -352,6 +353,7 @@ elif [ "$COMMAND" == "doc" ] ; then
 $0 fast
 
 build_doc_cmake     build/subttxrend-app
+build_doc_cmake     build/subttxrend-ctrl
 build_doc_cmake     build/subttxrend-common
 build_doc_cmake     build/subttxrend-dbus
 build_doc_cmake     build/subttxrend-protocol
@@ -363,6 +365,7 @@ build_doc_cmake     build/subttxrend-ttml
 build_doc_cmake     build/ttxdecoder
 build_doc_cmake     build/dvbsubdecoder
 build_doc_aggregate build/documentation $BASE_DIR/src/doc \
+    $BASE_DIR/build/subttxrend-ctrl \
     $BASE_DIR/build/subttxrend-app \
     $BASE_DIR/build/subttxrend-common \
     $BASE_DIR/build/subttxrend-dbus \

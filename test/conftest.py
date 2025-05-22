@@ -22,4 +22,4 @@ from datetime import datetime
 # Place any code that needs to be run before every test execution
 @pytest.fixture(scope="function", autouse=True)
 def pre_req():
-    print(f"started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")# pass
+    print(f"started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")  # pass

@@ -266,8 +266,68 @@ def test_1075():
         'drawLine font size: 54 line text length: 350 line height: 41']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
-    sequence = [      
-        'parseAttributes adding xml:id=s0', 
+    sequence = [
+        'parseAttributes adding xml:id=s0',
+        'parseAttributes adding tts:backgroundColor=#000000FF', 
+        'parseAttributes adding tts:textAlign=left',
+        'parseAttributes adding tts:color=white',
+        'parseAttributes adding tts:lineHeight=106.78%',
+        'parseAttributes adding tts:fontSize=54px',
+        'parseAttributes adding tts:fontFamily=proportionalSansSerif',
+        'parseAttributes adding xml:id=transparentspace',
+        'parseAttributes adding tts:backgroundColor=#000000FF',
+        'parseAttributes adding tts:textAlign=left',
+        'parseAttributes adding tts:color=white',
+        'parseAttributes adding tts:lineHeight=106.78%',
+        'parseAttributes adding tts:fontSize=54px',
+        'parseAttributes adding tts:fontFamily=proportionalSansSerif',
+        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [106.78%] [ ] ',
+        'sizeToPixels size 54 (from 54px)',
+        'drawLine font size: 54 line text length: 350 line height: 58']
+    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
+
+    sequence = [
+        'parseAttributes adding xml:id=s0',
+        'parseAttributes adding tts:backgroundColor=#000000FF', 
+        'parseAttributes adding tts:textAlign=left',
+        'parseAttributes adding tts:color=white',
+        'parseAttributes adding tts:lineHeight=118%',
+        'parseAttributes adding tts:fontSize=54px',
+        'parseAttributes adding tts:fontFamily=proportionalSansSerif',
+        'parseAttributes adding xml:id=transparentspace',
+        'parseAttributes adding tts:backgroundColor=#000000FF',
+        'parseAttributes adding tts:textAlign=left',
+        'parseAttributes adding tts:color=white',
+        'parseAttributes adding tts:lineHeight=118%',
+        'parseAttributes adding tts:fontSize=54px',
+        'parseAttributes adding tts:fontFamily=proportionalSansSerif',
+        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [118%] [ ] ',
+        'sizeToPixels size 54 (from 54px)',
+        'drawLine font size: 54 line text length: 350 line height: 64']
+    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
+
+    sequence = [
+        'parseAttributes adding xml:id=s0',
+        'parseAttributes adding tts:backgroundColor=#000000FF', 
+        'parseAttributes adding tts:textAlign=left',
+        'parseAttributes adding tts:color=white',
+        'parseAttributes adding tts:lineHeight=124%',
+        'parseAttributes adding tts:fontSize=54px',
+        'parseAttributes adding tts:fontFamily=proportionalSansSerif',
+        'parseAttributes adding xml:id=transparentspace',
+        'parseAttributes adding tts:backgroundColor=#000000FF',
+        'parseAttributes adding tts:textAlign=left',
+        'parseAttributes adding tts:color=white',
+        'parseAttributes adding tts:lineHeight=124%',
+        'parseAttributes adding tts:fontSize=54px',
+        'parseAttributes adding tts:fontFamily=proportionalSansSerif',
+        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [124%] [ ] ',
+        'sizeToPixels size 54 (from 54px)',
+        'drawLine font size: 54 line text length: 350 line height: 67']
+    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
+
+    sequence = [
+        'parseAttributes adding xml:id=s0',
         'parseAttributes adding tts:backgroundColor=#000000FF', 
         'parseAttributes adding tts:textAlign=left',
         'parseAttributes adding tts:color=white',

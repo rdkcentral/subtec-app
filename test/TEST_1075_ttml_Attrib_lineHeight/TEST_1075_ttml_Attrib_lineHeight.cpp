@@ -70,7 +70,17 @@ int main(int argc, char *argv[])
         read_file_send_data_packet_ttml("input_files/test_sample_lineHeight_75percent.ttml", channel);
         sleep (6);
 
+        read_file_send_data_packet_ttml("input_files/test_sample_lineHeight_106percent.ttml", channel);
+        sleep (6);
+
+        read_file_send_data_packet_ttml("input_files/test_sample_lineHeight_118percent.ttml", channel);
+        sleep (6);
+
+        read_file_send_data_packet_ttml("input_files/test_sample_lineHeight_124percent.ttml", channel);
+        sleep (6);
+
         read_file_send_data_packet_ttml("input_files/test_sample_lineHeight_150percent.ttml", channel);
+
     }
     else
     {

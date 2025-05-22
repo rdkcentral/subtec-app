@@ -72,6 +72,9 @@ int main(int argc, char *argv[])
 
         read_file_send_data_packet_ttml("input_files/test_sample_fontSize_99percent.ttml", channel);
         sleep (6);
+
+        read_file_send_data_packet_ttml("input_files/test_sample_fontSize_115percent.ttml", channel);
+        sleep (6);
     }
     else
     {

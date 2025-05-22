@@ -39,7 +39,7 @@ def test_1074():
     run_test_prereq(script_dir)
 
     # wait for end of test
-    wait_for_log_string(subtec_log_path, "displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [99%] [ ] ", 20)
+    wait_for_log_string(subtec_log_path, "displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [115%] [ ] ", 20)
     copy_log_file(subtec_log_path, subtec_copy_path)
 
     sequence = [
@@ -156,7 +156,7 @@ def test_1074():
         'drawLine font size: 54']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
-    sequence = [      
+    sequence = [
         'parseAttributes adding xml:id=s0', 
         'parseAttributes adding tts:fontSize=99%',
         'parseAttributes adding xml:id=transparentspace',
@@ -164,6 +164,16 @@ def test_1074():
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [99%] [ ] ',
         'sizeToPixels size 71 (from 99%)',
         'drawLine font size: 71']
+    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
+
+    sequence = [
+        'parseAttributes adding xml:id=s0',
+        'parseAttributes adding tts:fontSize=115%',
+        'parseAttributes adding xml:id=transparentspace',
+        'parseAttributes adding tts:fontSize=115%',
+        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [115%] [ ] ',
+        'sizeToPixels size 83 (from 115%)',
+        'drawLine font size: 83']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     print("test_1074".ljust(50), "Test Passed")

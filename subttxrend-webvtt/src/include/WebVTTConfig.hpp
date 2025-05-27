@@ -31,22 +31,7 @@ namespace subttxrend {
 namespace webvttengine {
 extern common::Logger g_logger_config;
 
-inline double getConfigFractional(const common::ConfigProvider* configProvider, const std::string &key, int defaultValue, int fraction) {
-    const std::string defString = std::to_string((double)defaultValue / (double)fraction);
-    const std::string confString = configProvider->get(key, defString);
-
-    try {
-        double confDouble = std::stod(confString);
-        int converted = std::round(fraction * confDouble);
-        g_logger_config.osdebug(__LOGGER_FUNC__, " ", key, "=", confString, " :", converted);
-
-        return converted;
-    } catch (const std::exception &e) {
-        g_logger_config.oswarning(__LOGGER_FUNC__, " - Can't convert ", confString, " to double");
-    }
-
-    return defaultValue;
-}
+double getConfigFractional(const common::ConfigProvider* configProvider, const std::string &key, int defaultValue, int fraction);
     
 struct WebVTTConfig {
     void init(const common::ConfigProvider* configProvider) {

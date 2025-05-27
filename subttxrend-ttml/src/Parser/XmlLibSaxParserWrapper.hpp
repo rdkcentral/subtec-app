@@ -25,7 +25,7 @@
 #include <libxml/SAX.h>
 
 #include <subttxrend/common/Logger.hpp>
-
+#include <string>
 #include <cstdint>
 #include <vector>
 

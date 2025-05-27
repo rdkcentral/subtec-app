@@ -142,10 +142,10 @@ private:
     /** Logger config provider. */
     common::PrefixConfigProvider m_loggerConfigProvider;
 
-    /** Logger config provider. */
+    /** TTML config provider. */
     common::PrefixConfigProvider m_ttmlConfigProvider;
 
-    /** Logger config provider. */
+    /** WebVTT config provider. */
     common::PrefixConfigProvider m_webvttConfigProvider;
 };
 

@@ -83,6 +83,7 @@ add_cppunit_test(DocumentInstance_Test
                  ../src/Parser/Outline.cpp
                  ../src/Parser/StyleSet.cpp
                  ../src/Parser/Utils.cpp
+                 ../src/Parser/DocumentInstance.cpp
                  TestRunner.cpp
                  )
 

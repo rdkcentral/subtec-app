@@ -514,7 +514,7 @@ public:
         }
     }
 
-    virtual void appendNewline()
+    virtual void appendNewline() override
     {
         m_textLines.push_back({true, {}});
     }

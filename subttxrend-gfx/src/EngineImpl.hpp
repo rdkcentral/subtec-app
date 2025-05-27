@@ -59,7 +59,7 @@ public:
 
     virtual void shutdown() override;
 
-    virtual void execute();
+    virtual void execute() override;
 
     virtual WindowPtr createWindow() override;
 

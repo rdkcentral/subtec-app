@@ -35,6 +35,7 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 # Packages to use
 #
 find_package(LibSubTtxRendCommon REQUIRED)
+find_package(LibSubTtxRendGfx REQUIRED)
 
 #
 # Include directories
@@ -42,6 +43,7 @@ find_package(LibSubTtxRendCommon REQUIRED)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Parser/include)
 include_directories(${LIBSUBTTXRENDCOMMON_INCLUDE_DIRS})
+include_directories(${LIBSUBTTXRENDGFX_INCLUDE_DIRS})
 
 #
 # Documentation
@@ -112,6 +114,7 @@ set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_WEBVTT_PUBLIC_HEADERS})
 target_include_directories(${LIBRARY_NAME} PRIVATE ${WEBVTT_PRIVATE_HEADERS})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
+target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDGFX_LIBRARIES})
 set_target_properties(${LIBRARY_NAME} PROPERTIES COMPILE_FLAGS "${WEBVTT_DEFINES}")
 
 #
@@ -138,7 +141,7 @@ find_package(PkgConfig REQUIRED)
 set(PACKAGE_NAME        "${PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "WebVTT Subtitles Engine")
 set(PACKAGE_VERSION     "0.0.0")
-set(PACKAGE_REQUIRES    "${LIBSUBWEBVTTRENDCOMMON_PACKAGE_NAME}")
+set(PACKAGE_REQUIRES    "${LIBSUBTTXRENDCOMMON_PACKAGE_NAME} ${LIBSUBTTXRENDGFX_PACKAGE_NAME}")
 set(PACKAGE_LIB_NAME    "${LIBRARY_NAME}")
 
 if(PKG_CONFIG_FOUND)

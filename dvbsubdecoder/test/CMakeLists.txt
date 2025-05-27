@@ -60,7 +60,7 @@ macro (add_cppunit_test _name)
     # invoke built-in add_executable
     add_executable(${ARGV})
 
-    set_property(TARGET ${_name} PROPERTY CXX_STANDARD 11)
+    set_property(TARGET ${_name} PROPERTY CXX_STANDARD 14)
 
     target_link_libraries(${_name} ${LIBCPPUNIT_LIBRARIES})
 if(CMAKE_COMPILER_IS_GNUCXX)

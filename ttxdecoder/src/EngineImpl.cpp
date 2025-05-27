@@ -103,7 +103,9 @@ EngineImpl::EngineImpl(EngineClient& client,
             new Parser(PresentationLevel::LEVEL_1, *m_database.get(),
                     m_charsetManager));
 
-    resetAcquisition();
+    // Explicit call to specific resetAcquisition() method from EngineImpl is a result of static code analyser warning
+    // as described here: https://pvs-studio.com/en/blog/posts/cpp/0891/
+    EngineImpl::resetAcquisition();
 }
 
 EngineImpl::~EngineImpl()

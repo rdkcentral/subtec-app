@@ -288,10 +288,10 @@ void TtmlEngineImpl::process()
                 // intentionally empty
             };
 
-            // remove no-loger visible ones
+            // remove no-longer visible ones
             m_shownDocuments.remove_if([&needUpdate, currentMediaTimeMs](IntermediateDocument& doc) {
                 auto end = doc.m_timing.getEndTimeRef().toMilliseconds();
-                bool ret = end < currentMediaTimeMs;
+                bool ret = end <= currentMediaTimeMs;
                 if (!ret) {
                     needUpdate = false;
                 }

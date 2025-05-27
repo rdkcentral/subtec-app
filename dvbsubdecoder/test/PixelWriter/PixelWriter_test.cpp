@@ -22,6 +22,8 @@
 
 #include "PixelWriter.hpp"
 
+#include <array>
+
 using dvbsubdecoder::PixelWriter;
 using dvbsubdecoder::Pixmap;
 

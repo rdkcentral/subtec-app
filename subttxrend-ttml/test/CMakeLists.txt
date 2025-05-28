@@ -41,6 +41,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../src)
 include_directories(${LIBCPPUNIT_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDGFX_INCLUDE_DIRS})
+include_directories(${LIBSUBTTXRENDCOMMON_INCLUDE_DIRS})
 
 #
 # Macros
@@ -52,6 +53,7 @@ macro (add_cppunit_test _name)
     set_property(TARGET ${_name} PROPERTY CXX_STANDARD 14)
 
     target_link_libraries(${_name} ${LIBSUBTTXRENDGFX_LIBRARIES})
+    target_link_libraries(${_name} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
     target_link_libraries(${_name} ${LIBCPPUNIT_LIBRARIES})
 
     add_test(NAME ${_name} COMMAND ${_name} )

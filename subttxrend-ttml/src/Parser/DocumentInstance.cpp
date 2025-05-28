@@ -283,9 +283,12 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                     auto region = findRegion(content->getRegionId());
                     if (region != nullptr)
                     {
-                        //New region - create new entity if current is not empty
+                        //Create a new entity if the current one is not empty and is not in the same
+                        //region.
                         //Otherwise just update the region
-                        if (!entities.back().empty())
+                        if ((!entities.back().empty()) &&
+                            ((entities.back().m_region == nullptr) ||
+                            (entities.back().m_region->getId() != content->getRegionId())))
                         {
                             newEntity(entities, "region");
                         }

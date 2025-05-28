@@ -112,7 +112,10 @@ set(SUBTTXREND_TTML_SOURCES
 if(BUILD_RDK_REFERENCE)
     set(SUBTTXREND_TTML_SOURCES ${SUBTTXREND_TTML_SOURCES} src/transform/TtmlTransformer.cpp)
 else(BUILD_RDK_REFERENCE)
-    set(SUBTTXREND_TTML_SOURCES ${SUBTTXREND_TTML_SOURCES} src/transform-lgi/TtmlTransformer.cpp)
+    set(SUBTTXREND_TTML_SOURCES ${SUBTTXREND_TTML_SOURCES} 
+        src/transform-lgi/TtmlTransformer.cpp
+        src/transform-lgi/StyleRulesHelper.cpp
+    )
 endif(BUILD_RDK_REFERENCE)
 
 #

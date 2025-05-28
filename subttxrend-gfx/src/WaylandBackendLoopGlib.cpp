@@ -195,7 +195,9 @@ WaylandBackendLoopGlib::WaylandBackendLoopGlib() :
 
 WaylandBackendLoopGlib::~WaylandBackendLoopGlib()
 {
-    stop();
+    // Explicit call to specific stop() method from WaylandBackendLoopGlib is a result of static code analyser warning
+    // as described here: https://pvs-studio.com/en/blog/posts/cpp/0891/
+    WaylandBackendLoopGlib::stop();
 }
 
 bool WaylandBackendLoopGlib::start(waylandcpp::DisplayPtr display,

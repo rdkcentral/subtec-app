@@ -734,6 +734,8 @@ std::list<Line> LineBuilder::getOutputLines(const CueSharedList &cueList) {
             linePositionsBeforeAdjustment(boxes, align, ComputedLine_px, 
                                             ComputedPosition_px, true);
             switch(lineAlign) {
+                case WebVTTCue::LineAlignType::kStart:
+                    break;
                 case WebVTTCue::LineAlignType::kCenter:
                     for (auto &cueLine : boxes) {
                         cueLine.lineRectangle.m_y -= total_boxes_height / 2;

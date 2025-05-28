@@ -41,7 +41,6 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 #
 find_package(LibSubTtxRendCommon REQUIRED)
 find_package(LibSubTtxRendGfx REQUIRED)
-#find_package(LibDvbSubDecoder REQUIRED)
 find_package(LibSubTtxRendProtocol REQUIRED)
 find_package(ZLIB)
 
@@ -95,7 +94,6 @@ set_property(TARGET ${LIBRARY_NAME} PROPERTY VERSION 0.0.0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_SCTE_PUBLIC_HEADERS})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDGFX_LIBRARIES})
-#target_link_libraries(${LIBRARY_NAME} ${LIBDVBSUBDECODER_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDPROTOCOL_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} ${ZLIB_LIBRARIES})
 

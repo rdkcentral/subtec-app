@@ -86,21 +86,15 @@ void TtmlEngineImpl::init(const common::ConfigProvider* configProvider,
     m_renderer = std::make_unique<TtmlRenderer>(configProvider, gfxWindow, m_dataDumper);
 
     m_docTransformer.setProperties(properties);
+    m_pathTtmlFromFile = configProvider->get("READ_FROM_FILE");
 
-    auto ttmlFromFile = configProvider->get("READ_FROM_FILE");
-    m_logger.osinfo(__LOGGER_FUNC__, " ttmlFromFile=", ttmlFromFile);
-    if (not ttmlFromFile.empty())
-    {
-        auto data = m_dataDumper.readTtmlFromFile(ttmlFromFile);
-        addData(data.data(), data.size());
-        m_useTtmlFromFile = true;
-    }
     clear();
 }
 
 void TtmlEngineImpl::setRelatedVideoSize(gfx::Size relatedVideoSize)
 {
     m_renderer->setRelatedVideoSize(relatedVideoSize);
+    m_docTransformer.setRelatedVideoSize(relatedVideoSize);
 }
 
 void TtmlEngineImpl::start()
@@ -185,7 +179,7 @@ void TtmlEngineImpl::addData(const std::uint8_t* buffer,
                    " mediatime=",
                    getCurrentMediatime().toStr());
 
-    if (m_useTtmlFromFile)
+    if (!m_pathTtmlFromFile.empty())
     {
         m_logger.osinfo("using ttml from file, skipping data");
         return;
@@ -259,6 +253,15 @@ void TtmlEngineImpl::setSubtitleInfo(const std::string& contentType, const std::
 {
     m_logger.osinfo(__LOGGER_FUNC__, " contentType = ", contentType, " subtitleInfo = ", subsInfo);
     m_docTransformer.setSubtitleInfo(contentType, subsInfo);
+    if (!m_pathTtmlFromFile.empty())
+    {
+        m_logger.osinfo(__LOGGER_FUNC__, " path TTML from file: ", m_pathTtmlFromFile);
+        auto data = m_dataDumper.readTtmlFromFile(m_pathTtmlFromFile);
+        std::string tmp;
+        tmp.swap(m_pathTtmlFromFile);
+        addData(data.data(), data.size());
+        m_pathTtmlFromFile.swap(tmp);
+    }
 }
 
 void TtmlEngineImpl::process()

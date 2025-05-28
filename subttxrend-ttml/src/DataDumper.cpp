@@ -66,8 +66,7 @@ void DataDumper::setup(const common::ConfigProvider* provider)
     }
 }
 
-void DataDumper::dump(const std::uint8_t* buffer,
-          std::size_t bufferSize) const
+void DataDumper::dump(const std::uint8_t* buffer, std::size_t bufferSize) const
 {
     if (dumpTolog)
     {
@@ -80,13 +79,12 @@ void DataDumper::dump(const std::uint8_t* buffer,
     }
 }
 
-void DataDumper::toFile(const std::string filename,
-            const std::uint8_t* buffer,
-            std::size_t bufferLen) const
+void DataDumper::toFile(const std::string filename, const std::uint8_t* buffer, std::size_t bufferLen) const
 {
     if (! dirPath.empty())
     {
-        g_logger.info("dumping: %p (size %zu) to %s", buffer, bufferLen, filename.c_str());
+        auto bufferStr = std::string{(char const*)buffer, bufferLen};
+        g_logger.info("dumping: %s (size %zu) to %s", bufferStr.c_str(), bufferLen, filename.c_str());
 
         std::string filePath = dirPath + filename;
         FILE* dumpFile = fopen(filePath.c_str(), "aw+");
@@ -133,8 +131,7 @@ std::vector<std::uint8_t> DataDumper::readTtmlFromFile(const std::string& path)
    return data;
 }
 
-void DataDumper::dumpXml(const std::uint8_t* buffer,
-             std::size_t bufferSize) const
+void DataDumper::dumpXml(const std::uint8_t* buffer, std::size_t bufferSize) const
 {
     using namespace std::chrono;
 
@@ -170,24 +167,8 @@ void DataDumper::dumpXml(const std::uint8_t* buffer,
 void DataDumper::toLog(const std::uint8_t* buffer, std::size_t bufferSize) const
 {
     g_logger.info("TTML DATA DUMP >>>>>>>>>>>>>>>>>>>>>>>>>");
-    std::string str;
-    str.resize(bufferSize);
-    for (std::size_t i = 0; i < bufferSize; ++i )
-    {
-        if (buffer[i] == '\n')
-        {
-            g_logger.info("%s", str.c_str());
-            str.clear();
-        }
-        else
-        {
-            str += (reinterpret_cast<const char*>(buffer)[i]);
-        }
-    }
-    if (!str.empty())
-    {
-        g_logger.info("%s", str.c_str());
-    }
+    auto bufferStr = std::string{(char const*)buffer, bufferSize};
+    g_logger.info("%s", bufferStr.c_str());
     g_logger.info("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
 }
 

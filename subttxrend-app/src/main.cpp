@@ -84,8 +84,8 @@ int main(int argc,
         std::cerr << "subttxrend-app signaled (" << signalNum << ") to exit" << std::endl;
 #else // __APPLE__
         app.startBlockingApplicationWindow();
-        app.quit();
 #endif
+        app.quit();
         rv = EXIT_SUCCESS;
     }
     catch (std::exception const& e)

@@ -25,6 +25,7 @@
 
 #include <array>
 #include <cstdint>
+#include <ostream>
 #include <unordered_map>
 
 namespace subttxrend

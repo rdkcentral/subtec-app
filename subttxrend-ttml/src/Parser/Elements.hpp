@@ -422,6 +422,15 @@ public:
         return m_base64ImageData;
     }
 
+    bool isSameImage(std::shared_ptr<ImageElement> const& other) const
+    {
+        auto isSame{false};
+        if (other && (getId() == other->getId()) && (m_base64ImageData->size() == other->m_base64ImageData->size())) {
+            isSame = !m_base64ImageData->compare(*(other->m_base64ImageData));
+        }
+        return isSame;
+    }
+
     /**
      * Equality operator.
      *
@@ -482,7 +491,7 @@ public:
             m_parent(parent),
             m_whitespaceHandling(parent->m_whitespaceHandling),
             m_styleRef(parent->m_styleRef),
-            m_regionRef(),
+            m_regionRef(parent->m_regionRef),
             m_timing(parent->m_timing),
             m_textLines({{}})
     {

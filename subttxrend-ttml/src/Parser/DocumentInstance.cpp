@@ -51,6 +51,7 @@ void DocumentInstance::reset()
     {
         m_parsedBodyElementsStack.pop();
     }
+    // We do not clear the override style attributes
 
     m_currentImageElement = std::shared_ptr<ImageElement>();
 }
@@ -283,9 +284,12 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                     auto region = findRegion(content->getRegionId());
                     if (region != nullptr)
                     {
-                        //New region - create new entity if current is not empty
+                        //Create a new entity if the current one is not empty and is not in the same
+                        //region.
                         //Otherwise just update the region
-                        if (!entities.back().empty())
+                        if ((!entities.back().empty()) &&
+                            ((entities.back().m_region == nullptr) ||
+                            (entities.back().m_region->getId() != content->getRegionId())))
                         {
                             newEntity(entities, "region");
                         }
@@ -495,6 +499,9 @@ void DocumentInstance::updateStyleAttributes() const
 
         //finally merge style attributes from element
         mergeAttributes(styleAttrs, content->getStyleAttributes());
+
+        // and at last merge style attributes from override-styling
+        mergeAttributes(styleAttrs, m_overrideStyleAttributes);
 
         content->set(std::move(styleAttrs));
 

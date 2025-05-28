@@ -165,8 +165,8 @@ private:
     /** Debug feature - show current media time on screen. */
     bool m_showMediatime{false};
 
-    /** Use ttml data from file. */
-    bool m_useTtmlFromFile{false};
+    /** Path file ttml data to be read from,*/
+    std::string m_pathTtmlFromFile;
 
     /** Ordered list of subtitles. */
     mutable std::mutex m_mutex;

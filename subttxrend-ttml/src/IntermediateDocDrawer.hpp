@@ -97,6 +97,9 @@ private:
         //current font size
         int m_fontSize{0};
 
+        //current magin [px]
+        int m_margin{0};
+
         //total height of all text lines per entity
         unsigned int m_totalTextHeight = 0;
     };

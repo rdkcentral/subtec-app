@@ -38,9 +38,7 @@ public:
 
     void setup(const common::ConfigProvider* provider);
     void dump(const std::uint8_t* buffer, std::size_t bufferSize) const;
-    void toFile(const std::string filename,
-                const std::uint8_t* buffer,
-                std::size_t bufferLen) const;
+    void toFile(const std::string filename, const std::uint8_t* buffer, std::size_t bufferLen) const;
     bool imageDumpEnabled() const;
     std::vector<std::uint8_t> readTtmlFromFile(const std::string& path);
 

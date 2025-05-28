@@ -184,6 +184,28 @@ function run_tests_coverage {
     popd
 }
 
+function build_components {
+    build_project_cmake     $BASE_DIR/src/rdklogger                     build/rdklogger                     $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-common          build/subttxrend-common             $INSTALL_DIR    "${SUBTTXREND_COMMON_DFLAGS}"
+    build_project_cmake     $AV_PROJECTS_DIR/ttxdecoder                 build/ttxdecoder                    $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/dvbsubdecoder              build/dvbsubdecoder                 $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-protocol        build/subttxrend-protocol           $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-socksrc         build/subttxrend-socksrc            $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-dbus            build/subttxrend-dbus               $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-gfx             build/subttxrend-gfx                $INSTALL_DIR    -DWITH_OPENGL=1
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-dvbsub          build/subttxrend-dvbsub             $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ttxt            build/subttxrend-ttxt               $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ttml            build/subttxrend-ttml               $INSTALL_DIR    "${SUBTTXREND_TTML_DFLAGS}"
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-webvtt          build/subttxrend-webvtt             $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-scte            build/subttxrend-scte               $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-cc              build/subttxrend-cc                 $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ctrl            build/subttxrend-ctrl               $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-app             build/subttxrend-app                $INSTALL_DIR    -DINSTALL_CONFIG_FILE=OFF
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-testapps        build/subttxrend-testapps           $INSTALL_DIR    ""
+
+    ls -Rl $INSTALL_DIR
+}
+
 #============================================================================
 #============================================================================
 
@@ -197,15 +219,16 @@ if [ "$#" -lt 1 ] ; then
     echo "Example: $0 build"
     echo "---------------------------------------------"
     echo "Available commands:"
-    echo "full:   clean + build + dotest + run"
-    echo "clean:  clean everything"
-    echo "build:  build everything"
-    echo "run:    run the application"
-    echo "fast:   build with -j8 (jobs) option"
-    echo "dotest: build, build tests, run tests"
+    echo "full:          clean + build + dotest + run"
+    echo "clean:         clean everything"
+    echo "build:         build everything"
+    echo "buildwithas:   build everything with as clients and lgi transformer enabled"
+    echo "run:           run the application"
+    echo "fast:          build with -j8 (jobs) option"
+    echo "dotest:        build, build tests, run tests"
     echo "buildunits $1: build specified unit"
-    echo "testunits $1: build, build tests, run tests for unit"
-    echo "doc:    build, build docs, show docs warnings"
+    echo "testunits $1:  build, build tests, run tests for unit"
+    echo "doc:           build, build docs, show docs warnings"
     echo "---------------------------------------------"
     echo ""
     exit
@@ -243,6 +266,10 @@ INSTALL_DIR=$OE_BUILD_DIR/subttxrend-app/x86_builder/build/install
 RDK_COMPONENTS_DIR=$ONEMW_ROOT_DIR/components/generic/dvb/
 RDK_PATCHES_DIR=$ONEMW_ROOT_DIR/meta-lgi-om-common/meta-rdk/recipes-extended/
 
+UTILS_DFLAGS="-DBUILD_PC=1"
+SUBTTXREND_COMMON_DFLAGS="-DBUILD_RDK_REFERENCE=1"
+SUBTTXREND_TTML_DFLAGS="-DBUILD_RDK_REFERENCE=1"
+
 #
 # export path for .pc for pkg-config
 #
@@ -265,25 +292,15 @@ rm -rf build
 
 elif [ "$COMMAND" == "build" ] ; then
 
-build_project_cmake     $BASE_DIR/src/rdklogger                     build/rdklogger                     $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-common          build/subttxrend-common             $INSTALL_DIR    -DBUILD_RDK_REFERENCE=1
-build_project_cmake     $AV_PROJECTS_DIR/ttxdecoder                 build/ttxdecoder                    $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/dvbsubdecoder              build/dvbsubdecoder                 $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-protocol        build/subttxrend-protocol           $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-socksrc         build/subttxrend-socksrc            $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-dbus            build/subttxrend-dbus               $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-gfx             build/subttxrend-gfx                $INSTALL_DIR    -DWITH_OPENGL=1
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-dvbsub          build/subttxrend-dvbsub             $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ttxt            build/subttxrend-ttxt               $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ttml            build/subttxrend-ttml               $INSTALL_DIR    -DBUILD_RDK_REFERENCE=1
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-webvtt          build/subttxrend-webvtt             $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-scte            build/subttxrend-scte               $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-cc              build/subttxrend-cc                 $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-ctrl            build/subttxrend-ctrl               $INSTALL_DIR    ""
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-app             build/subttxrend-app                $INSTALL_DIR    -DINSTALL_CONFIG_FILE=OFF
-build_project_cmake     $AV_PROJECTS_DIR/subttxrend-testapps        build/subttxrend-testapps           $INSTALL_DIR    ""
+build_components
 
-ls -Rl $INSTALL_DIR
+elif [ "$COMMAND" == "buildwithas" ] ; then
+
+UTILS_DFLAGS="-DBUILD_PC=1 -DENABLE_AS=ON"
+SUBTTXREND_COMMON_DFLAGS="-DBUILD_RDK_REFERENCE=0"
+SUBTTXREND_TTML_DFLAGS="-DBUILD_RDK_REFERENCE=0"
+
+build_components
 
 elif [ "$COMMAND" == "buildunits" ] ; then
 

@@ -62,7 +62,7 @@ class AsListener
   public:
     virtual ~AsListener() = default;
     virtual AsHelpers getHelpers() = 0;
-    virtual Properties getData(std::chrono::milliseconds timeout) = 0;
+    virtual Properties getData() = 0;
 };
 
 } // namespace common

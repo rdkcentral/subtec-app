@@ -69,7 +69,6 @@ void forAllControllers(Ctrls const& ctrls, Packet const& packet, void (ctrl::Con
 }
 
 constexpr const std::chrono::milliseconds connection_status_check_timeout{1000};
-constexpr const std::chrono::milliseconds as_data_acq_timeout{2000};
 
 } /* namespace  */
 
@@ -377,7 +376,7 @@ void Controller::processTtmlSelection(const protocol::PacketTtmlSelection& packe
 
     common::Properties properties;
     try {
-        properties = m_asLstnr->getData(as_data_acq_timeout);
+        properties = m_asLstnr->getData();
     } catch (std::exception const& e) {
         m_logger.oserror(__LOGGER_FUNC__, " exception: ", e.what());
     }

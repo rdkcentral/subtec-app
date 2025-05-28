@@ -180,6 +180,7 @@ bool IntermediateDocDrawer::drawLine(const IntermediateDocument::TextLine& textL
         const auto cellHeightPx = m_valueConverter.getCellHeight();
         drawingState.m_fontSize = m_valueConverter.sizeToPixels(style.getFontSize(), cellHeightPx);
         drawingState.m_font = getFont(style.getFontFamily(), drawingState.m_fontSize);
+        drawingState.m_margin = m_valueConverter.sizeToPixels(BACKGROUND_RECT_MARGIN, drawingState.m_fontSize);
 
         if (drawingState.m_font)
         {
@@ -224,14 +225,13 @@ void IntermediateDocDrawer::alignPenX(DrawingState& drawingState,
 
     m_logger.ostrace(__LOGGER_FUNC__, " textAlign=", textAlign, " textLength=", textLength);
 
-    auto const backgroundMarginPx = m_valueConverter.sizeToPixels(BACKGROUND_RECT_MARGIN, drawingState.m_fontSize);
     if (textAlign == StyleSet::TextAlign::LEFT)
     {
-        drawingState.m_penX = backgroundMarginPx;
+        drawingState.m_penX = drawingState.m_margin;
     }
     else if (textAlign == StyleSet::TextAlign::RIGHT)
     {
-        drawingState.m_penX = drawingState.m_regionRect.m_w - textLength - backgroundMarginPx;
+        drawingState.m_penX = drawingState.m_regionRect.m_w - textLength - drawingState.m_margin;
     }
     else // defaults - "center"
     {
@@ -332,13 +332,11 @@ void IntermediateDocDrawer::drawLineBackground(const gfx::ColorArgb& backgroundC
 {
     if (drawingState.m_lineSize.m_w > 0)
     {
-        auto const backgroundMarginPx = m_valueConverter.sizeToPixels(BACKGROUND_RECT_MARGIN, drawingState.m_fontSize);
-
         dc.fillRectangle(backgroundColor,
                          gfx::Rectangle {
-                                 drawingState.m_regionRect.m_x + drawingState.m_lineXOffset + drawingState.m_penX - backgroundMarginPx,
+                                 drawingState.m_regionRect.m_x + drawingState.m_penX - drawingState.m_margin,
                                  drawingState.m_regionRect.m_y + drawingState.m_penY,
-                                 drawingState.m_lineSize.m_w + (2 * backgroundMarginPx),
+                                 drawingState.m_lineSize.m_w + (2 * drawingState.m_margin),
                                  drawingState.m_lineSize.m_h });
     }
 }

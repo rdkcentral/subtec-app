@@ -334,7 +334,7 @@ void IntermediateDocDrawer::drawLineBackground(const gfx::ColorArgb& backgroundC
     {
         dc.fillRectangle(backgroundColor,
                          gfx::Rectangle {
-                                 drawingState.m_regionRect.m_x + drawingState.m_penX - drawingState.m_margin,
+                                 drawingState.m_regionRect.m_x + drawingState.m_lineXOffset + drawingState.m_penX - drawingState.m_margin,
                                  drawingState.m_regionRect.m_y + drawingState.m_penY,
                                  drawingState.m_lineSize.m_w + (2 * drawingState.m_margin),
                                  drawingState.m_lineSize.m_h });

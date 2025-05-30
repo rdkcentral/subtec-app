@@ -134,8 +134,6 @@ target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDCC_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDTTXT_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDTTML_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDWEBVTT_LIBRARIES})
-target_link_libraries(${APP_NAME} pthread)
-target_link_libraries(${APP_NAME} boost_system)
 
 #
 # Install rules

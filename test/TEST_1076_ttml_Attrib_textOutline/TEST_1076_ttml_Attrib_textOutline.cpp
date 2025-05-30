@@ -18,23 +18,33 @@
 */
 
 #include <PacketSender.hpp>
-#include <ClosedCaptionsPacket.hpp>
+#include <TtmlPacket.hpp>
+#include <fstream>
 
 #include <utils.h>
 
 int main(int argc, char *argv[])
 {
-    debug_log("Test CC 708 unmute packet wiithout active type packet started");
+    debug_log("Test ttml attribute line height started");
     bool ret = false;
 
-    ClosedCaptionsChannel *channel = new ClosedCaptionsChannel();
-
+    TtmlChannel *channel = new TtmlChannel();
     ret = channel->InitComms();
     if (ret)
     {
         channel->SendResetAllPacket();
         channel->SendResetChannelPacket();
+        channel->SendSelectionPacket(1920, 1080);
         channel->SendUnmutePacket();
+
+        read_file_send_data_packet_ttml("input_files/test_sample_textOutline_pt25c.ttml", channel);
+        sleep (6);
+
+        read_file_send_data_packet_ttml("input_files/test_sample_textOutline_5percent.ttml", channel);
+        sleep (6);
+
+        read_file_send_data_packet_ttml("input_files/test_sample_textOutline_7px.ttml", channel);
+        sleep (6);
     }
     else
     {

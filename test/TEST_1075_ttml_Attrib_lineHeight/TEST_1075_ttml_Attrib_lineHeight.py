@@ -62,7 +62,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=0.25c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [0.25c] [ ]',
-        'sizeToPixels size 18 (from 0.25c)',
+        'sizeToPixels size 18 (from 25)',
         'drawLine font size: 18 line text length: 115 line height: 18']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -82,7 +82,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=0.25c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [0.5c] [ ] ',
-        'sizeToPixels size 18 (from 0.25c)',
+        'sizeToPixels size 36 (from 50)',
         'drawLine font size: 18 line text length: 115 line height: 36']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -102,7 +102,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=0.5c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [0.75c] [ ] ',
-        'sizeToPixels size 36 (from 0.5c)',
+        'sizeToPixels size 54 (from 75)',
         'drawLine font size: 36 line text length: 236 line height: 54']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -122,7 +122,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=0.5c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [1.2c] [ ] ',
-        'sizeToPixels size 36 (from 0.5c)',
+        'sizeToPixels size 86 (from 120)',
         'drawLine font size: 36 line text length: 236 line height: 86']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -142,7 +142,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=20px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [20px] [ ] ',
-        'sizeToPixels size 20 (from 20px)',
+        'sizeToPixels size 20 (from 20)',
         'drawLine font size: 20 line text length: 128 line height: 20']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -162,7 +162,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=20px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [36px] [ ] ',
-        'sizeToPixels size 20 (from 20px)',
+        'sizeToPixels size 36 (from 36)',
         'drawLine font size: 20 line text length: 128 line height: 36']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -182,7 +182,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=20px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [54px] [ ] ',
-        'sizeToPixels size 20 (from 20px)',
+        'sizeToPixels size 54 (from 54)',
         'drawLine font size: 20 line text length: 128 line height: 54']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -202,7 +202,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=20px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [75px] [ ] ',
-        'sizeToPixels size 20 (from 20px)',
+        'sizeToPixels size 75 (from 75)',
         'drawLine font size: 20 line text length: 128 line height: 75']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -222,7 +222,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [25%] [ ] ',
-        'sizeToPixels size 54 (from 54px)',
+        'sizeToPixels size 14 (from 2500)',
         'drawLine font size: 54 line text length: 351 line height: 14']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -242,7 +242,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [50%] [ ] ',
-        'sizeToPixels size 54 (from 54px)',
+        'sizeToPixels size 27 (from 5000)',
         'drawLine font size: 54 line text length: 351 line height: 27']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -262,7 +262,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [75%] [ ] ',
-        'sizeToPixels size 54 (from 54px)',
+        'sizeToPixels size 41 (from 7500)',
         'drawLine font size: 54 line text length: 351 line height: 41']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
@@ -282,7 +282,7 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [150%] [ ] ',
-        'sizeToPixels size 54 (from 54px)',
+        'sizeToPixels size 81 (from 15000)',
         'drawLine font size: 54 line text length: 351 line height: 81']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 

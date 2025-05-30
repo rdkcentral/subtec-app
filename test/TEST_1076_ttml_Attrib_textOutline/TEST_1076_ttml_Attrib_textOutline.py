@@ -29,8 +29,8 @@ subtec_log_path = script_dir + "/../" + "/subtec_console_common.log"
 
 @pytest.mark.ttml
 @pytest.mark.attributes
-def test_1072():
-    print("test_1072".ljust(50), "Test Started")
+def test_1076():
+    print("test_1076".ljust(50), "Test Started")
 
     subtec_copy_path = "./output_files/" + get_log_filename()
     get_last_read_position(subtec_log_path)
@@ -39,7 +39,7 @@ def test_1072():
     run_test_prereq(script_dir)
 
     # wait for end of test
-    wait_for_log_string(subtec_log_path, "displaying: [00:00:00.000-00:00:05.000]: [ ] [Test display align] [ ] [ ] [center] [ ] ", 20)
+    wait_for_log_string(subtec_log_path, "sizeToPixels size 7 (from 7)", 20)
     copy_log_file(subtec_log_path, subtec_copy_path)
 
     sequence = [
@@ -50,60 +50,60 @@ def test_1072():
         'parseAttributes adding xml:id=s0', 
         'parseAttributes adding tts:backgroundColor=#000000FF', 
         'parseAttributes adding tts:textAlign=left',
-        'parseAttributes adding tts:displayAlign=before',
         'parseAttributes adding tts:color=white',
         'parseAttributes adding tts:fontSize=1c',
+        'parseAttributes adding tts:textOutline=gray 0.25c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:backgroundColor=#000000FF',
         'parseAttributes adding tts:textAlign=left',
-        'parseAttributes adding tts:displayAlign=before',
         'parseAttributes adding tts:color=white',
         'parseAttributes adding tts:fontSize=1c',
+        'parseAttributes adding tts:textOutline=gray 0.25c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
-        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test display align] [ ] [ ] [before] [ ]',
-        'alignPenY displayAlign=before textHeight=',
-        'drawChunk starting pen position: 23 0 (']
-    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1072 missing"
+        ', outline: GRAY, 0.25c',
+        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test text outline] [ ] [ ] [gray 0.25c] [ ] ',
+        'sizeToPixels size 18 (from 25)']
+    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1076 missing"
 
     sequence = [      
         'parseAttributes adding xml:id=s0', 
         'parseAttributes adding tts:backgroundColor=#000000FF', 
         'parseAttributes adding tts:textAlign=left',
-        'parseAttributes adding tts:displayAlign=after',
         'parseAttributes adding tts:color=white',
         'parseAttributes adding tts:fontSize=1c',
+        'parseAttributes adding tts:textOutline=red 5%',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:backgroundColor=#000000FF',
         'parseAttributes adding tts:textAlign=left',
-        'parseAttributes adding tts:displayAlign=after',
         'parseAttributes adding tts:color=white',
         'parseAttributes adding tts:fontSize=1c',
+        'parseAttributes adding tts:textOutline=red 5%',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
-        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test display align] [ ] [ ] [after] [ ] ',
-        'alignPenY displayAlign=after textHeight=',
-        'drawChunk starting pen position: 23 40 (']
-    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1072 missing"
+        ', outline: RED, 5%',
+        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test text outline] [ ] [ ] [red 5%]',
+        'sizeToPixels size 4 (from 500)']
+    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1076 missing"
 
     sequence = [      
         'parseAttributes adding xml:id=s0', 
         'parseAttributes adding tts:backgroundColor=#000000FF', 
         'parseAttributes adding tts:textAlign=left',
-        'parseAttributes adding tts:displayAlign=center',
         'parseAttributes adding tts:color=white',
         'parseAttributes adding tts:fontSize=1c',
+        'parseAttributes adding tts:textOutline=maroon 7px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:backgroundColor=#000000FF',
         'parseAttributes adding tts:textAlign=left',
-        'parseAttributes adding tts:displayAlign=center',
         'parseAttributes adding tts:color=white',
         'parseAttributes adding tts:fontSize=1c',
+        'parseAttributes adding tts:textOutline=maroon 7px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
-        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test display align] [ ] [ ] [center] [ ] ',
-        'alignPenY displayAlign=center textHeight=',
-        'drawChunk starting pen position: 23 20 (']
-    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1072 missing"
+        ', outline: MAROON, 7px',
+        'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test text outline] [ ] [ ] [maroon 7px]',
+        'sizeToPixels size 7 (from 7)']
+    assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1076 missing"
 
-    print("test_1072".ljust(50), "Test Passed")
+    print("test_1076".ljust(50), "Test Passed")

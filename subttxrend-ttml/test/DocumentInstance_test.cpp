@@ -19,6 +19,7 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include "Parser/DocumentInstance.hpp"
+#include <subttxrend/gfx/ColorArgb.hpp>
 
 using namespace subttxrend::ttmlengine;
 
@@ -799,26 +800,28 @@ public:
       doc.endElement(); //tt
 
       auto timeline = doc.generateTimeline();
-      CPPUNIT_ASSERT_EQUAL(1, timeline.size());
+      CPPUNIT_ASSERT(timeline.size() == 1);
 
       auto firstDoc = timeline.front();
-      CPPUNIT_ASSERT_EQUAL(1, firstDoc.m_entites.size());
+      CPPUNIT_ASSERT(firstDoc.m_entites.size() == 1);
 
       auto firstEntity = firstDoc.m_entites[0];
-      CPPUNIT_ASSERT_EQUAL(1, firstEntity.m_textLines.size());
+      CPPUNIT_ASSERT(firstEntity.m_textLines.size() == 1);
 
       auto firstLine = firstEntity.m_textLines[0];
-      CPPUNIT_ASSERT_EQUAL(1, firstLine.size());
+      CPPUNIT_ASSERT(firstLine.size() == 1);
 
       auto textChunk = firstLine[0];
-      CPPUNIT_ASSERT_EQUAL("text", textChunk.m_text);
+      CPPUNIT_ASSERT(textChunk.m_text == "text");
 
-      CPPUNIT_ASSERT_EQUAL(StyleSet::TextAlign::LEFT, textChunk.m_style.getTextAlign());
-      CPPUNIT_ASSERT_EQUAL(gfx::ColorArgb::BLUE, textChunk.m_style.getColor());
+      CPPUNIT_ASSERT(textChunk.m_style.getTextAlign() == StyleSet::TextAlign::LEFT);
+      CPPUNIT_ASSERT(subttxrend::gfx::ColorArgb::BLUE == textChunk.m_style.getColor());
     }
 
     void defaultWhitespaceHandling()
     {
+      DocumentInstance doc{};
+
       doc.startElement("tt");
       auto div = doc.startElement("div");
       div->parseAttribute("", "begin", "00:00:00");

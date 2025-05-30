@@ -32,9 +32,8 @@ namespace ttmlengine
 
 namespace {
 
-const gfx::Size MAX_SURFACE_SIZE{1920, 1080};
 // 1x1 is special case for UI
-const gfx::Size MIN_SURFACE_SIZE{2, 2};
+const gfx::Size MIN_SURFACE_SIZE{64, 64};
 
 bool isFullScreen(gfx::Rectangle const& rect, gfx::Size const& windowSize)
 {
@@ -59,18 +58,7 @@ TtmlRenderer::TtmlRenderer(const common::ConfigProvider *configProvider,
 void TtmlRenderer::setRelatedVideoSize(gfx::Size relatedVideoSize)
 {
     // size from  IPPlayer -> size of max video representation
-    m_valueConverter.setSourceSize(relatedVideoSize);
-
-    if ((relatedVideoSize.m_h > MAX_SURFACE_SIZE.m_h)
-            or (relatedVideoSize.m_w > MAX_SURFACE_SIZE.m_w))
-    {
-        m_surfaceSize = MAX_SURFACE_SIZE;
-    }
-    else
-    {
-        m_surfaceSize = relatedVideoSize;
-    }
-    m_valueConverter.setDrawingSize(m_surfaceSize);
+    m_surfaceSize = m_valueConverter.setSourceSize(relatedVideoSize);
 }
 
 void TtmlRenderer::update()
@@ -118,10 +106,7 @@ void TtmlRenderer::resizeWindow(IntermediateDocument& doc)
             {
                 if (m_surfaceSize != bmpSize) {
                     m_logger.osinfo("surface size different than bmp size:", m_surfaceSize, " vs:", bmpSize);
-
-                    m_surfaceSize = bmpSize;
-                    m_valueConverter.setSourceSize(m_surfaceSize);
-                    m_valueConverter.setDrawingSize(m_surfaceSize);
+                    m_surfaceSize = m_valueConverter.setSourceSize(bmpSize);
                 }
             }
             else

@@ -67,6 +67,7 @@ class TtmlController final : public ControllerInterface
     void mute(bool muted) override;
     bool wantsData(protocol::PacketChannelSpecific const& packet) const override;
 
+    void flush() override;
     void pause() override;
     void resume() override;
 

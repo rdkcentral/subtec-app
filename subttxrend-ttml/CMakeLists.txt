@@ -40,6 +40,7 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 # Packages to use
 #
 find_package(LibSubTtxRendCommon REQUIRED)
+find_package(LibSubTtxRendGfx REQUIRED)
 find_package(LibXml2 REQUIRED)
 
 #
@@ -47,6 +48,7 @@ find_package(LibXml2 REQUIRED)
 #
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${LIBSUBTTXRENDCOMMON_INCLUDE_DIRS})
+include_directories(${LIBSUBTTXRENDGFX_INCLUDE_DIRS})
 include_directories(${LIBXML2_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -92,10 +94,15 @@ set(SUBTTXREND_TTML_PUBLIC_HEADERS
 set(SUBTTXREND_TTML_SOURCES
      src/Factory.cpp
      src/Parser/AttributeHandlers.cpp
+     src/Parser/DocumentInstance.cpp
+     src/Parser/XmlLibSaxParserWrapper.cpp
      src/Parser/Outline.cpp
      src/Parser/Parser.cpp
      src/Parser/StyleSet.cpp
      src/Parser/Utils.cpp
+     src/Parser/XmlLibSaxParserWrapper.cpp
+     src/Parser/DocumentInstance.cpp
+     src/DataDumper.cpp
      src/TtmlEngineImpl.cpp
      src/TtmlRenderer.cpp
      src/IntermediateDocDrawer.cpp
@@ -105,7 +112,10 @@ set(SUBTTXREND_TTML_SOURCES
 if(BUILD_RDK_REFERENCE)
     set(SUBTTXREND_TTML_SOURCES ${SUBTTXREND_TTML_SOURCES} src/transform/TtmlTransformer.cpp)
 else(BUILD_RDK_REFERENCE)
-    set(SUBTTXREND_TTML_SOURCES ${SUBTTXREND_TTML_SOURCES} src/transform-lgi/TtmlTransformer.cpp)
+    set(SUBTTXREND_TTML_SOURCES ${SUBTTXREND_TTML_SOURCES} 
+        src/transform-lgi/TtmlTransformer.cpp
+        src/transform-lgi/StyleRulesHelper.cpp
+    )
 endif(BUILD_RDK_REFERENCE)
 
 #
@@ -118,6 +128,7 @@ set_property(TARGET ${LIBRARY_NAME} PROPERTY VERSION 0.0.0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_TTML_PUBLIC_HEADERS})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
+target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDGFX_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} ${LIBXML2_LIBRARIES})
 
 #
@@ -139,7 +150,7 @@ find_package(PkgConfig REQUIRED)
 set(PACKAGE_NAME        "${PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "Ttml Subtitles Engine")
 set(PACKAGE_VERSION     "0.0.0")
-set(PACKAGE_REQUIRES    "${LIBSUBTTMLRENDCOMMON_PACKAGE_NAME}")
+set(PACKAGE_REQUIRES    "${LIBSUBTTXRENDCOMMON_PACKAGE_NAME} ${LIBSUBTTXRENDGFX_PACKAGE_NAME}")
 set(PACKAGE_LIB_NAME    "${LIBRARY_NAME}")
 
 if(PKG_CONFIG_FOUND)

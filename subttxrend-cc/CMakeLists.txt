@@ -41,6 +41,7 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 #
 find_package(LibSubTtxRendCommon REQUIRED)
 find_package(LibSubTtxRendGfx REQUIRED)
+find_package(LibSubTtxRendProtocol REQUIRED)
 
 #
 # Include directories
@@ -49,6 +50,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${LIBSUBTTXRENDCOMMON_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDGFX_INCLUDE_DIRS})
 include_directories(${LIBCOMMON_INCLUDE_DIRS})
+include_directories(${LIBSUBTTXRENDPROTOCOL_INCLUDE_DIRS})
 
 #
 # Public headers
@@ -98,7 +100,7 @@ set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_CC_PUBLIC_HEADERS})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDGFX_LIBRARIES})
-target_link_libraries(${LIBRARY_NAME} ${LIBDVBSUBDECODER_LIBRARIES})
+target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDPROTOCOL_LIBRARIES})
 
 #
 # Install rules
@@ -119,7 +121,7 @@ find_package(PkgConfig REQUIRED)
 set(PACKAGE_NAME        "${PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "Subtitles Renderer - Closed Captions Renderer")
 set(PACKAGE_VERSION     "0.0.0")
-set(PACKAGE_REQUIRES    "")
+set(PACKAGE_REQUIRES    "${LIBSUBTTXRENDGFX_PACKAGE_NAME} ${LIBSUBTTXRENDPROTOCOL_PACKAGE_NAME}")
 set(PACKAGE_LIB_NAME    "${LIBRARY_NAME}")
 
 if(PKG_CONFIG_FOUND)

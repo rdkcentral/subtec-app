@@ -45,7 +45,7 @@ class TtmlAsClient final : public AsListener
     ~TtmlAsClient();
 
     AsHelpers getHelpers() override;
-    Properties getData(std::chrono::milliseconds timeout) override;
+    Properties getData();
 
   private:
     class Impl;

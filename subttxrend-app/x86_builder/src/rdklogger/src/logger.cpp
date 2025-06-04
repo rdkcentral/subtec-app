@@ -73,7 +73,7 @@ rdk_Error rdk_logger_deinit()
     return 0;
 }
 
-rdk_logger_Bool rdk_dbg_enabled(const char *module,
+rdk_logger_Bool rdk_logger_is_logLevel_enabled(const char *module,
                                 rdk_LogLevel level)
 {
     return true;

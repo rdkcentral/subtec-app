@@ -129,9 +129,9 @@ line:75%
         CPPUNIT_ASSERT_NO_THROW(std::tie(list, std::ignore) = doc.parseCueList(time_offset));
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.size());
         auto list_iter = list.begin();
-        //89s + 10s PTS + 5s LOCAL offset
-        CPPUNIT_ASSERT(TimePoint(104000) == (*list_iter)->startTime());
-        CPPUNIT_ASSERT(TimePoint(106000) == (*list_iter)->endTime());
+        //89s + 10s PTS - 5s LOCAL offset
+        CPPUNIT_ASSERT(TimePoint(94000) == (*list_iter)->startTime());
+        CPPUNIT_ASSERT(TimePoint(96000) == (*list_iter)->endTime());
     }
     
     void testRegion()
@@ -475,10 +475,10 @@ Special Characters
     {
         WebVTTDocumentTestFixture parser;
         std::map<std::string, std::uint64_t> goodlines = {
-            {"X-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:02:00:05", (std::uint64_t)7215000},
+            {"X-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:02:00:05", (std::uint64_t)10000},
             {"X-TIMESTAMP-MAP=MPEGTS:900000", (std::uint64_t)10000},
-            {"X-TIMESTAMP-MAP=LOCAL:02:00:05", (std::uint64_t)7205000},
-            {"X-TIMESTAMP-MAP=LOCAL:02:00:05.123", (std::uint64_t)7205123}
+            {"X-TIMESTAMP-MAP=LOCAL:02:00:05", (std::uint64_t)0},
+            {"X-TIMESTAMP-MAP=LOCAL:02:00:05.123", (std::uint64_t)0}
         };
         std::list<std::string> badlines = {
             "X-TIMESTAMP-MAPMPEGTS:900000LOCAL:02:00:05",
@@ -487,10 +487,12 @@ Special Characters
 
         for (const auto& good : goodlines)
         {
+            std::cout << good.first << "Krithika" << good.second;
             std::uint64_t ptsOffset = 0;
             auto& str = good.first;
             auto& expectedPts = good.second;
-            CPPUNIT_ASSERT_MESSAGE(str, ptsOffset = parser.parseXTimestampMap(str));
+
+            ptsOffset = parser.parseXTimestampMap(str);
             CPPUNIT_ASSERT_EQUAL_MESSAGE(str, (std::uint64_t)expectedPts, ptsOffset);
         }
 

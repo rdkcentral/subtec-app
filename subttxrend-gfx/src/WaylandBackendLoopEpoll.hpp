@@ -49,35 +49,40 @@ public:
     /**
      * Destructor.
      */
-    virtual ~WaylandBackendLoopEpoll()
+    ~WaylandBackendLoopEpoll()
     {
-        stop();
+        internalStop();
     }
 
-    virtual bool isSyncNeeded() const override
+    bool isSyncNeeded() const override
     {
         return true;
     }
 
-    virtual bool start(waylandcpp::DisplayPtr display,
+    bool start(waylandcpp::DisplayPtr display,
                        WaylandBackendLoopListener* listener) override
     {
         m_listener = listener;
         return m_displayLoop.start(display, this);
     }
 
-    virtual void stop() override
+    void stop() override
     {
-        m_displayLoop.stop();
+        internalStop();
     }
 
-    virtual void requestWakeup() override
+    void requestWakeup() override
     {
         m_displayLoop.wakeup();
     }
 
+private:
+    void internalStop()
+    {
+        m_displayLoop.stop();
+    }
 protected:
-    virtual void started(waylandcpp::EpollDisplayLoop* /*loop*/) override
+    void started(waylandcpp::EpollDisplayLoop* /*loop*/) override
     {
         if (m_listener)
         {
@@ -85,7 +90,7 @@ protected:
         }
     }
 
-    virtual void finished(waylandcpp::EpollDisplayLoop* /*loop*/) override
+    void finished(waylandcpp::EpollDisplayLoop* /*loop*/) override
     {
         if (m_listener)
         {
@@ -93,7 +98,7 @@ protected:
         }
     }
 
-    virtual void wakeupReceived(waylandcpp::EpollDisplayLoop* /*loop*/) override
+    void wakeupReceived(waylandcpp::EpollDisplayLoop* /*loop*/) override
     {
         if (m_listener)
         {

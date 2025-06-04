@@ -24,7 +24,7 @@
 
 int main(int argc, char *argv[])
 {
-    debug_log("Test CC 708 unmute packet wiithout active type packett started");
+    debug_log("Test CC 708 unmute packet wiithout active type packet started");
     bool ret = false;
 
     ClosedCaptionsChannel *channel = new ClosedCaptionsChannel();

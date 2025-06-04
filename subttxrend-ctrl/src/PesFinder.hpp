@@ -22,6 +22,7 @@
 #define ONEMW_SRC_AV_SUBTTXREND_APP_SRC_PESFINDER_HPP_
 
 #include <cstdint>
+#include <cstddef>
 
 #include <subttxrend/common/Logger.hpp>
 

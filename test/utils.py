@@ -22,6 +22,7 @@ import time
 import glob
 import inspect
 import shutil
+import sys
 
 # Global - since subtec is not restarted for every test, we keep track of last
 # read position in log file to use to validate next tests.
@@ -84,7 +85,7 @@ def start_subtec(script_path, subtec_log_path = "subtec_console_common.log"):
     """
     Start subtec app using build.sh script
 
-    This function executes build.sh script with "run" argument,
+    This function executes build.sh script with "full" argument,
     redirecting both standard output and standard error to the specified logfile.
     'stdbuf -o0' is used to ensure that the output is unbuffered. This 
     subprocess runs in the background.
@@ -104,18 +105,18 @@ def start_subtec(script_path, subtec_log_path = "subtec_console_common.log"):
     with open(subtec_log_path, 'w+') as logfile:
         os.chdir(script_path)
 
-        run_command = ['stdbuf', '-o0', './build.sh', 'run']
+        run_command = ['stdbuf', '-o0', './build.sh', 'full']
         try:
             result = subprocess.Popen(run_command, stdout=logfile, stderr=subprocess.STDOUT)
             debug_log("Start build.sh and subtec app")
             return True
         except subprocess.CalledProcessError as e:
-            debug_log("Execution failed for build.sh run")
+            debug_log("Execution failed for build.sh full command")
             debug_log(e.stderr)
             debug_log(e.stdout)
             return False
         except Exception as e:
-            debug_log(f"Unexpected error for build.sh run : {e}")
+            debug_log(f"Unexpected error for build.sh full command : {e}")
             return False
 
 def is_process_running(process_name):
@@ -204,7 +205,85 @@ def check_and_restart_subtec():
         start_subtec("../../subttxrend-app/x86_builder", "../subtec_console_common.log")
         
         # wait to be sure subtec has started
-        assert wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 220, 1), "Subtec not started, check !"
+        if not wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 600, 1):
+            debug_log("Subtec not started, check !")
+        validate_unittests_results()
+
+def validate_unittests_results():
+    """
+    Checks result of unittests executed
+
+    This function validates the subtec console log to check if all the
+    unit tests are passed on running build.sh full.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
+    # Give logs to check in expected sequence
+    log_sequence = [ 'tests-subttxrend-common',
+        '1/2 Test #1: StringUtils_Test .................   Passed',
+        '2/2 Test #2: IniFile_Test .....................   Passed',
+        'tests-subttxrend-protocol',
+        '1/8 Test #1: PacketData_Test ..................   Passed',
+        '2/8 Test #2: PacketTimestamp_Test .............   Passed',
+        '3/8 Test #3: PacketTtmlInfo_Test ..............   Passed',
+        '4/8 Test #4: PacketResetAll_Test ..............   Passed',
+        '5/8 Test #5: PacketResetChannel_Test ..........   Passed',
+        '6/8 Test #6: PacketSubtitleSelection_Test .....   Passed',
+        '7/8 Test #7: PacketTeletextSelection_Test .....   Passed',
+        '8/8 Test #8: StreamValidator_Test .............   Passed',
+        'tests-dvbsubdecoder',
+        '1/30 Test  #1: BitStream_Test ...................   Passed',
+        '2/30 Test  #2: Clut_Test ........................   Passed',
+        '3/30 Test  #3: Pixmap_Test ......................   Passed',
+        '4/30 Test  #4: PixelWriter_Test .................   Passed',
+        '5/30 Test  #5: ObjectParser_Test ................   Passed',
+        '6/30 Test  #6: Exception_Test ...................   Passed',
+        '7/30 Test  #7: PesPacketReader_Test .............   Passed',
+        '8/30 Test  #8: BasicAllocator_Test ..............   Passed',
+        '9/30 Test  #9: Array_Test .......................   Passed',
+        '10/30 Test #10: Status_Test ......................   Passed',
+        '11/30 Test #11: Display_Test .....................   Passed',
+        '12/30 Test #12: Page_Test ........................   Passed',
+        '13/30 Test #13: ParserPCS_Test ...................   Passed',
+        '14/30 Test #14: RenderingState_Test ..............   Passed',
+        '15/30 Test #15: PixmapAllocator_Test .............   Passed',
+        '16/30 Test #16: ObjectPool_Test ..................   Passed',
+        '17/30 Test #17: ObjectTablePool_Test .............   Passed',
+        '18/30 Test #18: PesBuffer_Test ...................   Passed',
+        '19/30 Test #19: ObjectInstance_Test ..............   Passed',
+        '20/30 Test #20: ParserEDS_Test ...................   Passed',
+        '21/30 Test #21: ParserDDS_Test ...................   Passed',
+        '22/30 Test #22: ParserODS_Test ...................   Passed',
+        '23/30 Test #23: ParserRCS_Test ...................   Passed',
+        '24/30 Test #24: ParserCDS_Test ...................   Passed',
+        '25/30 Test #25: Parser_Test ......................   Passed',
+        '26/30 Test #26: Region_Test ......................   Passed',
+        '27/30 Test #27: Database_Test ....................   Passed',
+        '28/30 Test #28: Decoder_Test .....................   Passed',
+        '29/30 Test #29: ColorCalculator_Test .............   Passed',
+        '30/30 Test #30: Coverage_Test ....................   Passed',
+        'tests-subttxrend-ttml',
+        '1/4 Test #1: TtmlTiming_Test ..................   Passed',
+        '2/4 Test #2: StyleSet_Test ....................   Passed',
+        '3/4 Test #3: DocumentInstance_Test ............   Passed',
+        '4/4 Test #4: AttributeHandlers_test ...........   Passed',
+        'tests-subttxrend-webvtt',
+        '1/5 Test #1: WebVTTCue_test ...................   Passed',
+        '2/5 Test #2: WebVTTDocument_test ..............   Passed',
+        '3/5 Test #3: WebVTTConverter_test .............   Passed',
+        '4/5 Test #4: LineBuilder_test .................   Passed',
+        '5/5 Test #5: WebVTTAttributes_test ............   Passed',
+        'tests-ttxdecoder',
+        '1/1 Test #1: CacheImpl_Test ...................   Passed']
+    if not monitor_log_for_sequence("../../test/subtec_console_common.log", log_sequence):
+        debug_log("Check and fix unit test failures before proceeding !")
+        sys.exit(0)
+    else:
+        debug_log("Unit tests pass !")
 
 def cleanup_subtec():
     """

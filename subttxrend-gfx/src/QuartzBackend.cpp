@@ -22,7 +22,7 @@
 #import <cocoa_window.h>
 #endif
 
-#include "ipp2/Logger.h"
+#include <subttxrend/common/Logger.hpp>
 
 #include "Pixmap.hpp"
 
@@ -33,7 +33,7 @@ namespace gfx
 
 namespace
 {
-DEFINE_DEFAULT_CAT("SUBS.GFX.GRAPHICS.QTZBEND");
+subttxrend::common::Logger g_logger("Gfx", "QuartzBackend");
 } // namespace <anonymous>
 
 //------------------------------------------
@@ -82,21 +82,21 @@ void QuartzBackend::stop()
 
 void QuartzBackend::requestRender()
 {
-    log_trace(" ");
+    g_logger.trace("%s", __func__);
 
     redraw();
 }
 
 void QuartzBackend::forceRender()
 {
-    log_trace(" ");
+    g_logger.trace("%s", __func__);
 
     redraw();
 }
 
 void QuartzBackend::redraw()
 {
-    log_trace(" ");
+    g_logger.trace("%s", __func__);
 
     auto contentSize = calculateContentSize();
 
@@ -110,23 +110,23 @@ void QuartzBackend::redraw()
     {
         if (!prepareBuffer(contentSize))
         {
-            log_error("cannot prepare buffer of size " << contentSize.m_w << "x" << contentSize.m_h);
+            g_logger.fatal("%s - cannot prepare buffer of size %dx%d", __func__, contentSize.m_w, contentSize.m_h);
             return;
         }
 
         if (!copyToBuffer(contentSize))
         {
-            log_error("cannot copy contents");
+            g_logger.fatal("%s - cannot copy contents", __func__);
             return;
         }
 
-        log_trace("width=" << contentSize.m_w << " height=" << contentSize.m_h << " size=" << m_buffer.size() << " ptr=" <<  m_buffer.data());
+		g_logger.trace("%s - width=%d height=%d size=%d ptr=%X", __func__, contentSize.m_w, contentSize.m_h, m_buffer.size(), m_buffer.data());
         // Send the buffer to Quartz
         setSubtitleData(m_buffer.data(), m_buffer.size(), contentSize.m_w, contentSize.m_h);
     }
     else
     {
-        log_trace(" nothing to draw");
+        g_logger.trace("%s nothing to draw", __func__);
         // Tell Quartz to mute the subtitles
         muteSubtitles();
     }
@@ -134,7 +134,7 @@ void QuartzBackend::redraw()
 
 Size QuartzBackend::calculateContentSize()
 {
-    log_trace(" ");
+    g_logger.trace("%s", __func__);
 
     class SizeCalculator : public BackendWindowEnumerator
     {
@@ -175,7 +175,7 @@ bool QuartzBackend::prepareBuffer(const Size& contentSize)
 
 bool QuartzBackend::copyToBuffer(const Size& contentSize)
 {
-    log_trace(" ");
+    g_logger.trace("%s", __func__);
 
     class BitmapCopier : public BackendWindowEnumerator
     {
@@ -193,7 +193,7 @@ bool QuartzBackend::copyToBuffer(const Size& contentSize)
 
             if ((pw > m_imageSize.m_w) || (ph > m_imageSize.m_h))
             {
-                log_info("pixmap larger than image, skipping");
+                g_logger.info("%s - pixmap larger than image, skipping", __func__);
                 return;
             }
 

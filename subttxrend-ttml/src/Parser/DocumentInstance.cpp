@@ -181,77 +181,9 @@ std::shared_ptr<Element> DocumentInstance::getCurrentImageElement() const
 void DocumentInstance::newEntity(std::vector<IntermediateDocument::Entity>& entities,
                std::string reason) const
 {
-    if (!entities.empty() && !entities.back().m_textLines.empty())
-    {
-        applyWhitespaceHandling(entities.back().m_textLines.back());
-    }
     entities.emplace_back();
     entities.back().m_region = std::make_shared<RegionElement>();
     m_logger.ostrace(__LOGGER_FUNC__, " - ", reason);
-}
-
-void DocumentInstance::applyWhitespaceHandling(IntermediateDocument::TextLine& textLine) const
-{
-    //Text chunks with DEFAULT space handling are already treated by
-    //BodyElement::applyDefaultWhitespaceHandling()
-    //now spaces:
-    // - leading
-    // - trailing
-    // - on the border between text chunks
-    // need to be handled
-    //(they might come from different elements + have different space handling)
-    if (!textLine.empty())
-    {
-        //Remove leading space
-        auto& firstChunk = textLine.front();
-        if (firstChunk.m_whitespaceHandling == XmlSpace::DEFAULT && !firstChunk.m_text.empty())
-        {
-            if (isSpace(firstChunk.m_text.front()))
-            {
-                firstChunk.m_text.erase(0, 1);
-            }
-        }
-
-        //Remove trailing space
-        auto& lastChunk = textLine.back();
-        if (lastChunk.m_whitespaceHandling == XmlSpace::DEFAULT && !lastChunk.m_text.empty())
-        {
-            if (isSpace(lastChunk.m_text.back()))
-            {
-                lastChunk.m_text.pop_back();
-            }
-        }
-
-        //Remove spaces on the border between text chunks
-        //in case there are mixed (DEFAULT/PRESERVE) whitespace handling
-        //check leading and trailing spaces
-        for (int i=0; i < ((int)textLine.size() - 1); i++)
-        {
-            if (textLine[i].m_whitespaceHandling == XmlSpace::DEFAULT && !textLine[i].m_text.empty())
-            {
-                if (isSpace(textLine[i].m_text.back()) && isSpace(textLine[i+1].m_text.front()))
-                {
-                    textLine[i].m_text.pop_back();
-                }
-            }
-            if (i > 0 && textLine[i].m_whitespaceHandling == XmlSpace::DEFAULT && !textLine[i].m_text.empty())
-            {
-                if (isSpace(textLine[i].m_text.front()) && isSpace(textLine[i-1].m_text.back()))
-                {
-                    textLine[i].m_text.erase(0, 1);
-                }
-            }
-        }
-    }
-}
-
-void DocumentInstance::newLine(IntermediateDocument::Entity& entity) const
-{
-    if (!entity.m_textLines.empty())
-    {
-        applyWhitespaceHandling(entity.m_textLines.back());
-    }
-    entity.m_textLines.emplace_back();
 }
 
 std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
@@ -318,14 +250,13 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                             {
                                 if (entities.back().m_textLines.empty())
                                 {
-                                    newLine(entities.back());
+                                    entities.back().m_textLines.emplace_back();
                                 }
 
                                 auto& currentLine = entities.back().m_textLines.back();
                                 currentLine.emplace_back();
                                 auto& textChunk = currentLine.back();
                                 textChunk.m_text = textLine.text;
-                                textChunk.m_whitespaceHandling = content->getWhiteSpaceHandling();
 
                                 auto styleId = content->getStyleId();
                                 textChunk.m_style.setStyleId(styleId);
@@ -336,7 +267,7 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                             //If TTML contained new line mark - add new line to render
                             if (textLine.isForcedLine == true && !entities.back().empty())
                             {
-                                newLine(entities.back());
+                                entities.back().m_textLines.emplace_back();
                             }
                         }
                     }
@@ -344,11 +275,6 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
             }
             if (!entities.empty())
             {
-                if (!entities.back().m_textLines.empty())
-                {
-                    applyWhitespaceHandling(entities.back().m_textLines.back());
-                }
-
                 IntermediateDocument timespan;
 
                 timespan.m_entites = std::move(entities);

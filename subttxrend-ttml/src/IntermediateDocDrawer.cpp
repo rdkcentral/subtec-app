@@ -32,16 +32,7 @@ namespace subttxrend
 namespace ttmlengine
 {
 
-namespace
-{
-/** Text rectangle horizontal margin.
-    Calculated as percent of font size.
-    The value 32,1% is used to give 26px for font 81px */
-const auto BACKGROUND_RECT_MARGIN = DomainValue(DomainValue::Type::PERCENTAGE_HUNDREDTHS, 3210);
-
-/** Default font to use if loading requested font failed. */
-constexpr auto FALLBACK_FONT_NAME = "Bitstream Vera Sans Mono Bold";
-}//anonymous namespace
+const std::string IntermediateDocDrawer::FALLBACK_FONT_NAME = "Bitstream Vera Sans Mono Bold";
 
 IntermediateDocDrawer::IntermediateDocDrawer(const common::ConfigProvider *configProvider,
                                              const ValueConverter &valueConverter)
@@ -180,7 +171,6 @@ bool IntermediateDocDrawer::drawLine(const IntermediateDocument::TextLine& textL
         const auto cellHeightPx = m_valueConverter.getCellHeight();
         drawingState.m_fontSize = m_valueConverter.sizeToPixels(style.getFontSize(), cellHeightPx);
         drawingState.m_font = getFont(style.getFontFamily(), drawingState.m_fontSize);
-        drawingState.m_margin = m_valueConverter.sizeToPixels(BACKGROUND_RECT_MARGIN, drawingState.m_fontSize);
 
         if (drawingState.m_font)
         {
@@ -224,14 +214,13 @@ void IntermediateDocDrawer::alignPenX(DrawingState& drawingState,
     const std::int32_t textLength = drawingState.m_lineSize.m_w;
 
     m_logger.ostrace(__LOGGER_FUNC__, " textAlign=", textAlign, " textLength=", textLength);
-
     if (textAlign == StyleSet::TextAlign::LEFT)
     {
-        drawingState.m_penX = drawingState.m_margin;
+        drawingState.m_penX = BACKGROUND_RECT_MARGIN;
     }
     else if (textAlign == StyleSet::TextAlign::RIGHT)
     {
-        drawingState.m_penX = drawingState.m_regionRect.m_w - textLength - drawingState.m_margin;
+        drawingState.m_penX = drawingState.m_regionRect.m_w - textLength - BACKGROUND_RECT_MARGIN;
     }
     else // defaults - "center"
     {
@@ -294,10 +283,10 @@ void IntermediateDocDrawer::getLineSize(const IntermediateDocument::TextLine& li
                                         DrawingState& drawingState)
 {
     assert(drawingState.m_font);
-    std::int32_t textWidth = 0;
-    std::int32_t textTrimmed = 0;
+    float textWidth = 0.0;
+    float textTrimmed = 0.0;
     bool textStarted = false;
-    std::int32_t xOffset = 0;
+    float xOffset = 0.0;
 
     for (const IntermediateDocument::TextChunk& chunk : line)
     {
@@ -309,21 +298,21 @@ void IntermediateDocDrawer::getLineSize(const IntermediateDocument::TextLine& li
             if (!textStarted)
             {
                 if (token.isWhite)
-                    xOffset += std::round(token.totalAdvanceX);
+                    xOffset += token.totalAdvanceX;
                 else
                     textStarted = true;
             }
 
             if (textStarted)
-                textWidth += std::round(token.totalAdvanceX);
+                textWidth += token.totalAdvanceX;
 
             if (!token.isWhite)
                 textTrimmed = textWidth;
         }
     }
-    drawingState.m_lineSize.m_w = textTrimmed;
+    drawingState.m_lineSize.m_w = static_cast<std::int32_t>(std::ceil(textTrimmed));
     drawingState.m_lineSize.m_h = m_valueConverter.sizeToPixels(lineHeight, drawingState.m_fontSize);
-    drawingState.m_lineXOffset = xOffset;
+    drawingState.m_lineXOffset = static_cast<std::int32_t>(std::ceil(xOffset));
 }
 
 void IntermediateDocDrawer::drawLineBackground(const gfx::ColorArgb& backgroundColor,
@@ -334,9 +323,9 @@ void IntermediateDocDrawer::drawLineBackground(const gfx::ColorArgb& backgroundC
     {
         dc.fillRectangle(backgroundColor,
                          gfx::Rectangle {
-                                 drawingState.m_regionRect.m_x + drawingState.m_lineXOffset + drawingState.m_penX - drawingState.m_margin,
+                                 drawingState.m_regionRect.m_x + drawingState.m_lineXOffset + drawingState.m_penX - BACKGROUND_RECT_MARGIN,
                                  drawingState.m_regionRect.m_y + drawingState.m_penY,
-                                 drawingState.m_lineSize.m_w + (2 * drawingState.m_margin),
+                                 drawingState.m_lineSize.m_w + (2 * BACKGROUND_RECT_MARGIN),
                                  drawingState.m_lineSize.m_h });
     }
 }
@@ -372,7 +361,7 @@ bool IntermediateDocDrawer::drawChunk(const IntermediateDocument::TextChunk& chu
         if (token.forceNewline)
         {
             // TODO:  FEATURE tts:wrapOption support
-            if ((drawingState.m_penX + std::round(token.totalAdvanceX)) > drawingState.m_regionRect.m_w)
+            if ((drawingState.m_penX + token.totalAdvanceX) > drawingState.m_regionRect.m_w)
             {
                 newline(drawingState);
                 didNewline = true;
@@ -397,7 +386,7 @@ bool IntermediateDocDrawer::drawChunk(const IntermediateDocument::TextChunk& chu
             // TODO: would need more whitespace handling in textToTokens otherwise
             if (!didNewline)
             {
-                drawingState.m_penX += std::round(token.totalAdvanceX);
+                drawingState.m_penX += token.totalAdvanceX;
             }
         }
         else
@@ -438,7 +427,7 @@ bool IntermediateDocDrawer::drawChunk(const IntermediateDocument::TextChunk& chu
             //then draw the text on top of the outline
             dc.drawString(*(drawingState.m_font.get()), rectangle, token.glyphs, fgColor, gfx::ColorArgb::TRANSPARENT, 0, verticalOffset);
 
-            drawingState.m_penX += std::round(token.totalAdvanceX);
+            drawingState.m_penX += token.totalAdvanceX;
         }
     }
 

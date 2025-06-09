@@ -45,12 +45,35 @@ public:
     /**
      * Constructor.
      */
-    DocumentInstance();
+    DocumentInstance() :
+            m_styles(),
+            m_regions(),
+            m_parsedBodyElementsStack(),
+            m_content(),
+            m_logger("TtmlEngine", "DocumentInstance")
+    {
+        // noop
+    }
 
     /**
      * Clears document.
      */
-    void reset();
+    void reset()
+    {
+        m_root.reset();
+        m_regions.clear();
+        m_styles.clear();
+        m_content.clear();
+        m_images.clear();
+
+        while (!m_parsedBodyElementsStack.empty())
+        {
+            m_parsedBodyElementsStack.pop();
+        }
+        // We do not clear the override style attributes
+
+        m_currentImageElement = std::shared_ptr<ImageElement>();
+    }
 
     /**
      * Adds element to the document.
@@ -60,7 +83,71 @@ public:
      * @return
      *      Shared pointer to the element or nullptr if element type is not supported.
      */
-    std::shared_ptr<Element> startElement(const std::string& name);
+    std::shared_ptr<Element> startElement(const std::string& name)
+    {
+        m_logger.ostrace(__LOGGER_FUNC__, " name ", name);
+
+        if (name == "image")
+        {
+            std::shared_ptr<ImageElement> img = std::make_shared<ImageElement>();
+            m_images.insert(img);
+            m_currentImageElement = img;
+            return img;
+        }
+        else if (name == "region")
+        {
+            auto regionElement = std::make_shared<RegionElement>();
+            m_regions.insert(regionElement);
+            return regionElement;
+        }
+        else if (name == "style")
+        {
+            auto styleElement = std::make_shared<StyleElement>();
+            m_styles.insert(styleElement);
+            return styleElement;
+        }
+        else if (name == "body" || name == "div" || name == "p" || name == "span")
+        {
+            std::shared_ptr<BodyElement> bodyElement;
+            if (m_parsedBodyElementsStack.empty())
+            {
+                bodyElement = std::make_shared<BodyElement>();
+            }
+            else
+            {
+                bodyElement = std::make_shared<BodyElement>(m_parsedBodyElementsStack.top());
+            }
+            m_parsedBodyElementsStack.push(bodyElement);
+            m_content.push_back(bodyElement);
+            return bodyElement;
+        }
+        else if (name == "tt")
+        {
+            if (m_root == nullptr)
+            {
+                m_root = std::make_shared<TTElement>();
+            }
+            else
+            {
+                m_logger.oswarning(__LOGGER_FUNC__, " more than one tt element in document");
+            }
+            return m_root;
+        }
+        else if (name == "br")
+        {
+            if (m_parsedBodyElementsStack.empty() == false)
+            {
+                auto& currentBodyElement = m_parsedBodyElementsStack.top();
+                currentBodyElement->appendNewline();
+            }
+            m_parsedBodyElementsStack.push(nullptr);
+            return nullptr;
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
 
     /**
      * Sets styling override attributes.
@@ -68,12 +155,59 @@ public:
      * @param styleAttributes
      *      The styling override attributes.
      */
-    void setStyleOverrideAttributes(const Attributes& styleAttributes);
+    void setStyleOverrideAttributes(const Attributes& styleAttributes)
+    {
+        m_overrideStyleAttributes = styleAttributes;
+    }
 
     /**
      * Signals end of element.
      */
-    void endElement(bool copyTopElement = true);
+    void endElement(bool copyTopElement = true)
+    {
+        if (m_parsedBodyElementsStack.empty() == false)
+        {
+            auto currentElement = m_parsedBodyElementsStack.top();
+            m_parsedBodyElementsStack.pop();
+
+            if (currentElement and currentElement->hasValidContent())
+            {
+                currentElement->finalize();
+            }
+        }
+        //
+        // Below creates a copy of the parent and adds to m_content collection on "end" of child element.
+        //
+        // This is to cover cases like:
+        // <p><span xml:id="span1">2</span><br/><span xml:id="span2">4</span></p>
+        // "p" element is parent, "span" elements are children of "p". Whenever end of "span" element is detected -
+        // this function is called for "span" - a copy of "p" is added to m_content collection and endElement() is called
+        // for previously added "p" - so there is single "p" element on BodyElement-s stack.
+        //
+        // <br/> - new line - needs to be added in the correct place - after 2
+        // To achieve this <p> element is added to m_content collection each time its child element ends.
+        // Once it's added as top element - the text and new lines are added to it (by the Parser).
+        //
+        // With adding <p> element on child end rendering is:
+        // 2<line break>4
+        //
+        // Without adding <p> element on child end rendering is:
+        // 24<line break>
+        //
+        // As a side effect following <p> is now correctly supported as well:
+        // <p>1<span>2</span>3<span>4</span>5</p>
+        //
+        if (copyTopElement && m_parsedBodyElementsStack.empty() == false)
+        {
+            //Note: copyElement is created with its original element as parent
+            auto copyElement = std::make_shared<BodyElement>(m_parsedBodyElementsStack.top());
+            endElement(false);
+            m_parsedBodyElementsStack.push(copyElement);
+            m_content.push_back(copyElement);
+        }
+
+        m_currentImageElement = std::shared_ptr<ImageElement>();
+    }
 
     /**
      * Currently parsed element getter.
@@ -81,16 +215,23 @@ public:
      * @return
      *      Currently parsed element.
      */
-    std::shared_ptr<Element> getCurrentElement() const;
+    std::shared_ptr<Element> getCurrentElement() const
+    {
+        return m_parsedBodyElementsStack.empty() ? nullptr : m_parsedBodyElementsStack.top();
+    }
 
-    std::shared_ptr<Element> getCurrentImageElement() const;
+    std::shared_ptr<Element> getCurrentImageElement() const
+    {
+        return m_currentImageElement;
+    }
 
     void newEntity(std::vector<IntermediateDocument::Entity>& entities,
-                   std::string reason) const;
-
-    void applyWhitespaceHandling(IntermediateDocument::TextLine& textLine) const;
-
-    void newLine(IntermediateDocument::Entity& entity) const;
+                   std::string reason) const
+    {
+        entities.emplace_back();
+        entities.back().m_region = std::make_shared<RegionElement>();
+        m_logger.ostrace(__LOGGER_FUNC__, " - ", reason);
+    }
 
     /**
      * Generates list of time periods during which ttml content is constant.
@@ -108,12 +249,143 @@ public:
      * @return
      *      Timelined list of text content and it's properties.
      */
-    std::list<IntermediateDocument> generateTimeline() const;
+    std::list<IntermediateDocument> generateTimeline() const
+    {
+        std::list<IntermediateDocument> timeline;
+
+        if (m_root)
+        {
+            auto timings = generateTimings();
+            updateStyleAttributes();
+            updateRegionAttributes();
+
+            for (auto &timing : timings)
+            {
+                m_logger.ostrace(__LOGGER_FUNC__, ' ', timing.toStr());
+
+                std::vector<IntermediateDocument::Entity> entities;
+
+                for (auto &content : m_content)
+                {
+                    assert(content.get() != nullptr);
+
+                    if (content->getTiming().isOverlapping(timing))
+                    {
+                        if (entities.empty())
+                        {
+                            //Add new Entity on timing change
+                            newEntity(entities, "document start");
+                        }
+                        auto region = findRegion(content->getRegionId());
+                        if (region != nullptr)
+                        {
+                            //New region - create new entity if current is not empty
+                            //Otherwise just update the region
+                            if (!entities.back().empty())
+                            {
+                                newEntity(entities, "region");
+                            }
+                            entities.back().m_region = std::move(region);
+                        }
+
+                        auto image = findImage(content->getBackgroundImageId());
+                        if (image != nullptr)
+                        {
+                            //image based subtitles - IntermediateDocument should hold single image
+                            entities.back().m_imageChunk.m_image = std::move(image);
+                            if (entities.size() > 1)
+                            {
+                                m_logger.oswarning("Subtitles with multiple images or mixed image and text not supported");
+                            }
+                        }
+                        else
+                        {
+                            //text based subtitles - IntermediateDocument::Entity represents single region to render
+                            // it may consists of more than one BodyElement-s
+                            const auto& contextLines = content->getTextLines();
+
+                            for (const auto& textLine : contextLines)
+                            {
+                                if (!textLine.text.empty())
+                                {
+                                    if (entities.back().m_textLines.empty())
+                                    {
+                                        entities.back().m_textLines.emplace_back();
+                                    }
+
+                                    auto& currentLine = entities.back().m_textLines.back();
+                                    currentLine.emplace_back();
+                                    auto &textChunk = currentLine.back();
+                                    textChunk.m_text = textLine.text;
+
+                                    auto styleId = content->getStyleId();
+                                    textChunk.m_style.setStyleId(styleId);
+                                    textChunk.m_style.merge(content->getStyleAttributes());
+
+                                    m_logger.ostrace(__LOGGER_FUNC__, " chunk: \'", textChunk.m_text, "\'", ", style: ", textChunk.m_style.toStr());
+                                }
+                                //If TTML contained new line mark - add new line to render
+                                if (textLine.isForcedLine == true && !entities.back().empty())
+                                {
+                                    entities.back().m_textLines.emplace_back();
+                                }
+                            }
+                        }
+                    }
+                }
+                if (!entities.empty())
+                {
+                    IntermediateDocument timespan;
+
+                    timespan.m_entites = std::move(entities);
+                    timespan.m_timing = timing;
+                    timespan.setCellResolution(m_root->getCellResolution());
+
+                    timeline.emplace_back(std::move(timespan));
+                }
+            }
+        }
+        else
+        {
+            m_logger.oswarning("Root <tt> element not found - ignoring content");
+        }
+
+        return timeline;
+    }
 
     /**
      * Dumps contents to log. Used for debugging purposes.
      */
-    void dump() const;
+    void dump() const
+    {
+        m_logger.ostrace("--------- STYLES -----------");
+        for (auto &style : m_styles)
+        {
+            m_logger.ostrace("id: ", style->getId());
+        }
+
+        m_logger.ostrace("--------- REGIONS -----------");
+        for (auto &region : m_regions)
+        {
+            m_logger.ostrace(region->toStr());
+        }
+
+        m_logger.ostrace("--------- CONTENTS -----------");
+        for (auto &content : m_content)
+        {
+            auto timing = content->getTiming();
+            m_logger.ostrace("id:",
+                           content->getId(),
+                           " ",
+                           timing.toStr(),
+                           " reg:",
+                           content->getRegionId(),
+                           " style:",
+                           content->getStyleId(),
+                           " lines of text: ",
+                           content->getTextLines().size());
+        }
+    }
 
 private:
 
@@ -149,7 +421,14 @@ private:
      * @return
      *      StyleElement instance with given id, default style if not found.
      */
-    std::shared_ptr<StyleElement> findStyle(const std::string& styleId) const;
+    std::shared_ptr<StyleElement> findStyle(const std::string& styleId) const
+    {
+        auto retVal = find(styleId, m_styles);
+        if (retVal == nullptr) {
+            retVal = std::make_shared<StyleElement>();
+        }
+        return retVal;
+    }
 
     /**
      * Finds region with given region id.
@@ -159,7 +438,10 @@ private:
      * @return
      *      RegionElement instance with given id, nullptr if not found.
      */
-    std::shared_ptr<RegionElement> findRegion(const std::string& regionId) const;
+    std::shared_ptr<RegionElement> findRegion(const std::string& regionId) const
+    {
+        return find(regionId, m_regions);
+    }
 
     /**
      * Finds image with given id.
@@ -169,7 +451,10 @@ private:
      * @return
      *      ImageElement instance with given id, nullptr if not found.
      */
-    std::shared_ptr<ImageElement> findImage(const std::string& imageId) const;
+    std::shared_ptr<ImageElement> findImage(const std::string& imageId) const
+    {
+        return find(imageId, m_images);
+    }
 
     /**
      * Generates list of time periods within which subtitle content does not change.
@@ -177,7 +462,55 @@ private:
      * @return
      *      Sorted list of time periods.
      */
-    std::vector<Timing> generateTimings() const;
+    std::vector<Timing> generateTimings() const
+    {
+        std::set<TimePoint> timepoints;
+
+        // first create sorted list of unique points in time...
+        for (auto &content : m_content)
+        {
+            std::string contentStr;
+
+            for (auto& line : content->getTextLines()) {
+                contentStr.append("[");
+                contentStr.append(line.text);
+                        contentStr.append("]");
+            }
+            m_logger.ostrace(
+                    __LOGGER_FUNC__, " some content, with texts[", content->getTextLines().size(), "]: ", contentStr);
+
+            if (!(content->getTextLines().empty() && content->getBackgroundImageId().empty()))
+            {
+                timepoints.insert(content->getTiming().getStartTimeRef());
+                timepoints.insert(content->getTiming().getEndTimeRef());
+            }
+        }
+
+        // than generate time periods for every neighboring timepoints
+        std::vector<Timing> result;
+        if (!timepoints.empty())
+        {
+            m_logger.ostrace(__LOGGER_FUNC__, " size: ", timepoints.size());
+
+            auto it = timepoints.begin();
+            auto it2 = timepoints.begin();
+            it2++;
+
+            while (it2 != timepoints.end())
+            {
+                result.emplace_back(*it, *it2);
+                it = it2;
+                it2++;
+            }
+        }
+
+        for (auto x : result)
+        {
+            m_logger.ostrace(__LOGGER_FUNC__, " result: ", x.toStr());
+        }
+
+        return result;
+    }
 
     /**
      * Update style attributes for all BodyElement-s
@@ -188,14 +521,69 @@ private:
      * - region
      * - "self"
      */
-    void updateStyleAttributes() const;
+    void updateStyleAttributes() const
+    {
+        for (auto& content : m_content)
+        {
+            Attributes styleAttrs;
+
+            assert(content.get() != nullptr);
+            const auto& parent = content->getParent();
+
+            if (parent != nullptr)
+            {
+                //merge style attributes from parent
+                mergeAttributes(styleAttrs, parent->getStyleAttributes());
+            }
+
+            const auto& style = findStyle(content->getStyleId());
+            //merge style attributes from element style
+            mergeAttributes(styleAttrs, style->getStyleAttributes());
+
+            const auto& region = findRegion(content->getRegionId());
+            if (region != nullptr)
+            {
+                const auto& regionStyle = findStyle(region->getStyleId());
+                //merge style attributes from region style
+                mergeAttributes(styleAttrs, regionStyle->getStyleAttributes());
+
+                //merge style attributes from region
+                mergeAttributes(styleAttrs, region->getStyleAttributes());
+            }
+
+            //finally merge style attributes from element
+            mergeAttributes(styleAttrs, content->getStyleAttributes());
+
+            // and at last merge style attributes from override-styling
+            mergeAttributes(styleAttrs, m_overrideStyleAttributes);
+
+            content->set(std::move(styleAttrs));
+
+            std::ostringstream stream;
+            stream << content->getStyleAttributes();
+            m_logger.ostrace(__LOGGER_FUNC__, " content style attributes: ", stream.str());
+        }
+    }
 
     /**
      * Add style attributes referenced by the region into region
      * As a result, all attributes referenced by style become attributes of region
      * among others "tts:extent" and "tts:origin"
      */
-    void updateRegionAttributes() const;
+    void updateRegionAttributes() const
+    {
+        for (auto& region : m_regions)
+        {
+            const auto& regionStyle = findStyle(region->getStyleId());
+            //merge style attributes from region style
+            const auto& regionStyleAttrs = regionStyle->getStyleAttributes();
+            for (auto& styleAttr : regionStyleAttrs) {
+                region->addAttribute(styleAttr.first, styleAttr.second);
+            }
+
+            m_logger.ostrace(__LOGGER_FUNC__, " region: ", region->toStr());
+        }
+    }
 
 private:
     /** TT root element */

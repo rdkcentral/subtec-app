@@ -31,14 +31,6 @@ namespace subttxrend
 {
 namespace ttmlengine
 {
-/**
- * Defines how to process whitespace.
- */
-enum class XmlSpace
-{
-    DEFAULT = 0, //!< DEFAULT
-    PRESERVE     //!< PRESERVE
-};
 
 class StyleSet
 {

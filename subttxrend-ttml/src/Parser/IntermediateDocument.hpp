@@ -97,8 +97,6 @@ public:
 
         /** Force newline flag. */
         bool m_forceNewline = false;
-
-        XmlSpace m_whitespaceHandling = XmlSpace::DEFAULT;
     };
 
     struct ImageChunk
@@ -164,7 +162,7 @@ public:
         {
             if (m_textLines.empty() && other.m_textLines.empty()) {
                 return m_imageChunk.m_image && other.m_imageChunk.m_image &&
-                       m_imageChunk.m_image->isSameImage(other.m_imageChunk.m_image);
+                       m_imageChunk.m_image->getId() == other.m_imageChunk.m_image->getId();
             }
             // always false for text ttml
             return false;
@@ -235,8 +233,6 @@ public:
      * @return
      *      True if element are the same. False otherwise.
      */
-     //TODO: does not seem to be used - potentially to be removed
-     // together with used inside equality operators
     friend bool operator==(const IntermediateDocument& lhs,
                            const IntermediateDocument& rhs)
     {

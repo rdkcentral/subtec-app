@@ -88,6 +88,10 @@ public:
     void newEntity(std::vector<IntermediateDocument::Entity>& entities,
                    std::string reason) const;
 
+    void applyWhitespaceHandling(IntermediateDocument::TextLine& textLine) const;
+
+    void newLine(IntermediateDocument::Entity& entity) const;
+
     /**
      * Generates list of time periods during which ttml content is constant.
      *

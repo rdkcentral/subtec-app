@@ -325,7 +325,7 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                                 currentLine.emplace_back();
                                 auto& textChunk = currentLine.back();
                                 textChunk.m_text = textLine.text;
-                                textChunk.m_whitespaceHandling = content->getWhiteSpaceHandling();
+                                //textChunk.m_whitespaceHandling = content->getWhiteSpaceHandling();
 
                                 auto styleId = content->getStyleId();
                                 textChunk.m_style.setStyleId(styleId);

@@ -617,7 +617,7 @@ public:
             auto & linePair = *it;
             if (m_whitespaceHandling == XmlSpace::DEFAULT)
             {
-                linePair.text = trimWhitespace(linePair.text);
+                applyDefaultWhitespaceHandling(linePair.text);
             }
             if (linePair.isForcedLine == false && linePair.text.empty())
             {

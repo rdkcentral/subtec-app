@@ -181,6 +181,10 @@ std::shared_ptr<Element> DocumentInstance::getCurrentImageElement() const
 void DocumentInstance::newEntity(std::vector<IntermediateDocument::Entity>& entities,
                std::string reason) const
 {
+    if (!entities.empty() && !entities.back().m_textLines.empty())
+    {
+        applyWhitespaceHandling(entities.back().m_textLines.back());
+    }
     entities.emplace_back();
     entities.back().m_region = std::make_shared<RegionElement>();
     m_logger.ostrace(__LOGGER_FUNC__, " - ", reason);
@@ -314,7 +318,7 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                             {
                                 if (entities.back().m_textLines.empty())
                                 {
-                                    entities.back().m_textLines.emplace_back();
+                                    newLine(entities.back());
                                 }
 
                                 auto& currentLine = entities.back().m_textLines.back();
@@ -332,7 +336,7 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                             //If TTML contained new line mark - add new line to render
                             if (textLine.isForcedLine == true && !entities.back().empty())
                             {
-                                entities.back().m_textLines.emplace_back();
+                                newLine(entities.back());
                             }
                         }
                     }
@@ -340,6 +344,11 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
             }
             if (!entities.empty())
             {
+                if (!entities.back().m_textLines.empty())
+                {
+                    applyWhitespaceHandling(entities.back().m_textLines.back());
+                }
+
                 IntermediateDocument timespan;
 
                 timespan.m_entites = std::move(entities);

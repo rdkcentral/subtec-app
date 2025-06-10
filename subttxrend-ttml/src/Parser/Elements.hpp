@@ -422,6 +422,15 @@ public:
         return m_base64ImageData;
     }
 
+    bool isSameImage(std::shared_ptr<ImageElement> const& other) const
+    {
+        auto isSame{false};
+        if (other && (getId() == other->getId()) && (m_base64ImageData->size() == other->m_base64ImageData->size())) {
+            isSame = !m_base64ImageData->compare(*(other->m_base64ImageData));
+        }
+        return isSame;
+    }
+
     /**
      * Equality operator.
      *
@@ -482,7 +491,7 @@ public:
             m_parent(parent),
             m_whitespaceHandling(parent->m_whitespaceHandling),
             m_styleRef(parent->m_styleRef),
-            m_regionRef(),
+            m_regionRef(parent->m_regionRef),
             m_timing(parent->m_timing),
             m_textLines({{}})
     {
@@ -514,7 +523,7 @@ public:
         }
     }
 
-    virtual void appendNewline()
+    virtual void appendNewline() override
     {
         m_textLines.push_back({true, {}});
     }
@@ -585,6 +594,17 @@ public:
         return m_parent;
     }
 
+    /**
+     * White space handling getter.
+     *
+     * @return
+     *      white space handling.
+     */
+    XmlSpace getWhiteSpaceHandling()
+    {
+        return m_whitespaceHandling;
+    }
+
     bool hasValidContent()
     {
         return (not m_textLines.empty() or not m_backgroundImageId.empty());
@@ -611,15 +631,6 @@ public:
     }
 
 protected:
-
-    /**
-     * Defines how to process whitespace.
-     */
-    enum class XmlSpace
-    {
-        DEFAULT = 0, //!< DEFAULT
-        PRESERVE     //!< PRESERVE
-    };
 
     /** @copydoc Element::parseAttributeDerived */
     virtual void parseAttributeDerived(const std::string& name,

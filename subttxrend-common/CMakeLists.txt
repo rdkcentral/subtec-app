@@ -137,8 +137,6 @@ set_property(TARGET ${LIBRARY_NAME} PROPERTY VERSION 0.0.0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_COMMON_PUBLIC_HEADERS})
 target_link_libraries(${LIBRARY_NAME} ${LIBRDKLOGGER_LIBRARIES})
-target_link_libraries(${LIBRARY_NAME} boost_system)
-target_link_libraries(${LIBRARY_NAME} pthread)
 
 #
 # Install rules

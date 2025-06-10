@@ -70,6 +70,9 @@ public:
     /** @copydoc TtmlEngine::stop */
     virtual void stop() override;
 
+    /** @copydoc TtmlEngine::flush */
+    virtual void flush() override;
+
     /** @copydoc TtmlEngine::pause */
     virtual void pause() override;
 
@@ -162,11 +165,11 @@ private:
     /** Debug feature - show current media time on screen. */
     bool m_showMediatime{false};
 
-    /** Use ttml data from file. */
-    bool m_useTtmlFromFile{false};
+    /** Path file ttml data to be read from,*/
+    std::string m_pathTtmlFromFile;
 
     /** Ordered list of subtitles. */
-    std::mutex m_mutex;
+    mutable std::mutex m_mutex;
     std::list<IntermediateDocument> m_timeline;
     std::list<IntermediateDocument> m_shownDocuments;
 

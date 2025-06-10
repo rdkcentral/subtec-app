@@ -78,6 +78,7 @@ set(SUBTTXREND_PROTOCOL_PUBLIC_HEADERS
     
     include/PacketData.hpp
     include/PacketTimestamp.hpp
+    include/PacketFlush.hpp
     include/PacketPause.hpp
     include/PacketResume.hpp
     include/PacketMute.hpp
@@ -131,8 +132,6 @@ set_property(TARGET ${LIBRARY_NAME} PROPERTY VERSION 0.0.0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_PROTOCOL_PUBLIC_HEADERS})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
-target_link_libraries(${LIBRARY_NAME} ${LIBGIO_LIBRARIES})
-target_link_libraries(${LIBRARY_NAME} ${LIBGLIB_LIBRARIES})
 
 #
 # Install rules
@@ -153,7 +152,7 @@ find_package(PkgConfig REQUIRED)
 set(PACKAGE_NAME        "${PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "Subtitles/Teletext Renderer - Protocol")
 set(PACKAGE_VERSION     "0.0.0")
-set(PACKAGE_REQUIRES    "")
+set(PACKAGE_REQUIRES    "${LIBSUBTTXRENDCOMMON_PACKAGE_NAME}")
 set(PACKAGE_LIB_NAME    "${LIBRARY_NAME}")
 
 if(PKG_CONFIG_FOUND)

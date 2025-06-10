@@ -222,7 +222,7 @@ WaylandBuffer::Ptr WaylandBufferManager::findBuffer(const waylandcpp::BufferPara
 
 WaylandBuffer::Ptr WaylandBufferManager::createEmptyBuffer()
 {
-    waylandcpp::BufferParams params(0, 1, 1, waylandcpp::PixelFormat::ARGB8888);
+    waylandcpp::BufferParams params(0, 64, 64, waylandcpp::PixelFormat::ARGB8888);
 
     auto shmPool = createPool(params.getMemSize());
     if (!shmPool)

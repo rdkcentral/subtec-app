@@ -149,7 +149,7 @@ public:
             if (state.addRegion(i & 0xFF, i & 0x0F,
             { 0, 0, 10, 10 }))
             {
-                CPPUNIT_ASSERT(state.getRegionByIndex(i).m_id == i & 0xFF);
+                CPPUNIT_ASSERT(state.getRegionByIndex(i).m_id == (i & 0xFF));
 
                 ++regionCount;
                 CPPUNIT_ASSERT(state.getRegionCount() == regionCount);

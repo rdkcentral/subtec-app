@@ -361,7 +361,7 @@ std::chrono::milliseconds WebvttEngineImpl::getWaitTime() const
     auto anythingToDraw = !m_timeline.empty();
     auto anythingToHide = !m_shownDocuments.empty();
 
-    if ((anythingToDraw || anythingToHide) && !m_paused) {
+    if ((anythingToDraw || anythingToHide) && (m_lastMediatimeMs != -1) && (!m_paused)) {
         // TimePoint const currentMediaTime = getCurrentMediatime();
 
         // if (anythingToDraw) {

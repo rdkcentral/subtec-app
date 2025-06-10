@@ -21,6 +21,12 @@
 #include <exception>
 #include <string>
 
+#ifdef __APPLE__
+#undef _GLIBCXX_USE_NOEXCEPT
+#define _GLIBCXX_USE_NOEXCEPT _NOEXCEPT
+#endif
+
+
 class WebVTTException : public std::exception
 {
 

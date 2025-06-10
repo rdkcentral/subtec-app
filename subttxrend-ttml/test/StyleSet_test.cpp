@@ -51,7 +51,7 @@ public:
         CPPUNIT_ASSERT(styleSet.getFontFamily() == "default");
         CPPUNIT_ASSERT((styleSet.getFontSize() == DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 100}));
         CPPUNIT_ASSERT((styleSet.getLineHeight() == DomainValue{DomainValue::Type::PERCENTAGE_HUNDREDTHS, 100*100}));
-        CPPUNIT_ASSERT(styleSet.getTextAlign() == StyleSet::TextAlign::LEFT);
+        CPPUNIT_ASSERT(styleSet.getTextAlign() == StyleSet::TextAlign::CENTER);
         CPPUNIT_ASSERT(styleSet.getDisplayAlign() == StyleSet::DisplayAlign::BEFORE);
         auto outline = Outline{DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 0}, subttxrend::gfx::ColorArgb{subttxrend::gfx::ColorArgb::BLACK}};
         CPPUNIT_ASSERT((styleSet.getOutline() == outline));
@@ -74,7 +74,7 @@ public:
         CPPUNIT_ASSERT(styleSet.getFontFamily() == std::string{someFontName});
         CPPUNIT_ASSERT((styleSet.getFontSize() == DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 100}));
         CPPUNIT_ASSERT((styleSet.getLineHeight() == DomainValue{DomainValue::Type::PERCENTAGE_HUNDREDTHS, 100*100}));
-        CPPUNIT_ASSERT(styleSet.getTextAlign() == StyleSet::TextAlign::LEFT);
+        CPPUNIT_ASSERT(styleSet.getTextAlign() == StyleSet::TextAlign::CENTER);
         CPPUNIT_ASSERT(styleSet.getDisplayAlign() == StyleSet::DisplayAlign::BEFORE);
         auto outline = Outline{DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 0}, subttxrend::gfx::ColorArgb{subttxrend::gfx::ColorArgb::BLACK}};
         CPPUNIT_ASSERT((styleSet.getOutline() == outline));

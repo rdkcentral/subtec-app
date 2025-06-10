@@ -115,10 +115,8 @@ public:
      *      Offset in buffer (in bytes) where the buffer starts.
      * @param wantedSize
      *      Wanted size of the buffer.
-     * @param bufferValue
-     *      Variable to store buffer pointer.
-     * @param sizeValue
-     *      Variable to store buffer size.
+     * @param buffer
+     *      Variable to store buffer.
      *
      * @retval true
      *      Value was successfully extracted.

@@ -93,6 +93,11 @@ public:
     /** @copydoc Backend::stop() */
     virtual void stop() override final;
 
+#ifdef __APPLE__
+    /** @copydoc Backend::startBlockingApplicationWindow() */
+    void startBlockingApplicationWindow() override final {};
+#endif
+
     /**
      * Requests render.
      *
@@ -223,13 +228,13 @@ protected:
     // TODO: shall not be protected
 
     /** Frame ready flag. */
-    std::atomic<bool> m_frameReady;
+    std::atomic<bool> m_frameReady{false};
 
     /** Render requested flag. */
-    std::atomic<bool> m_renderRequested;
+    std::atomic<bool> m_renderRequested{false};
 
     /** Force render flag. */
-    std::atomic<bool> m_forceRender;
+    std::atomic<bool> m_forceRender{false};
 
     /** Current surface id. */
     uint32_t m_currentSurfaceId;

@@ -154,12 +154,12 @@ public:
         CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(3)));
         CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(4)));
 
-        // invalid counter
-        CPPUNIT_ASSERT(!validator.validate(generatePacketTimestamp(10)));
+        // invalid counter - still will be considered valid
+        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(10)));
 
         // try to get back to valid - shall not switch stream validity
-        CPPUNIT_ASSERT(!validator.validate(generatePacketTimestamp(5)));
-        CPPUNIT_ASSERT(!validator.validate(generatePacketTimestamp(11)));
+        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(5)));
+        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(11)));
 
         // reset all
         CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));

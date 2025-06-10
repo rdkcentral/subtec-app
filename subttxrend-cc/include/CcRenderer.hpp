@@ -44,7 +44,7 @@ public:
 
     void drawBackground(const Point& p, const Dimensions& dimensions, Color color) override;
     virtual void drawBorder(const Point& p, const Dimensions& dimensions, Color color,
-                            Color br_color, WindowBorder border_type);
+                            Color br_color, WindowBorder border_type) override;
     void update() override;
     void clear() override;
     void show() override;

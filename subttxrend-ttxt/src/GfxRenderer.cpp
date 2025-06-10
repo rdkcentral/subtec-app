@@ -59,14 +59,6 @@ GfxRenderer& GfxRenderer::getSingleton()
 }
 
 GfxRenderer::GfxRenderer() :
-        m_initCount(0),
-        m_currentClient(nullptr),
-        m_bgAlpha(0),
-        m_newPageId(0),
-        m_zoomMode(ZoomMode::NONE),
-        m_paused(false),
-        m_transparentMode(false),
-        m_clut(),
         m_gridModel(GRID_SIZE_IN_CELLS),
         m_grid(m_gridModel, m_clut)
 {

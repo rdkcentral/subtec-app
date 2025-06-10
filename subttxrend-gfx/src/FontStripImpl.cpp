@@ -121,7 +121,7 @@ protected:
     /** @copydoc ftcpp::MonospaceRenderer::setPixel */
     virtual void setPixel(FT_Long x,
                           FT_Long y,
-                          uint8_t value)
+                          uint8_t value) override
     {
         if ((x < 0) || (y < 0) || (x >= m_rect.m_w) || (y >= m_rect.m_h))
         {

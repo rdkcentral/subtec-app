@@ -57,7 +57,7 @@ public:
     bool drawable() override;
     bool backspace() override;
     void setColumn(int column) override;
-    void transparentSpace(bool nonbreaking);
+    void transparentSpace(bool nonbreaking) override;
 
     void setPenAttributes(PenAttributes penattrs) override;
     void getPenAttributes(PenAttributes &penattrs) override;

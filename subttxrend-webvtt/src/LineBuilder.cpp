@@ -262,7 +262,7 @@ static void replaceEscapedCharacters(std::string &editString) {
  * @param style_list 
  * @return std::string 
  */
-std::string searchTag(const std::string& search, std::vector<Result>& results, std::list<std::string> styleList) {
+std::string searchTag(const std::string& search, std::vector<Result>& results, std::list<std::string>& styleList) {
     std::string prefix, suffix, tag;
     std::list<std::string> localList;
     Result result;
@@ -576,7 +576,6 @@ std::list<Line> LineBuilder::getRegionLines(const CueSharedList &cueList, const 
     
     try {
         const auto regionWidthVwH = region.width_vw_h;
-        const auto regionWidthPx = m_converter.vwToWidthPixels(regionWidthVwH);
         const auto linesVhH = m_converter.lineHeightVh() * region.lines;
         const auto linesPx = m_converter.vhToHeightPixels(linesVhH);
         const auto left = region.viewport_anchor.x - (region.region_anchor.x * (regionWidthVwH / 10000.0));
@@ -669,10 +668,8 @@ std::list<Line> LineBuilder::getOutputLines(const CueSharedList &cueList) {
         const auto snapToLines = cueBox.snapToLines;
         const auto align = cueBox.cueTextAlign;
         const auto lineAlign = cueBox.cueLineAlign;
-        const auto lineHeight = m_converter.lineHeightPixels();
         const auto viewportHeight = m_converter.height();
         const auto region_width_px = m_converter.vwToWidthPixels(cueBox.computedSizeVwH);
-        const auto horizPadding = m_converter.horizontalPadding();
         
         auto boxes = buildLines(cue->lines(), region_width_px);
         
@@ -737,6 +734,8 @@ std::list<Line> LineBuilder::getOutputLines(const CueSharedList &cueList) {
             linePositionsBeforeAdjustment(boxes, align, ComputedLine_px, 
                                             ComputedPosition_px, true);
             switch(lineAlign) {
+                case WebVTTCue::LineAlignType::kStart:
+                    break;
                 case WebVTTCue::LineAlignType::kCenter:
                     for (auto &cueLine : boxes) {
                         cueLine.lineRectangle.m_y -= total_boxes_height / 2;

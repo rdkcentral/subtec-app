@@ -617,7 +617,9 @@ public:
             auto & linePair = *it;
             if (m_whitespaceHandling == XmlSpace::DEFAULT)
             {
+                std::cout << "before applyDefaultWhitespaceHandling" << linePair.text << std::endl;
                 applyDefaultWhitespaceHandling(linePair.text);
+                std::cout << "after applyDefaultWhitespaceHandling" << linePair.text << std::endl;
             }
             if (linePair.isForcedLine == false && linePair.text.empty())
             {

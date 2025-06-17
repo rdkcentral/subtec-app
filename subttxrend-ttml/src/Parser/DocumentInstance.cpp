@@ -318,9 +318,11 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                             {
                                 if (entities.back().m_textLines.empty())
                                 {
+                                    m_logger.ostrace(__LOGGER_FUNC__, "entities.back().m_textLines.empty() TRUE ");
                                     newLine(entities.back());
                                 }
 
+                                m_logger.ostrace(__LOGGER_FUNC__, ", style before currentLine: ", (entities.back().m_textLines.back()).back().m_style.toStr());
                                 auto& currentLine = entities.back().m_textLines.back();
                                 currentLine.emplace_back();
                                 auto& textChunk = currentLine.back();
@@ -527,6 +529,7 @@ void DocumentInstance::updateRegionAttributes() const
         const auto& regionStyleAttrs = regionStyle->getStyleAttributes();
         for (auto& styleAttr : regionStyleAttrs) {
             region->addAttribute(styleAttr.first, styleAttr.second);
+            m_logger.ostrace(__LOGGER_FUNC__, " styleAttr.first: ", styleAttr.first, " styleAttr.second: ", styleAttr.second);
         }
 
         m_logger.ostrace(__LOGGER_FUNC__, " region: ", region->toStr());

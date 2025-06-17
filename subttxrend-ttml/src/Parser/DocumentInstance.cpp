@@ -327,8 +327,10 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                                 textChunk.m_text = textLine.text;
                                 textChunk.m_whitespaceHandling = content->getWhiteSpaceHandling();
 
+								m_logger.ostrace(__LOGGER_FUNC__, ", style before styleId: ", textChunk.m_style.toStr());
                                 auto styleId = content->getStyleId();
                                 textChunk.m_style.setStyleId(styleId);
+								m_logger.ostrace(__LOGGER_FUNC__, ", style before merge: ", textChunk.m_style.toStr());
                                 textChunk.m_style.merge(content->getStyleAttributes());
 
                                 m_logger.ostrace(__LOGGER_FUNC__, " chunk: \'", textChunk.m_text, "\'", ", style: ", textChunk.m_style.toStr());

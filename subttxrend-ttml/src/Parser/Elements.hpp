@@ -617,7 +617,7 @@ public:
             auto & linePair = *it;
             if (m_whitespaceHandling == XmlSpace::DEFAULT)
             {
-                linePair.text = trimWhitespace(linePair.text);
+                applyDefaultWhitespaceHandling(linePair.text);
             }
             if (linePair.isForcedLine == false && linePair.text.empty())
             {
@@ -714,6 +714,26 @@ private:
                 // reset to defaults
                 timePointRef = TimePoint();
             }
+        }
+    }
+
+    void applyDefaultWhitespaceHandling(std::string& input)
+    {
+        //for default white space handling:
+        // - "linefeed-treatment" = "treat-as-space"
+        //   replace linefeed with space
+        // - "white-space-collapse" = "true"
+        //   replace multiple spaces with just single one
+
+        auto dstIt = input.begin();
+        for (auto it = input.begin(); it < input.end(); it++) {
+            if ((it == input.begin()) || (!isSpace(*(it-1)) || !isSpace(*it))) {
+                *dstIt = (*it != '\n') ? *it : ' ';
+                dstIt++;
+            }
+        }
+        if (dstIt != input.end()) {
+            input.erase(dstIt, input.end());
         }
     }
 

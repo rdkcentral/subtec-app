@@ -617,13 +617,10 @@ public:
             auto & linePair = *it;
             if (m_whitespaceHandling == XmlSpace::DEFAULT)
             {
-                printf ("before applyDefaultWhitespaceHandling : %s size : %d\n", linePair.text.c_str(), m_textLines.size());
                 applyDefaultWhitespaceHandling(linePair.text);
-                printf ("after applyDefaultWhitespaceHandling : %s size : %d\n", linePair.text.c_str(), m_textLines.size());
             }
             if (linePair.isForcedLine == false && linePair.text.empty())
             {
-                printf ("is linePair.text empty\n");
                 it = m_textLines.erase(it);
             }
             else

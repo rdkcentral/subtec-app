@@ -617,13 +617,13 @@ public:
             auto & linePair = *it;
             if (m_whitespaceHandling == XmlSpace::DEFAULT)
             {
-                printf ("before applyDefaultWhitespaceHandling %s size : %d", linePair.text.c_str(), m_textLines.size());
+                printf ("before applyDefaultWhitespaceHandling : %s size : %d\n", linePair.text.c_str(), m_textLines.size());
                 applyDefaultWhitespaceHandling(linePair.text);
-                printf ("after applyDefaultWhitespaceHandling %s size : %d", linePair.text.c_str(), m_textLines.size());
+                printf ("after applyDefaultWhitespaceHandling : %s size : %d\n", linePair.text.c_str(), m_textLines.size());
             }
             if (linePair.isForcedLine == false && linePair.text.empty())
             {
-                printf ("is linePair.text empty");
+                printf ("is linePair.text empty\n");
                 it = m_textLines.erase(it);
             }
             else
@@ -730,7 +730,9 @@ private:
 
         auto dstIt = input.begin();
         for (auto it = input.begin(); it < input.end(); it++) {
-            if ((it == input.begin()) || (!isSpace(*(it-1)) || !isSpace(*it))) {
+            if ( ((it == input.begin()) && !isSpace(*it)) || // Retain first char IF NOT space
+                  ((it != input.begin()) && (!isSpace(*(it-1)) || !isSpace(*it))) ) // Original logic for subsequent chars 
+            {
                 *dstIt = (*it != '\n') ? *it : ' ';
                 dstIt++;
             }

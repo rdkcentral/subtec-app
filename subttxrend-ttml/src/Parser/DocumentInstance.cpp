@@ -322,10 +322,10 @@ std::list<IntermediateDocument> DocumentInstance::generateTimeline() const
                                     newLine(entities.back());
                                 }
 
-                                m_logger.ostrace(__LOGGER_FUNC__, ", style before currentLine: ", (entities.back().m_textLines.back()).back().m_style.toStr());
                                 auto& currentLine = entities.back().m_textLines.back();
                                 currentLine.emplace_back();
                                 auto& textChunk = currentLine.back();
+                                m_logger.ostrace(__LOGGER_FUNC__, "textChunk : ", textChunk.m_style.toStr());
                                 textChunk.m_text = textLine.text;
                                 textChunk.m_whitespaceHandling = content->getWhiteSpaceHandling();
 

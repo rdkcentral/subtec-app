@@ -188,7 +188,8 @@ bool IntermediateDocDrawer::drawLine(const IntermediateDocument::TextLine& textL
             getLineSize(textLine, style.getLineHeight(), drawingState);
             m_logger.ostrace(__LOGGER_FUNC__, " font size: ", drawingState.m_fontSize,
                              " line text length: ", drawingState.m_lineSize.m_w,
-                             " line height: ", drawingState.m_lineSize.m_h);
+                             " line height: ", drawingState.m_lineSize.m_h,
+                            " background color", style.getBackgroundColor());
 
             alignPenX(drawingState, style.getTextAlign());
             // and background is drawn - with the background color of the first text chunk

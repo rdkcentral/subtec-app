@@ -22,7 +22,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 PesFinder::PesFinder(const std::uint8_t* buffer,
@@ -109,6 +109,6 @@ bool PesFinder::findNextPes(const std::uint8_t*& pesStart,
     return false;
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 

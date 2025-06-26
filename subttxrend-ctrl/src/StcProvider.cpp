@@ -25,7 +25,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 namespace
@@ -106,6 +106,6 @@ std::uint32_t StcProvider::convertToHighStcUnits(const std::uint64_t valueMs) co
     return (valueMs * 45);
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 

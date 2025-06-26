@@ -36,7 +36,7 @@ namespace subttxrend
 namespace app
 {
 
-Application::Application(const Options& options) :
+Application::Application(const ctrl::Options& options) :
         m_configuration(options),
         m_logger("App", "Application", this)
 {

@@ -27,7 +27,7 @@
 
 namespace subttxrend
 {
-namespace app
+namespace ctrl
 {
 
 namespace
@@ -157,6 +157,6 @@ const char* Configuration::getValue(const std::string& key) const
     return m_configFile.getCstr(key);
 }
 
-} // namespace app
+} // namespace ctrl
 }
 // namespace subttxrend

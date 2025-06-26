@@ -27,7 +27,7 @@
 #include <subttxrend/dvbsub/Factory.hpp>
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 DvbSubController::DvbSubController(const protocol::PacketChannelSpecific& packet,
                                    const gfx::WindowPtr& gfxWindow,
@@ -158,6 +158,6 @@ std::uint32_t DvbSubController::getStc()
     }
 }
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 

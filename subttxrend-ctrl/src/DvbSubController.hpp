@@ -35,7 +35,7 @@
 #include "Channel.hpp"
 
 namespace subttxrend {
-namespace app {
+namespace ctrl {
 
 class StcProvider;
 
@@ -124,7 +124,7 @@ class DvbSubController final : public ControllerInterface, private dvbsub::TimeS
     common::Logger m_logger;
 };
 
-} // namespace app
+} // namespace ctrl
 } // namespace subttxrend
 
 #endif /* _SUBTTXREND_APP_DVBSUBCONTROLLER_HPP_ */

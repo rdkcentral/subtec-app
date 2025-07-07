@@ -12,8 +12,9 @@
 </head>
 <body>
   <div xml:lang="en">
-   <p xml:id="c239eb0_00" xml:space="preserve" begin="00:00:00" end="00:00:05" region="_239eb0_r0" ><span style="transparentspace">    </span><span style="s0">This text is added to test pause-resume</span><span style="transparentspace">     </span><br/><span style="transparentspace">    </span><span style="s0">packet - 0-5 seconds</span><span style="transparentspace">   </span></p>
-   <p xml:id="c239eb1_00" xml:space="preserve" begin="00:00:06" end="00:00:10" region="_239eb1_r0" ><span style="transparentspace">    </span><span style="s0">This text is added to test pause-resume</span><span style="transparentspace">     </span><br/><span style="transparentspace">    </span><span style="s0">packet - 5-10 seconds</span><span style="transparentspace">   </span></p>
+   <p xml:id="c239eb0_00" xml:space="preserve" begin="00:00:00" end="00:00:05" region="_239eb0_r0" ><span style="s0">--Text sample to test 32 chars--</span></p>
+   <p xml:id="c239eb1_00" xml:space="preserve" begin="00:00:06" end="00:00:10" region="_239eb0_r0" ><span style="s0">--Text sample to test 32 chars--</span></p>
+   <p xml:id="c239eb2_00" xml:space="preserve" begin="00:00:11" end="00:00:15" region="_239eb0_r0" ><span style="s0">--Text sample to test 32 chars--</span></p>
   </div>
 </body>
 </tt>

@@ -45,7 +45,7 @@ class TtmlAsClient final : public AsListener
     ~TtmlAsClient();
 
     AsHelpers getHelpers() override;
-    Properties getData();
+    Properties getData() override;
 
   private:
     class Impl;

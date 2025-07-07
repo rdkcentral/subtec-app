@@ -402,32 +402,34 @@ std::chrono::milliseconds TtmlEngineImpl::getWaitTime() const
     auto anythingToDraw = !m_timeline.empty();
     auto anythingToHide = !m_shownDocuments.empty() || m_startTimer;
 
-    if ((anythingToDraw || anythingToHide)) {
-        // TimePoint const currentMediaTime = getCurrentMediatime();
+    {
+        std::lock_guard<std::mutex> lock{m_mutex};
+        if ((m_lastMediatimeMs != -1) && (anythingToDraw || anythingToHide)) {
+            // TimePoint const currentMediaTime = getCurrentMediatime();
 
-        // if (anythingToDraw) {
-        //     TimePoint const& start = m_timeline.front().m_timing.getStartTimeRef();
+            // if (anythingToDraw) {
+            //     TimePoint const& start = m_timeline.front().m_timing.getStartTimeRef();
 
-        //     if (currentMediaTime < start) {
-        //         waitTime = start.toMilliseconds() - currentMediaTime.toMilliseconds();
-        //     }
-        // }
+            //     if (currentMediaTime < start) {
+            //         waitTime = start.toMilliseconds() - currentMediaTime.toMilliseconds();
+            //     }
+            // }
 
-        // for_each(m_shownDocuments.begin(), m_shownDocuments.end(), [&waitTime,
-        //                                                             currentMediaTime](const IntermediateDocument &doc) {
-        //     TimePoint const& end = doc.m_timing.getEndTimeRef();
-        //     auto hideTime = end.toMilliseconds() - currentMediaTime.toMilliseconds();
-        //     if (hideTime < waitTime) {
-        //         waitTime = hideTime;
-        //     }
-        // });
+            // for_each(m_shownDocuments.begin(), m_shownDocuments.end(), [&waitTime,
+            //                                                             currentMediaTime](const IntermediateDocument &doc) {
+            //     TimePoint const& end = doc.m_timing.getEndTimeRef();
+            //     auto hideTime = end.toMilliseconds() - currentMediaTime.toMilliseconds();
+            //     if (hideTime < waitTime) {
+            //         waitTime = hideTime;
+            //     }
+            // });
 
-        auto static constexpr MIN_WAIT_TIME = 25ms;
-        // if (waitTime < MIN_WAIT_TIME) {
-            waitTime = MIN_WAIT_TIME;
-        // }
+            auto static constexpr MIN_WAIT_TIME = 25ms;
+            // if (waitTime < MIN_WAIT_TIME) {
+                waitTime = MIN_WAIT_TIME;
+            // }
+        }
     }
-
     m_logger.osdebug(__LOGGER_FUNC__, " waitTime: ", waitTime.count());
     return waitTime;
 }

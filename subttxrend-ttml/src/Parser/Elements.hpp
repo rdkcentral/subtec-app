@@ -727,7 +727,9 @@ private:
 
         auto dstIt = input.begin();
         for (auto it = input.begin(); it < input.end(); it++) {
-            if ((it == input.begin()) || (!isSpace(*(it-1)) || !isSpace(*it))) {
+            if ( ((it == input.begin()) && !isSpace(*it)) || // Retain first char only if not space
+                  ((it != input.begin()) && (!isSpace(*(it-1)) || !isSpace(*it))) ) // handle consecutive spaces
+            {
                 *dstIt = (*it != '\n') ? *it : ' ';
                 dstIt++;
             }

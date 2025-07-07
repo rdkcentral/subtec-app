@@ -867,25 +867,22 @@ public:
       CPPUNIT_ASSERT(firstEntity.m_textLines.size() == 1);
 
       auto firstLine = firstEntity.m_textLines[0];
-      CPPUNIT_ASSERT(firstLine.size() == 6);
+      CPPUNIT_ASSERT(firstLine.size() == 5);
 
       auto firstChunk = firstLine[0];
-      CPPUNIT_ASSERT(firstChunk.m_text == "div text");
+      CPPUNIT_ASSERT(firstChunk.m_text == "div text ");
 
       auto secondChunk = firstLine[1];
-      CPPUNIT_ASSERT(secondChunk.m_text == " p text ");
+      CPPUNIT_ASSERT(secondChunk.m_text == "p text ");
 
       auto thirdChunk = firstLine[2];
       CPPUNIT_ASSERT(thirdChunk.m_text == "p_text");
 
       auto fourthChunk = firstLine[3];
-      CPPUNIT_ASSERT(fourthChunk.m_text == " 123");
+      CPPUNIT_ASSERT(fourthChunk.m_text == "123");
 
       auto fifthChunk = firstLine[4];
-      CPPUNIT_ASSERT(fifthChunk.m_text == " ");
-
-      auto sixthChunk = firstLine[5];
-      CPPUNIT_ASSERT(sixthChunk.m_text == "456");
+      CPPUNIT_ASSERT(fifthChunk.m_text == "456");
     }
 
 };

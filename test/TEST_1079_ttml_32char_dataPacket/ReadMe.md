@@ -1,7 +1,8 @@
 # Subtec ttml data L2 test
 
-This python3 L2 test verifies ttml data packet functionality, verifies the 
-data in ttml file is correctly received.
+This python3 L2 test verifies ttml data, specifically if 32 characters are
+displayed on screen without issues. This ensures margin related code changes
+do not have issues rendering on screen.
 
 ## Pre-requisites to L2 tests:
 
@@ -14,4 +15,4 @@ sample.ttml - sample input ttml file to be placed in input_files folder.
 
 From the *subtec-app/test/* folder run:
 
-./run_l2_tests.py -i 1063
+./run_l2_tests.py -i 1079

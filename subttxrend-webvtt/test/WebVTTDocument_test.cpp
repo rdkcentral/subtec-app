@@ -487,7 +487,6 @@ Special Characters
 
         for (const auto& good : goodlines)
         {
-            std::cout << good.first << "Krithika" << good.second;
             std::uint64_t ptsOffset = 0;
             auto& str = good.first;
             auto& expectedPts = good.second;

@@ -1,1 +1,26 @@
-<?xml version="1.0"?><tt xml:lang="en" xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" ttp:profile="http://www.w3.org/ns/ttml/profile/imsc1/text" ttp:cellResolution="40 24">	<head>		<metadata />		<layout>			<region xml:id="r1" tts:origin="0.000% 79.167%" tts:extent="100.000% 16.667%" tts:textAlign="center" tts:fontSize="160.000%" tts:lineHeight="125.000%" />			<region xml:id="r2" tts:origin="0.000% 87.500%" tts:extent="100.000% 8.333%" tts:textAlign="center" tts:fontSize="160.000%" tts:lineHeight="125.000%" />		</layout>	</head>	<body>		<div>			<p begin="00:00:00.00" end="00:00:5.400" region="r1">				<span tts:color="#ffffffff" tts:backgroundColor="#000000ff">Text sample has only newline character and spaces in</span>				<br />				<span tts:color="#ffffffff" tts:backgroundColor="#000000ff">first line, has black background</span>				<br />			</p>			<p begin="00:00:5.400" end="00:00:10.720" region="r1">				<span tts:color="#00ff00ff" tts:backgroundColor="#000000ff">This code snippet tests a corner case of</span>				<br />				<span tts:color="#ffffffff" tts:backgroundColor="#000000ff">default whitespace handling</span>				<br />			</p>		</div>	</body></tt>
+<?xml version="1.0"?>
+<tt xml:lang="en" xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" ttp:profile="http://www.w3.org/ns/ttml/profile/imsc1/text" ttp:cellResolution="40 24">
+	<head>
+		<metadata />
+		<layout>
+			<region xml:id="r1" tts:origin="0.000% 79.167%" tts:extent="100.000% 16.667%" tts:textAlign="center" tts:fontSize="160.000%" tts:lineHeight="125.000%" />
+			<region xml:id="r2" tts:origin="0.000% 87.500%" tts:extent="100.000% 8.333%" tts:textAlign="center" tts:fontSize="160.000%" tts:lineHeight="125.000%" />
+		</layout>
+	</head>
+	<body>
+		<div>
+			<p begin="00:00:00.00" end="00:00:5.400" region="r1">
+				<span tts:color="#ffffffff" tts:backgroundColor="#000000ff">Text sample has only newline character and spaces in</span>
+				<br />
+				<span tts:color="#ffffffff" tts:backgroundColor="#000000ff">first line, has black background</span>
+				<br />
+			</p>
+			<p begin="00:00:5.400" end="00:00:10.720" region="r1">
+				<span tts:color="#00ff00ff" tts:backgroundColor="#000000ff">This code snippet tests a corner case of</span>
+				<br />
+				<span tts:color="#ffffffff" tts:backgroundColor="#000000ff">default whitespace handling</span>
+				<br />
+			</p>
+		</div>
+	</body>
+</tt>

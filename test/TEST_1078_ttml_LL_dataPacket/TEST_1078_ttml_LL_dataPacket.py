@@ -32,6 +32,9 @@ def test_1078():
     print("test_1078".ljust(50), "Test Started")
 
     subtec_copy_path = "./output_files/" + get_log_filename()
+    # wait for previous tests to be over, so string "-[renderer->update]"
+    # is not copied as part of previous test
+    time.sleep(10)
     get_last_read_position(subtec_log_path)
 
     ## Run pre-requisites - find cpp test file, compile it, ensure subtec is started, run test
@@ -46,7 +49,7 @@ def test_1078():
         'TtmlController created',
         'unmute received',
         'onPacketReceived packet=type:TTML_TIMESTAMP',
-        'displaying: [00:00:00.000-00:00:00.168]: [Test sample to test subtitle flickering]',
+        'displaying: [00:00:00.000-00:00:02.168]: [Test sample to test subtitle flickering]',
         'displaying: [00:00:02.168-00:00:02.648]: [Test sample to test subtitle flickering]',
         'displaying: [00:00:03.648-00:00:04.068]: [Test sample to test subtitle flickering]',
         'displaying: [00:00:05.078-00:00:05.528]: [Test sample to test subtitle flickering]']

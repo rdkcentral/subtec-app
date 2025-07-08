@@ -195,12 +195,15 @@ void Decoder::processCurrentPage(const PacketHeader& newHeader)
 
             auto headerMgzPage = newHeader.getPageId().getMagazinePage();
             auto currentMgzPage = currentPageInfo.page->getPageId().getMagazinePage();
+            auto currentPageHeader = currentPageInfo.page->getHeader();
+            assert(currentPageHeader);
+            auto controlInfo = currentPageHeader->getControlInfo();
 
             g_logger.trace("%s - serial mode, headerMgPage=%d currentMgzPage=%d",
                 __func__,
                 headerMgzPage,
                 currentMgzPage);
-            if (headerMgzPage != currentMgzPage)
+            if ((headerMgzPage != currentMgzPage) || (controlInfo & ControlInfo::SUBTITLE))
             {
                 processPageInfo(currentPageInfo);
             }
@@ -213,9 +216,12 @@ void Decoder::processCurrentPage(const PacketHeader& newHeader)
         {
             auto headerPage = newHeader.getPageId().getPage();
             auto currentPage = currentPageInfo.page->getPageId().getPage();
+            auto currentPageHeader = currentPageInfo.page->getHeader();
+            assert(currentPageHeader);
+            auto controlInfo = currentPageHeader->getControlInfo();
 
             g_logger.trace("%s - parallel mode, headerPage=%d current=%d", __func__, headerPage, currentPage);
-            if (headerPage != currentPage)
+            if ((headerPage != currentPage) || (controlInfo & ControlInfo::SUBTITLE))
             {
                 processPageInfo(m_currentPages[magazineNumber]);
             }

@@ -2,7 +2,7 @@ Readme.md
 
 # How to run subtec on ubuntu
 
-To install required packages for subtec to build successsfully on ubuntu, run below script from  ***subtec-app/test/*** folder for first time.
+To install required packages for subtec to build successfully on ubuntu, run below script from  ***subtec-app/test/*** folder for first time.
 
     bash install_subtec_dependencies.sh
 

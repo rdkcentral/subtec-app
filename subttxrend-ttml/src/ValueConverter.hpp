@@ -32,8 +32,7 @@ class ValueConverter
 {
 public:
 
-    void setDrawingSize(gfx::Size drawingSize);
-    void setSourceSize(gfx::Size relatedVideoSize);
+    gfx::Size setSourceSize(gfx::Size const& sourceSize);
     void setCellResolution(gfx::Size sourceSize);
     int getCellHeight() const;
 
@@ -41,6 +40,9 @@ public:
     gfx::Rectangle toTargetRectangle(const RegionElement& region) const;
 
     int sizeToPixels(DomainValue value, int relativeSizeInPixels) const;
+
+public:
+    static gfx::Size const MAX_SURFACE_SIZE;
 
 private:
 

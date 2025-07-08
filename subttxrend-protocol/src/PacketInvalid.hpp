@@ -45,7 +45,7 @@ public:
     virtual ~PacketInvalid() = default;
 
     /** @copydoc Packet::getType */
-    virtual Type getType() const;
+    virtual Type getType() const override;
 
 protected:
     /** @copydoc Packet::parseData */

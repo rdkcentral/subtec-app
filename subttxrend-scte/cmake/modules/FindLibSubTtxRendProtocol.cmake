@@ -17,8 +17,8 @@
 
 include(PkgConfigHelper)
 
-pkgconfig_resolve(LibDvbGfxEngine
-    dvb-graphics-engine
-    vlGraphics.h
-    dvbgraphicsengine
+pkgconfig_resolve(LibSubTtxRendProtocol
+    subttxrend-protocol
+    subttxrend/protocol/Packet.hpp
+    subttxrend-protocol
 )

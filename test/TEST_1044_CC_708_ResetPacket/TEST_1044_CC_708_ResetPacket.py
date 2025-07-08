@@ -38,7 +38,7 @@ def test_1044():
     run_test_prereq(script_dir)
 
     # wait for end of test
-    wait_for_log_string(subtec_log_path, 'processLoop no active controller, clearing the data queue')
+    wait_for_log_string(subtec_log_path, 'addBuffer no active controller, skipping the packet')
     copy_log_file(subtec_log_path, subtec_copy_path)
 
     sequence = [
@@ -59,8 +59,7 @@ def test_1044():
         'validate - RESET ALL received - resetting stream state',
         'onPacketReceived packet=type:RESET_ALL',
         'reset All',
-        'addBuffer no active controller, skipping the packet',
-        'processLoop no active controller, clearing the data queue'
+        'addBuffer no active controller, skipping the packet'
         ]
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1044 missing"
 

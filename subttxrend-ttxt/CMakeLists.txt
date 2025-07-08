@@ -42,7 +42,6 @@ ENDIF(CMAKE_COMPILER_IS_GNUCXX)
 find_package(LibSubTtxRendCommon REQUIRED)
 find_package(LibSubTtxRendGfx REQUIRED)
 find_package(LibTtxDecoder REQUIRED)
-find_package(LibXkbCommon REQUIRED)
 
 #
 # Include directories
@@ -51,7 +50,6 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${LIBSUBTTXRENDCOMMON_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDGFX_INCLUDE_DIRS})
 include_directories(${LIBTTXDECODER_INCLUDE_DIRS})
-include_directories(${LIBXKBCOMMON_INCLUDE_DIRS})
 
 #
 # Documentation
@@ -115,14 +113,13 @@ set(SUBTTXREND_TTXT_SOURCES
 #
 set(LIBRARY_NAME "subttxrend-ttxt")
 add_library(${LIBRARY_NAME} SHARED ${SUBTTXREND_TTXT_SOURCES})
-set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD 11)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD 14)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY VERSION 0.0.0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_TTXT_PUBLIC_HEADERS})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDGFX_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} ${LIBTTXDECODER_LIBRARIES})
-target_link_libraries(${LIBRARY_NAME} ${LIBXKBCOMMON_LIBRARIES})
 
 #
 # Install rules
@@ -143,7 +140,7 @@ find_package(PkgConfig REQUIRED)
 set(PACKAGE_NAME        "${PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "Subtitles/Teletext Renderer - Teletext Renderer")
 set(PACKAGE_VERSION     "0.0.0")
-set(PACKAGE_REQUIRES    "")
+set(PACKAGE_REQUIRES    "${LIBSUBTTXRENDCOMMON_PACKAGE_NAME} ${LIBSUBTTXRENDGFX_PACKAGE_NAME} ${LIBTTXDECODER_PACKAGE_NAME}")
 set(PACKAGE_LIB_NAME    "${LIBRARY_NAME}")
 
 if(PKG_CONFIG_FOUND)

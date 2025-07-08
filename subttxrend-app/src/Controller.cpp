@@ -69,7 +69,6 @@ void forAllControllers(Ctrls const& ctrls, Packet const& packet, void (ctrl::Con
 }
 
 constexpr const std::chrono::milliseconds connection_status_check_timeout{1000};
-constexpr const std::chrono::milliseconds as_data_acq_timeout{2000};
 
 } /* namespace  */
 
@@ -239,6 +238,10 @@ void Controller::doOnPacketReceived(UniqueLock& lock, const protocol::Packet& pa
             processWebvttTimestamp(static_cast<protocol::PacketWebvttTimestamp const&>(packet));
             break;
         }
+        case protocol::Packet::Type::FLUSH: {
+            processFlushPacket(static_cast<protocol::PacketFlush const&>(packet));
+            break;
+        }
         case protocol::Packet::Type::PAUSE: {
             processPausePacket(static_cast<protocol::PacketPause const&>(packet));
             break;
@@ -373,7 +376,7 @@ void Controller::processTtmlSelection(const protocol::PacketTtmlSelection& packe
 
     common::Properties properties;
     try {
-        properties = m_asLstnr->getData(as_data_acq_timeout);
+        properties = m_asLstnr->getData();
     } catch (std::exception const& e) {
         m_logger.oserror(__LOGGER_FUNC__, " exception: ", e.what());
     }
@@ -456,6 +459,14 @@ void Controller::processWebvttTimestamp(const protocol::PacketWebvttTimestamp& p
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
     forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::processTimestamp);
+}
+
+void Controller::processFlushPacket(const protocol::PacketChannelSpecific& packet)
+{
+    auto timing = m_logger.timing(__LOGGER_FUNC__);
+    forAllControllers(m_activeControllers, packet, &ctrl::ControllerInterface::flush);
+    m_dataqueue.clear();
+    m_renderCond.notify_one();
 }
 
 void Controller::processPausePacket(const protocol::PacketChannelSpecific& packet)

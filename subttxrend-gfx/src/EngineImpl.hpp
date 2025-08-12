@@ -59,7 +59,7 @@ public:
 
     virtual void shutdown() override;
 
-    virtual void execute();
+    virtual void execute() override;
 
     virtual WindowPtr createWindow() override;
 
@@ -69,6 +69,10 @@ public:
     virtual void attach(WindowPtr window) override;
 
     virtual void detach(WindowPtr window) override;
+
+#ifdef __APPLE__
+    virtual void startBlockingApplicationWindow() override;
+#endif
 
 private:
     /** Mutex type. */

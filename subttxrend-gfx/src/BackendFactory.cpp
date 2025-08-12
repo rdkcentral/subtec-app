@@ -30,6 +30,11 @@
 #include "WaylandBackendEgl.hpp"
 #define BACKEND_CLASS_NAME  WaylandBackendEgl
 
+#elif BACKEND_TYPE == BACKEND_TYPE_QUARTZ
+
+#include "QuartzBackend.hpp"
+#define BACKEND_CLASS_NAME  QuartzBackend
+
 #else
 
 #error Unknown backend type

@@ -1,7 +1,7 @@
 # Subtec ttml data L2 test
 
 This python3 L2 test verifies ttml data packet functionality, verifies the 
-data in webvtt file is correctly received.
+data in ttml file is correctly received.
 
 ## Pre-requisites to L2 tests:
 

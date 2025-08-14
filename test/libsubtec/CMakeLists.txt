@@ -16,27 +16,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+cmake_minimum_required(VERSION 3.2) # Or higher, if you prefer
+
+# Project name
+project(subtec)
 
 # Compiler and flags
-CXX = g++
-CXXFLAGS = -fPIC -Wall -DSUBTEC_PACKET_DEBUG=1 -DUBUNTU=1
+set(CMAKE_CXX_COMPILER "g++") # Explicitly set the C++ compiler, though CMake often detects it
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -DSUBTEC_PACKET_DEBUG=1 -DUBUNTU=1") # General flags
 
-# Source and object files
-SRCS = PacketSender.cpp SubtecChannel.cpp
-OBJS = $(SRCS:.cpp=.o)
-TARGET = libsubtec.so
+# Source files
+set(SOURCE_FILES
+    PacketSender.cpp
+    SubtecChannel.cpp
+)
 
-# Default target
-all: $(TARGET)
+# Create shared library
+add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES})
 
-# Link shared library
-$(TARGET): $(OBJS)
-	$(CXX) -shared -o $@ $(OBJS)
-
-# Compile source files
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# Clean up
-clean:
-	rm -f $(OBJS) $(TARGET)
+#Set the target name
+set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "subtec") # Sets library name, ensuring "lib" prefix is NOT added.

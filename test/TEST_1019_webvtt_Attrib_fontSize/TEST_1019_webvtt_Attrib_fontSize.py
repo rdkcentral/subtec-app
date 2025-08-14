@@ -51,28 +51,37 @@ def test_1019():
         'displaying: [00:00:00.000-00:00:05.000]: Sample text to test FONT_SIZE_EMBEDDED']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1019 missing"
     
+    calculated_font_size = calculate_webvtt_font_size(subtec_copy_path, 315)
+    log_string = f"getFont - get fontFamily:Cinecav Mono  size:{calculated_font_size}"
     sequence = [
         'new value for attibId[0x20] = 0',
         'displaying: [00:00:00.000-00:00:05.000]: Sample text to test FONT_SIZE_SMALL',
-        'getFont - get fontFamily:Cinecav Mono  size:19']
+        log_string]
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1019 missing"
-    
+
+    calculated_font_size = calculate_webvtt_font_size(subtec_copy_path, 463)
+    log_string = f"getFont - get fontFamily:Cinecav Mono  size:{calculated_font_size}"
     sequence = [
         'new value for attibId[0x20] = 1',
         'displaying: [00:00:00.000-00:00:05.000]: Sample text to test FONT_SIZE_STANDARD',
-        'getFont - get fontFamily:Cinecav Mono  size:28']
+        log_string]
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1019 missing"
-    
+
+    calculated_font_size = calculate_webvtt_font_size(subtec_copy_path, 741)
+    log_string = f"getFont - get fontFamily:Cinecav Mono  size:{calculated_font_size}"
     sequence = [
         'new value for attibId[0x20] = 2',
         'displaying: [00:00:00.000-00:00:05.000]: Sample text to test FONT_SIZE_LARGE',
-        'getFont - get fontFamily:Cinecav Mono  size:45']
+        log_string]
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1019 missing"
-    
+
+    calculated_font_size = calculate_webvtt_font_size(subtec_copy_path, 926)
+    log_string = f"getFont - get fontFamily:Cinecav Mono  size:{calculated_font_size}"
     sequence = [
         'new value for attibId[0x20] = 3',
         'displaying: [00:00:00.000-00:00:05.000]: Sample text to test FONT_SIZE_EXTRALARGE',
-        'getFont - get fontFamily:Cinecav Mono  size:56']
+        log_string]
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1019 missing"
 
     print("test_1019".ljust(50), "Test Passed")
+

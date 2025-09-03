@@ -501,6 +501,17 @@ Dimensions Window::calculateRects4Text(std::vector<Rect>& tdRects)
         // If we enable the ability to change text size per row then we need to make sure
         // that this row does not overwrite the row above (ie cant do row * this-row-font-height)
 
+        if ((previousTextDrawer != m_textDrawers.end()) &&
+            ((*textDrawer)->row > (*previousTextDrawer)->row))
+        {
+            if ((tdRects.back().y + tdRects.back().h) > textRelativeY)
+            {
+                logger.debug("%s calculated - %d expected %d",__LOGGER_FUNC__,textRelativeY, tdRects.back().y + tdRects.back().h);
+                textRelativeY = tdRects.back().y + tdRects.back().h;
+            }
+        }
+
+
         (*textDrawer)->padding = 0;
 
         // If this text drawer row is assigned to the same row as the last one,

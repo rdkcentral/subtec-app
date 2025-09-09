@@ -55,6 +55,7 @@ class TtmlTransformer final
 public:
     void setProperties(common::Properties const& properties);
     void setSubtitleInfo(const std::string& contentType, const std::string& subsInfo);
+    void setRelatedVideoSize(gfx::Size relatedVideoSize);
     void transform(IntermediateDocument& doc);
 
 private:

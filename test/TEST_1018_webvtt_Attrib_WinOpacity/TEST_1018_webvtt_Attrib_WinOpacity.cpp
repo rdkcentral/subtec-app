@@ -48,7 +48,7 @@ void sendCCAttributeWebvtt(Opacity color, std::string filename, AttribPosInArray
 
 int main(int argc, char *argv[])
 {
-    debug_log("Test webvtt attributes background opacity started");
+    debug_log("Test webvtt attributes window opacity started");
     bool ret = false;
 
     ret = channel->InitComms();

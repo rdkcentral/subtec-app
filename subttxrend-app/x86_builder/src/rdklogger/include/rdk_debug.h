@@ -63,13 +63,11 @@ typedef enum
 #define RDK_LOG_TRACE8 RDK_LOG_TRACE
 #define RDK_LOG_TRACE9 RDK_LOG_TRACE
 
-#define rdk_dbg_enabled rdk_logger_is_logLevel_enabled
-
 rdk_Error rdk_logger_init(const char* debugConfigFile);
 
 rdk_Error rdk_logger_deinit();
 
-rdk_logger_Bool rdk_dbg_enabled(const char *module,
+rdk_logger_Bool rdk_logger_is_logLevel_enabled(const char *module,
                                 rdk_LogLevel level);
 
 void RDK_LOG(rdk_LogLevel level,

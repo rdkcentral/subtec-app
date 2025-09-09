@@ -25,7 +25,7 @@
 #include <libxml/SAX.h>
 
 #include <subttxrend/common/Logger.hpp>
-
+#include <string>
 #include <cstdint>
 #include <vector>
 
@@ -145,20 +145,12 @@ public:
      * @param callbacks
      *      Sax callback receiver.
      */
-    SaxParser(SaxCallbacks& callbacks) :
-            m_saxHandler(), m_parserCtxPtr(nullptr), m_saxCallbacks(callbacks), m_logger("TtmlEngine", "SaxParser")
-    {
-        m_logger.ostrace(__LOGGER_FUNC__);
-        init();
-    }
+    SaxParser(SaxCallbacks& callbacks);
 
     /**
      * Destructor.
      */
-    ~SaxParser()
-    {
-        cleanup();
-    }
+    ~SaxParser();
 
     /**
      *  Parses chunk of data. Assumes buffer contains full xml document.
@@ -169,66 +161,25 @@ public:
      *      Buffer size.
      */
     void parse(const std::uint8_t* buffer,
-                    std::size_t size)
-    {
-        static constexpr int LIBXML_PARSE_TERMINATION_MARKER = 1;
-        auto parseResult = xmlParseChunk(m_parserCtxPtr,
-                                         reinterpret_cast<const char*>(buffer),
-                                         static_cast<int>(size),
-                                         LIBXML_PARSE_TERMINATION_MARKER);
-        if (parseResult != 0)
-        {
-            m_logger.osinfo(__LOGGER_FUNC__, " error parsing chunk: ", parseResult);
-        }
-    }
+                    std::size_t size);
 
     /**
      * Resets parser.
      */
-    void reset()
-    {
-        cleanup();
-        init();
-    }
+    void reset();
 
 private:
 
     /**
      * Initialization function.
      */
-    void init()
-    {
-        assert(m_parserCtxPtr == nullptr);
-
-        m_saxHandler.initialized = XML_SAX2_MAGIC;
-
-        m_saxHandler.startDocument = onStartDocument;
-        m_saxHandler.endDocument = onEndDocument;
-
-        m_saxHandler.startElementNs = onStartElementNs;
-        m_saxHandler.endElementNs = onEndElementNs;
-
-        m_saxHandler.characters = onCharacters;
-
-        m_saxHandler.warning = onWarning;
-        m_saxHandler.error = onError;
-
-        m_parserCtxPtr = xmlCreatePushParserCtxt(&m_saxHandler, this, nullptr, 0, nullptr);
-    }
+    void init();
 
     /**
      * Cleanup function.
      *
      */
-    void cleanup()
-    {
-        if (m_parserCtxPtr)
-        {
-            xmlFreeParserCtxt(m_parserCtxPtr);
-            m_parserCtxPtr = nullptr;
-        }
-        m_saxHandler = xmlSAXHandler();
-    }
+    void cleanup();
 
     /**
      * Casts pointer to class instance.
@@ -238,10 +189,7 @@ private:
      * @return
      *      Pointer to class instance.
      */
-    static SaxParser* cast(void* ptr)
-    {
-        return reinterpret_cast<SaxParser*>(ptr);
-    }
+    static SaxParser* cast(void* ptr);
 
     /**
      * Start document callback.
@@ -249,11 +197,7 @@ private:
      * @param ctx
      *      Context passed - expected to be pointer to class instance.
      */
-    static void onStartDocument(void *ctx)
-    {
-        auto thiz = cast(ctx);
-        thiz->m_saxCallbacks.onStartDocument();
-    }
+    static void onStartDocument(void *ctx);
 
     /**
      * End document callback.
@@ -261,11 +205,7 @@ private:
      * @param ctx
      *      Context passed - expected to be pointer to class instance.
      */
-    static void onEndDocument(void *ctx)
-    {
-        auto thiz = cast(ctx);
-        thiz->m_saxCallbacks.onEndDocument();
-    }
+    static void onEndDocument(void *ctx);
 
     /**
      * Start element callback.
@@ -297,38 +237,7 @@ private:
                                  const xmlChar ** namespaces,
                                  int nb_attributes,
                                  int nb_defaulted,
-                                 const xmlChar ** attributes)
-    {
-        auto thiz = cast(ctx);
-
-        std::vector<SaxCallbacks::Attribute> attributesVector{static_cast<std::size_t>(nb_attributes)};
-        unsigned int index = 0;
-        for (int indexAttribute = 0; indexAttribute < nb_attributes; ++indexAttribute, index += 5)
-        {
-            // name should always be present
-            assert(attributes[index]);
-            std::string attrName = std::string(reinterpret_cast<const char*>(attributes[index]));
-
-            // prefix is optional
-            auto attrPrefixPtr = reinterpret_cast<const char*>(attributes[index + 1]);
-            std::string attrPrefix = std::string(attrPrefixPtr ? attrPrefixPtr : "");
-
-            // value should be present
-            assert(attributes[index + 3]);
-            assert(attributes[index + 4]);
-            auto valueBegin = reinterpret_cast<const char*>(attributes[index + 3]);
-            auto valueEnd = reinterpret_cast<const char*>(attributes[index + 4]);
-            std::string value(valueBegin, valueEnd);
-
-            attributesVector.emplace_back(SaxCallbacks::Attribute{attrPrefix, attrName, value});
-        }
-
-        assert(localname != nullptr);
-        thiz->m_saxCallbacks.onStartElementNs(reinterpret_cast<const char*>(localname),
-            prefix != nullptr ? reinterpret_cast<const char*>(prefix) : "",
-            URI != nullptr ? reinterpret_cast<const char*>(URI) : "",
-            attributesVector);
-    }
+                                 const xmlChar ** attributes);
 
     /**
      * SAX2 callback when an element end has been detected by the parser. It provides the namespace informations for the element.
@@ -345,14 +254,7 @@ private:
     static void onEndElementNs(void * ctx,
                                const xmlChar * localname,
                                const xmlChar * prefix,
-                               const xmlChar * URI)
-    {
-        auto thiz = cast(ctx);
-        assert(localname != nullptr);
-        thiz->m_saxCallbacks.onEndElementNs(reinterpret_cast<const char*>(localname),
-            prefix != nullptr ? reinterpret_cast<const char*>(prefix) : "",
-            URI != nullptr ? reinterpret_cast<const char*>(URI) : "");
-    }
+                               const xmlChar * URI);
 
     /**
      * Display and format error messages callback.
@@ -364,11 +266,7 @@ private:
      */
     static void onError(void * ctx,
                         const char * msg,
-                        ...)
-    {
-        auto thiz = cast(ctx);
-        thiz->m_saxCallbacks.onError(msg);
-    }
+                        ...);
 
     /**
      * Display and format warning messages callback.
@@ -380,11 +278,7 @@ private:
      */
     static void onWarning(void * ctx,
                           const char * msg,
-                          ...)
-    {
-        auto thiz = cast(ctx);
-        thiz->m_saxCallbacks.onWarning(msg);
-    }
+                          ...);
 
     /**
      * Receiving some chars from the parser.
@@ -398,11 +292,7 @@ private:
      */
     static void onCharacters(void *ctx,
                              const xmlChar *ch,
-                             int len)
-    {
-        auto thiz = cast(ctx);
-        thiz->m_saxCallbacks.onCharacters(std::string{ch, ch + len});
-    }
+                             int len);
 
     /** xmlLib sax handler. */
     xmlSAXHandler m_saxHandler;

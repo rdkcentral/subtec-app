@@ -17,8 +17,8 @@
 
 include(PkgConfigHelper)
 
-pkgconfig_resolve(LibXkbCommon
-    xkbcommon
-    xkbcommon/xkbcommon.h
-    xkbcommon
+pkgconfig_resolve(LibSubTtxRendGfx
+    subttxrend-gfx
+    subttxrend/gfx/ColorArgb.hpp
+    subttxrend-gfx
 )

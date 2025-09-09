@@ -33,32 +33,38 @@ debug_log("run_l2_tests started")
 # Build libsubtec.so required for tests to run, and copy it to test folder
 def build_and_copy_lib():
     # Define paths
-    makefile_dir = os.path.join(os.path.dirname(__file__), 'libsubtec')
+    cmake_lists_dir = os.path.join(os.path.dirname(__file__), 'libsubtec')
+    build_path = os.path.join(cmake_lists_dir, "build")
+
+    os.makedirs(build_path, exist_ok=True)
+    os.chdir(build_path)
+
+    cmake_command = ["cmake", cmake_lists_dir]
+    try:
+        subprocess.run(cmake_command, check=True)
+    except subprocess.CalledProcessError as e:
+        debug_log(f"CMake configuration failed: {e}")
+        return
+
+    make_command = ["make"]
+    try:
+        subprocess.run(make_command, check=True)
+    except subprocess.CalledProcessError as e:
+        debug_log(f"Build failed: {e}")
+        return
+
     output_dir = os.path.dirname(__file__)
     lib_name = 'libsubtec.so'
 
-    # Change working directory to where the Makefile is located
-    os.chdir(makefile_dir)
-
-    # Run the make command
-    try:
-        ret = subprocess.run(['make'], check=True)
-        if ret.returncode:
-            debug_log("Error during make for libsubtec.so, with return code" << ret.returncode)
-            debug_log("ERROR : " << ret.stderr)
-    except subprocess.CalledProcessError as e:
-        debug_log(f"Error during make for libsubtec.so : {e}")
-        return
-
     # Define source and destination file paths
-    src_file = os.path.join(makefile_dir, lib_name)
+    src_file = os.path.join(build_path, lib_name)
     dest_file = os.path.join(output_dir, lib_name)
 
     # Copy the .so file to the test/ directory
     try:
         shutil.copy(src_file, dest_file)
     except FileNotFoundError:
-        debug_log(f"File {lib_name} not found in {makefile_dir}.")
+        debug_log(f"File {lib_name} not found in {build_path}.")
     except IOError as e:
         debug_log(f"Error copying file libsubtec.so to test folder : {e}")
 
@@ -68,12 +74,13 @@ def build_and_copy_lib():
 def parse_junit_xml(xml_file):
     tree = ET.parse(xml_file)
     root = tree.getroot()
-    
+
     data = []
-    
-    for testsuite in root.findall('testsuite'):     
+
+    for testsuite in root.findall('testsuite'):
         for testcase in testsuite.findall('testcase'):
             classname = testcase.get('classname')
+            case_name = classname
 
             # Extract relevant part of classname
             if classname:
@@ -83,14 +90,14 @@ def parse_junit_xml(xml_file):
                     case_name = parts[-1]
                 else:
                     # If there's no dot, use the classname as is
-                    case_name = classname
+                    pass
             status = 'PASS'
-            
+
             if testcase.find('failure') is not None:
                 status = 'FAIL'
-            
+
             data.append([case_name, status])
-    
+
     return data
 
 # Print tests executed with status PASS/FAIL
@@ -129,7 +136,7 @@ def install_python_dependencies():
 
     if os.path.isfile("requirements.txt"):
         debug_log("Using requirements.txt to install packages..")
-        ret = subprocess.run('python3 -m pip install -r requirements.txt', shell=True)
+        ret = subprocess.run('python3 -m pip install -r requirements.txt', check=False, shell=True)
         if ret.returncode:
             debug_log("ERROR python3 -m pip install failed with return code" << ret.returncode)
             debug_log("ERROR : " << ret.stderr)
@@ -166,8 +173,8 @@ if 'VIRTUAL_ENV' not in os.environ:
 
 # Get test cases to execute or exclude.
 # If no options provided, execute all test cases.
-parser = argparse.ArgumentParser(description= "Script to run subtec L2 tests"
-                                , epilog = epilog_string)
+parser = argparse.ArgumentParser(description="Script to run subtec L2 tests",
+                                epilog=epilog_string)
 
 parser.add_argument("-i", "--testsuites_run", nargs='*', help="Test case numbers to execute")
 parser.add_argument("-e", "--testsuites_exclude", nargs='*', help="Test case numbers to exclude")
@@ -190,8 +197,7 @@ for directory in os.listdir(test_cwd):
     elif m:
         num = m.group(1)
         if num in test_suite_dirs:
-            debug_log("ERROR Duplicate numbers from directories {} {} expecting unique".format
-                  (test_suite_dirs[num], directory))
+            debug_log(f"ERROR Duplicate numbers from directories {test_suite_dirs[num]} {directory} expecting unique")
             exit(1)
         if args.testsuites_run:
             if num in args.testsuites_run:

@@ -282,6 +282,16 @@ void EngineImpl::onPreferredSize(const Size& size)
     unlock();
 }
 
+#ifdef __APPLE__
+void EngineImpl::startBlockingApplicationWindow()
+{
+    if (m_backend)
+    {
+        m_backend->startBlockingApplicationWindow();
+    }
+}
+#endif
+
 }
  // namespace gfx
 }// namespace subttxrend

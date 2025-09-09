@@ -34,30 +34,30 @@ namespace
 common::Logger logger("TtmlEngine", "ValueConverter");
 }
 
-void ValueConverter::setDrawingSize(gfx::Size drawingSize_)
+gfx::Size const ValueConverter::MAX_SURFACE_SIZE{1920, 1080};
+
+gfx::Size ValueConverter::setSourceSize(gfx::Size const& sourceSize)
 {
-    drawingSize = drawingSize_;
+    srcSize = sourceSize;
+    if ((sourceSize.m_h > MAX_SURFACE_SIZE.m_h) || (sourceSize.m_w > MAX_SURFACE_SIZE.m_w))
+    {
+        drawingSize = MAX_SURFACE_SIZE;
+    }
+    else
+    {
+        drawingSize = sourceSize;
+    }
     updateScalingFactors();
 
-    logger.info("%s size %ux%u scaling[hor: %f ver: %f])",
+    logger.info("%s source: %ux%u drawing: %ux%u scaling[hor: %f ver: %f])",
         __LOGGER_FUNC__,
+        srcSize.m_w,
+        srcSize.m_h,
         drawingSize.m_w,
         drawingSize.m_h,
         horizontalScalingFactor,
         verticalScalingFactor);
-}
-
-void ValueConverter::setSourceSize(gfx::Size sourceSize)
-{
-    srcSize = sourceSize;
-    updateScalingFactors();
-
-    logger.info("%s size %ux%u scaling[hor: %f ver: %f])",
-        __LOGGER_FUNC__,
-        srcSize.m_w,
-        srcSize.m_h,
-        horizontalScalingFactor,
-        verticalScalingFactor);
+    return drawingSize;
 }
 
 void ValueConverter::setCellResolution(gfx::Size cellResolution)
@@ -137,10 +137,7 @@ int ValueConverter::sizeToPixels(DomainValue value, int relativeSizeInPixels) co
         pixelSize = PixelDefault;
     }
 
-    std::stringstream ss;
-    ss << value;
-    auto valueStr = ss.str();
-    logger.debug("%s size %d (from %s)", __LOGGER_FUNC__, pixelSize, valueStr.c_str());
+    logger.debug("%s size %d (from %d)", __LOGGER_FUNC__, pixelSize, static_cast<int>(value.getValue()));
 
     return pixelSize;
 }
@@ -179,27 +176,23 @@ int ValueConverter::convert(DomainValue value,
     {
         case DomainValue::Type::PERCENTAGE_HUNDREDTHS:
         {
-            convertedValue = static_cast<int>(value.getValue() * dimensionValue / 10000.0);
+            convertedValue = std::lround(value.getValue() * dimensionValue / 10000.0);
             break;
         }
         case DomainValue::Type::PIXEL:
         {
-            convertedValue = static_cast<int>(value.getValue() * scalingFactor);
+            convertedValue = std::lround(value.getValue() * scalingFactor);
             break;
         }
         case DomainValue::Type::CELL_HUNDREDTHS:
         default:
         {
-            logger.warning("%s value type (%d) not supported for dimension",
-            __LOGGER_FUNC__, static_cast<int>(value.getType()));
+            logger.warning("%s value (%d) not supported for dimension",
+            __LOGGER_FUNC__, static_cast<int>(value.getValue()));
             break;
         }
     }
-
-    std::stringstream ss;
-    ss << value;
-    auto valueStr = ss.str();
-    logger.debug("%s to %d from %s)", __LOGGER_FUNC__, convertedValue, valueStr.c_str());
+    logger.debug("%s to %d from %d)", __LOGGER_FUNC__, convertedValue, static_cast<int>(value.getValue()));
 
     return convertedValue;
 }

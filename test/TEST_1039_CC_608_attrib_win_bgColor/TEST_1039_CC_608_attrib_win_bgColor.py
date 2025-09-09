@@ -39,7 +39,7 @@ def test_1039():
     run_test_prereq(script_dir)
 
     # wait for end of test
-    wait_for_log_string(subtec_log_path, "[ClosedCaptions::TextGfxDrawer] draw text:[swe: 00:00:45:00]")
+    wait_for_log_string(subtec_log_path, "[ClosedCaptions::TextGfxDrawer] draw text:[swe: 00:00:38:00]")
     copy_log_file(subtec_log_path, subtec_copy_path)
 
     sequence = [

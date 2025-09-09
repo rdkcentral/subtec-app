@@ -78,6 +78,11 @@ public:
     virtual void stop() = 0;
 
     /**
+     * Flushes subtitle state.
+     */
+    virtual void flush() = 0;
+
+    /**
      * Pauses subtitle processing.
      */
     virtual void pause() = 0;

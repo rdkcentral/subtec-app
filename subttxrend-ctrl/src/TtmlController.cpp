@@ -129,6 +129,11 @@ void TtmlController::processInfo(const std::string& contentType, const std::stri
     m_ttmlEngine->setSubtitleInfo(contentType, subsInfo);
 }
 
+void TtmlController::flush()
+{
+    m_ttmlEngine->flush();
+}
+
 void TtmlController::pause()
 {
     m_ttmlEngine->pause();

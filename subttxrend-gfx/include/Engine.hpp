@@ -109,6 +109,12 @@ public:
      */
     virtual void detach(WindowPtr window) = 0;
 
+#ifdef __APPLE__
+    /**
+     * @brief Start blocking application window (block this thread)
+     */
+    virtual void startBlockingApplicationWindow() = 0;
+#endif
 };
 
 /**

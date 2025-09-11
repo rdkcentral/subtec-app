@@ -96,6 +96,13 @@ public:
      */
     virtual void forceRender() = 0;
 
+#ifdef __APPLE__
+    /**
+     * @brief start blocking application window (this will block the calling thread)
+     */
+    virtual void startBlockingApplicationWindow() = 0;
+#endif
+
 protected:
     /**
      * Returns backend events listener.

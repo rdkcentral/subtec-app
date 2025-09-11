@@ -17,8 +17,8 @@
 
 include(PkgConfigHelper)
 
-pkgconfig_resolve(LibXkbCommon
-    xkbcommon
-    xkbcommon/xkbcommon.h
-    xkbcommon
+pkgconfig_resolve(LibSubTtxRendProtocol
+    subttxrend-protocol
+    subttxrend/protocol/Packet.hpp
+    subttxrend-protocol
 )

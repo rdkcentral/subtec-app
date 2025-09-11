@@ -38,8 +38,6 @@ ENDIF(SUBTTXACCESS_GROUP)
 #
 # Packages to use
 #
-find_package(LibGlib REQUIRED)
-find_package(LibGio REQUIRED)
 find_package(LibSubTtxRendCommon REQUIRED)
 find_package(LibSubTtxRendProtocol REQUIRED)
 
@@ -47,8 +45,6 @@ find_package(LibSubTtxRendProtocol REQUIRED)
 # Include directories
 #
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-include_directories(${LIBGLIB_INCLUDE_DIRS})
-include_directories(${LIBGIO_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDCOMMON_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDPROTOCOL_INCLUDE_DIRS})
 
@@ -107,10 +103,7 @@ set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD 14)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY VERSION 0.0.0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_SOCKSRC_PUBLIC_HEADERS})
-target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
 target_link_libraries(${LIBRARY_NAME} ${LIBSUBTTXRENDPROTOCOL_LIBRARIES})
-target_link_libraries(${LIBRARY_NAME} ${LIBGIO_LIBRARIES})
-target_link_libraries(${LIBRARY_NAME} ${LIBGLIB_LIBRARIES})
 
 #
 # Install rules
@@ -131,7 +124,7 @@ find_package(PkgConfig REQUIRED)
 set(PACKAGE_NAME        "${PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "Subtitles/Teletext Renderer - Socket Source")
 set(PACKAGE_VERSION     "0.0.0")
-set(PACKAGE_REQUIRES    "")
+set(PACKAGE_REQUIRES    "${LIBSUBTTXRENDPROTOCOL_PACKAGE_NAME}")
 set(PACKAGE_LIB_NAME    "${LIBRARY_NAME}")
 
 if(PKG_CONFIG_FOUND)

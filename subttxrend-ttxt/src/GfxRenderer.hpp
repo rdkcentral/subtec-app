@@ -255,19 +255,19 @@ private:
     virtual void onKeyEvent(const gfx::KeyEvent& event) override;
 
     /** Number of initializations. */
-    int m_initCount;
+    int m_initCount{};
 
     /** Current client. */
-    GfxRendererClient* m_currentClient;
+    GfxRendererClient* m_currentClient{};
 
     /** GFX elements - window. */
-    gfx::Window* m_gfxWindow;
+    gfx::Window* m_gfxWindow{};
 
     /** Current background alpha. */
-    std::uint8_t m_bgAlpha;
+    std::uint8_t m_bgAlpha{};
 
     /** Current new page id (selected using DIGIT keys). */
-    std::uint16_t m_newPageId;
+    std::uint16_t m_newPageId{};
 
     /** Last renderer start (show) time. */
     TimePoint m_startTime;
@@ -276,13 +276,13 @@ private:
     TimePoint m_lastDigitTime;
 
     /** Rendering paused. */
-    bool m_paused;
+    bool m_paused{};
 
     /** Transparent background mode (subtitles/news). */
-    bool m_transparentMode;
+    bool m_transparentMode{};
 
     /** Current zoom mode. */
-    ZoomMode m_zoomMode;
+    ZoomMode m_zoomMode{ZoomMode::NONE};
 
     /** Teletext CLUT. */
     GfxTtxClut m_clut;

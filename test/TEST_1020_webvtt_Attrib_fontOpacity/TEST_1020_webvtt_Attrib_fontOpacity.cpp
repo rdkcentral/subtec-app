@@ -43,6 +43,9 @@ void sendccattribute(Opacity value, std::string filename, AttribPosInArray attri
     attributesMask |= (1 << FONT_SIZE_ARR_POSITION);
     attributesValues[FONT_SIZE_ARR_POSITION] = FONT_SIZE_EXTRALARGE;
 
+    attributesMask |= (1 << BACKGROUND_OPACITY_ARR_POSITION);
+    attributesValues[BACKGROUND_OPACITY_ARR_POSITION] = OPACITY_TRANSLUCENT;
+
     if (attributesMask)
     {
         channel->SendCCSetAttributePacket(ccType, attributesMask, attributesValues);
@@ -63,6 +66,7 @@ int main(int argc, char *argv[])
         channel->SendSelectionPacket(1920, 1080);
         channel->SendUnmutePacket();
 
+        resetAllWebVttAttributes(channel);
         /* TODO : Resetting attributes here causes test case failure
         as font opacity seems to be dependent on background opacity
         when running on ubuntu, so setting background opacity to 

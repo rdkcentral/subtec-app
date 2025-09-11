@@ -28,20 +28,12 @@ namespace common
 class TtmlAsClient::Impl final
 {
   public:
-    Impl()
-    {
-    }
-
-    ~Impl()
-    {
-    }
-
     AsHelpers getHelpers()
     {
         return AsHelpers{};
     }
 
-    Properties getData(std::chrono::milliseconds timeout)
+    Properties getData()
     {
         return Properties{};
     }
@@ -54,9 +46,9 @@ TtmlAsClient::TtmlAsClient()
 }
 TtmlAsClient::~TtmlAsClient() = default;
 
-Properties TtmlAsClient::getData(std::chrono::milliseconds timeout)
+Properties TtmlAsClient::getData()
 {
-    return impl->getData(timeout);
+    return impl->getData();
 }
 AsHelpers TtmlAsClient::getHelpers()
 {

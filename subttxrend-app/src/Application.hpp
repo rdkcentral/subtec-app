@@ -50,6 +50,10 @@ public:
     void runAsync();
     void quit();
 
+#ifdef __APPLE__
+    void startBlockingApplicationWindow();
+#endif
+
 private:
 
     /** Application configuration. */

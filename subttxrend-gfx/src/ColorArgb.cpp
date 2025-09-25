@@ -21,6 +21,7 @@
 #include "ColorArgb.hpp"
 #include <map>
 #include <iomanip>
+#include <sstream>
 
 namespace subttxrend
 {

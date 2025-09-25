@@ -41,6 +41,10 @@ void TtmlTransformer::setRules(std::vector<std::string> const& rules)
 {
 }
 
+void TtmlTransformer::setRelatedVideoSize(gfx::Size relatedVideoSize)
+{
+}
+
 Style TtmlTransformer::getPreferredStyle()
 {
     return Style::NORMAL;

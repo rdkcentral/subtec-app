@@ -25,6 +25,7 @@
 
 #include <array>
 #include <cstdint>
+#include <ostream>
 #include <unordered_map>
 
 namespace subttxrend
@@ -66,7 +67,9 @@ public:
         WEBVTT_TIMESTAMP = 17,
         SET_CC_ATTRIBUTES = 18,
         TTML_INFO = 19,
+        FLUSH = 20,
 
+        MAX,
         INVALID = 0xFFFFFFFF,
     };
 
@@ -233,7 +236,6 @@ private:
     /** Logger. */
     static common::Logger m_logger;
 };
-
 static const std::unordered_map<Packet::Type, std::string, std::hash<Packet::Type>> packetTypeStr = {
         {Packet::Type::PES_DATA, "PES_DATA"},
         {Packet::Type::TIMESTAMP, "TIMESTAMP"},
@@ -253,7 +255,8 @@ static const std::unordered_map<Packet::Type, std::string, std::hash<Packet::Typ
         {Packet::Type::WEBVTT_DATA,"WEBVTT_DATA"},
         {Packet::Type::WEBVTT_TIMESTAMP,"WEBVTT_TIMESTAMP"},
         {Packet::Type::SET_CC_ATTRIBUTES,"SET_CC_ATTRIBUTES"},
-        {Packet::Type::TTML_INFO,"TTML_INFO"}
+        {Packet::Type::TTML_INFO,"TTML_INFO"},
+        {Packet::Type::FLUSH, "FLUSH"}
 };
 
 inline std::ostream& operator<<(std::ostream& out, Packet::Type packetType)

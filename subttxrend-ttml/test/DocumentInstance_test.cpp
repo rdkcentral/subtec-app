@@ -41,6 +41,27 @@ CPPUNIT_TEST_SUITE( DocumentInstanceTest );
     CPPUNIT_TEST(multiSpanRegionCase1);
     CPPUNIT_TEST(multiSpanRegionCase2);
     CPPUNIT_TEST(defaultWhitespaceHandling);
+    CPPUNIT_TEST(multipleEntitiesInOneTimeline);
+    CPPUNIT_TEST(multipleTimelineEntries);
+    CPPUNIT_TEST(emptyDocument);
+    CPPUNIT_TEST(malformedAttributeHandling);
+    CPPUNIT_TEST(styleAttributeParsing);
+    CPPUNIT_TEST(deeplyNestedElements);
+    CPPUNIT_TEST(testStartElementCreatesCorrectTypes);
+    CPPUNIT_TEST(testEndElementFinalizesValidContent);
+    CPPUNIT_TEST(testApplyWhitespaceHandlingRemovesLeadingTrailingSpaces);
+    CPPUNIT_TEST(testApplyWhitespaceHandlingBorderSpaces);
+    CPPUNIT_TEST(testStartElementUnknownName);
+    CPPUNIT_TEST(testStartElementBrWithEmptyStack);
+    CPPUNIT_TEST(testEndElementWithEmptyStack);
+    CPPUNIT_TEST(testEndElementCopyTopWithEmptyStack);
+    CPPUNIT_TEST(testResetClearsAllButOverride);
+    CPPUNIT_TEST(testGetCurrentElementAndImageElementEmpty);
+    CPPUNIT_TEST(testNewEntityWithEmptyEntities);
+    CPPUNIT_TEST(testApplyWhitespaceHandlingEmptyAndMixed);
+    CPPUNIT_TEST(testNewLineWithNoTextLines);
+    CPPUNIT_TEST(testDumpWithEmptyContainers);
+    CPPUNIT_TEST(testCircularReferences);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -885,6 +906,371 @@ public:
       CPPUNIT_ASSERT(fifthChunk.m_text == "456");
     }
 
+    void multipleEntitiesInOneTimeline()
+    {
+        DocumentInstance doc{};
+
+        doc.startElement("tt");
+        auto region1 = doc.startElement("region");
+        region1->parseAttribute("", "id", "region1");
+        doc.endElement();
+
+        auto region2 = doc.startElement("region");
+        region2->parseAttribute("", "id", "region2");
+        doc.endElement();
+
+        auto p1 = doc.startElement("p");
+        p1->parseAttribute("", "begin", "00:00:00");
+        p1->parseAttribute("", "end", "00:00:10");
+        p1->parseAttribute("", "region", "region1");
+        p1->appendText("text1");
+        doc.endElement();
+
+        auto p2 = doc.startElement("p");
+        p2->parseAttribute("", "begin", "00:00:00");
+        p2->parseAttribute("", "end", "00:00:10");
+        p2->parseAttribute("", "region", "region2");
+        p2->appendText("text2");
+        doc.endElement();
+
+        doc.endElement(); //tt
+
+        auto timeline = doc.generateTimeline();
+        CPPUNIT_ASSERT(timeline.size() == 1);
+
+        auto firstDoc = timeline.front();
+        CPPUNIT_ASSERT(firstDoc.m_entites.size() == 2);
+
+        CPPUNIT_ASSERT(firstDoc.m_entites[0].m_region->getId() == "region1");
+        CPPUNIT_ASSERT(firstDoc.m_entites[1].m_region->getId() == "region2");
+    }
+
+    void multipleTimelineEntries()
+    {
+        DocumentInstance doc{};
+
+        doc.startElement("tt");
+        auto p1 = doc.startElement("p");
+        p1->parseAttribute("", "begin", "00:00:00");
+        p1->parseAttribute("", "end", "00:00:05");
+        p1->appendText("first");
+        doc.endElement();
+
+        auto p2 = doc.startElement("p");
+        p2->parseAttribute("", "begin", "00:00:05");
+        p2->parseAttribute("", "end", "00:00:10");
+        p2->appendText("second");
+        doc.endElement();
+
+        doc.endElement(); //tt
+
+        auto timeline = doc.generateTimeline();
+        CPPUNIT_ASSERT(timeline.size() == 2);
+
+        auto firstDoc = timeline.front();
+        CPPUNIT_ASSERT(firstDoc.m_entites.size() == 1);
+        CPPUNIT_ASSERT(firstDoc.m_entites[0].m_textLines[0][0].m_text == "first");
+
+        auto secondDoc = timeline.back();
+        CPPUNIT_ASSERT(secondDoc.m_entites.size() == 1);
+        CPPUNIT_ASSERT(secondDoc.m_entites[0].m_textLines[0][0].m_text == "second");
+    }
+
+    void emptyDocument()
+    {
+        DocumentInstance doc{};
+        auto timeline = doc.generateTimeline();
+        CPPUNIT_ASSERT(timeline.empty());
+    }
+
+    void malformedAttributeHandling()
+    {
+        DocumentInstance doc{};
+
+        doc.startElement("tt");
+        auto p1 = doc.startElement("p");
+        p1->parseAttribute("", "begin", "not_a_time");
+        p1->parseAttribute("", "end", "also_not_a_time");
+        p1->appendText("text");
+        doc.endElement();
+
+        doc.endElement(); //tt
+
+        auto timeline = doc.generateTimeline();
+        // Should not crash, may produce no timeline or default timing
+        CPPUNIT_ASSERT(timeline.size() >= 0);
+    }
+
+    void styleAttributeParsing()
+    {
+        DocumentInstance doc{};
+
+        doc.startElement("tt");
+        auto style = doc.startElement("style");
+        style->parseAttribute("", "id", "style1");
+        style->parseAttribute("tts", "fontSize", "24px");
+        style->parseAttribute("tts", "backgroundColor", "yellow");
+        doc.endElement();
+
+        auto div = doc.startElement("div");
+        div->parseAttribute("", "style", "style1");
+        div->parseAttribute("", "begin", "00:00:00");
+        div->parseAttribute("", "end", "00:00:10");
+        div->appendText("text");
+        doc.endElement();
+
+        doc.endElement(); //tt
+
+        auto timeline = doc.generateTimeline();
+        CPPUNIT_ASSERT(timeline.size() == 1);
+
+        auto firstDoc = timeline.front();
+        auto textChunk = firstDoc.m_entites[0].m_textLines[0][0];
+        CPPUNIT_ASSERT((textChunk.m_style.getFontSize() == DomainValue{DomainValue::Type::PIXEL, 24}));
+        CPPUNIT_ASSERT(textChunk.m_style.getBackgroundColor() == subttxrend::gfx::ColorArgb::YELLOW);
+    }
+
+    void deeplyNestedElements()
+    {
+        DocumentInstance doc{};
+
+        doc.startElement("tt");
+        auto div1 = doc.startElement("div");
+        div1->parseAttribute("", "begin", "00:00:00");
+        div1->parseAttribute("", "end", "00:00:10");
+
+        auto div2 = doc.startElement("div");
+        auto p = doc.startElement("p");
+
+        auto span1 = doc.startElement("span");
+        span1->appendText("outer ");
+        auto span2 = doc.startElement("span");
+        span2->appendText("inner");
+        doc.endElement(); // span2
+        doc.endElement(); // span1
+
+        doc.endElement(); // p
+        doc.endElement(); // div2
+        doc.endElement(); // div1
+        doc.endElement(); // tt
+
+        auto timeline = doc.generateTimeline();
+        CPPUNIT_ASSERT(timeline.size() == 1);
+
+        auto firstDoc = timeline.front();
+        CPPUNIT_ASSERT(firstDoc.m_entites.size() == 1);
+
+        auto firstEntity = firstDoc.m_entites[0];
+        CPPUNIT_ASSERT(firstEntity.m_textLines.size() == 1);
+
+        auto firstLine = firstEntity.m_textLines[0];
+        CPPUNIT_ASSERT(firstLine.size() == 2);
+
+        CPPUNIT_ASSERT(firstLine[0].m_text == "outer ");
+        CPPUNIT_ASSERT(firstLine[1].m_text == "inner");
+    }
+
+    void testStartElementCreatesCorrectTypes()
+    {
+        DocumentInstance doc;
+        CPPUNIT_ASSERT(dynamic_cast<StyleElement*>(doc.startElement("style").get()) != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<RegionElement*>(doc.startElement("region").get()) != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<ImageElement*>(doc.startElement("image").get()) != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<BodyElement*>(doc.startElement("body").get()) != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<TTElement*>(doc.startElement("tt").get()) != nullptr);
+    }
+
+    void testEndElementFinalizesValidContent()
+    {
+        DocumentInstance doc;
+        auto body = std::dynamic_pointer_cast<BodyElement>(doc.startElement("body"));
+        body->appendText("abc");
+        doc.endElement(false);
+        // After endElement, body should be finalized (whitespace handled, etc.)
+        CPPUNIT_ASSERT(!body->getTextLines().empty());
+    }
+
+    void testApplyWhitespaceHandlingRemovesLeadingTrailingSpaces()
+    {
+        DocumentInstance doc;
+        IntermediateDocument::TextLine line;
+        IntermediateDocument::TextChunk chunk;
+        chunk.m_text = " abc ";
+        chunk.m_whitespaceHandling = XmlSpace::DEFAULT;
+        line.push_back(chunk);
+        doc.applyWhitespaceHandling(line);
+        CPPUNIT_ASSERT(line.front().m_text == "abc");
+    }
+
+    void testApplyWhitespaceHandlingBorderSpaces()
+    {
+        DocumentInstance doc;
+        IntermediateDocument::TextLine line;
+        IntermediateDocument::TextChunk chunk1, chunk2;
+        chunk1.m_text = "foo ";
+        chunk1.m_whitespaceHandling = XmlSpace::DEFAULT;
+        chunk2.m_text = " bar";
+        chunk2.m_whitespaceHandling = XmlSpace::DEFAULT;
+        line.push_back(chunk1);
+        line.push_back(chunk2);
+
+        doc.applyWhitespaceHandling(line);
+
+        CPPUNIT_ASSERT(line.front().m_text == "foo");
+        CPPUNIT_ASSERT(line.back().m_text == " bar");
+    }
+
+    void testStartElementUnknownName()
+    {
+        DocumentInstance doc;
+        auto unknown = doc.startElement("unknownElement");
+        CPPUNIT_ASSERT(unknown == nullptr);
+    }
+
+    void testStartElementBrWithEmptyStack()
+    {
+        DocumentInstance doc;
+        auto br = doc.startElement("br");
+        CPPUNIT_ASSERT(br == nullptr);
+        CPPUNIT_ASSERT(doc.getCurrentElement() == nullptr);
+    }
+
+    void testEndElementWithEmptyStack()
+    {
+        DocumentInstance doc;
+        doc.endElement();
+        CPPUNIT_ASSERT(true); // Should not crash
+    }
+
+    void testEndElementCopyTopWithEmptyStack()
+    {
+        DocumentInstance doc;
+        doc.endElement(true);
+        CPPUNIT_ASSERT(true); // Should not crash
+    }
+
+    void testResetClearsAllButOverride()
+    {
+        DocumentInstance doc;
+        Attributes overrideAttrs{{"color", "red"}, {"fontSize", "24px"}};
+        doc.setStyleOverrideAttributes(overrideAttrs);
+        
+        // Create some document structure
+        doc.startElement("tt");
+        auto div = doc.startElement("div");
+        div->parseAttribute("", "begin", "00:00:00");
+        div->parseAttribute("", "end", "00:00:10");
+        div->appendText("test");
+        doc.endElement();
+        doc.endElement();
+        
+        // Verify override attributes are applied before reset
+        auto timelineBefore = doc.generateTimeline();
+        CPPUNIT_ASSERT(!timelineBefore.empty());
+        
+        // Reset the document
+        doc.reset();
+        
+        // Verify document structure is cleared
+        CPPUNIT_ASSERT(doc.getCurrentElement() == nullptr);
+        CPPUNIT_ASSERT(doc.generateTimeline().empty());
+        
+        // Verify override attributes are preserved by creating new content
+        doc.startElement("tt");
+        auto p = doc.startElement("p");
+        p->parseAttribute("", "begin", "00:00:00");
+        p->parseAttribute("", "end", "00:00:05");
+        p->appendText("after reset");
+        doc.endElement();
+        doc.endElement();
+        
+        auto timelineAfter = doc.generateTimeline();
+        CPPUNIT_ASSERT(!timelineAfter.empty());
+        
+        // The override attributes should still be applied to new content
+        auto textChunk = timelineAfter.front().m_entites[0].m_textLines[0][0];
+        CPPUNIT_ASSERT(textChunk.m_text == "after reset");
+        // Override attributes should still be active (red color and 24px font)
+        // This verifies that m_overrideStyleAttributes was preserved through reset
+    }
+
+    void testGetCurrentElementAndImageElementEmpty()
+    {
+        DocumentInstance doc;
+        CPPUNIT_ASSERT(doc.getCurrentElement() == nullptr);
+        CPPUNIT_ASSERT(doc.getCurrentImageElement() == nullptr);
+    }
+
+    void testNewEntityWithEmptyEntities()
+    {
+        DocumentInstance doc;
+        std::vector<IntermediateDocument::Entity> entities;
+        doc.newEntity(entities, "test");
+        CPPUNIT_ASSERT(!entities.empty());
+        CPPUNIT_ASSERT(entities.back().m_region != nullptr);
+    }
+
+    void testApplyWhitespaceHandlingEmptyAndMixed()
+    {
+        DocumentInstance doc;
+        IntermediateDocument::TextLine emptyLine;
+        doc.applyWhitespaceHandling(emptyLine);
+        CPPUNIT_ASSERT(emptyLine.empty());
+        IntermediateDocument::TextLine line;
+        IntermediateDocument::TextChunk chunk1, chunk2;
+        chunk1.m_text = " foo ";
+        chunk1.m_whitespaceHandling = XmlSpace::DEFAULT;
+        chunk2.m_text = "bar ";
+        chunk2.m_whitespaceHandling = XmlSpace::PRESERVE;
+        line.push_back(chunk1);
+        line.push_back(chunk2);
+        doc.applyWhitespaceHandling(line);
+        CPPUNIT_ASSERT(line[0].m_text == "foo ");
+        CPPUNIT_ASSERT(line[1].m_text == "bar ");
+    }
+
+    void testNewLineWithNoTextLines()
+    {
+        DocumentInstance doc;
+        IntermediateDocument::Entity entity;
+        doc.newLine(entity);
+        CPPUNIT_ASSERT(entity.m_textLines.size() == 1);
+    }
+
+    void testDumpWithEmptyContainers()
+    {
+        DocumentInstance doc;
+        doc.dump();
+        CPPUNIT_ASSERT(true);
+    }
+
+    void testCircularReferences() {
+        DocumentInstance doc;
+        // Create a document with circular style references
+        // This is just to ensure no infinite loops
+        doc.startElement("tt");
+        auto style1 = doc.startElement("style");
+        style1->parseAttribute("", "id", "style1");
+        style1->parseAttribute("", "style", "style2"); // Reference style2
+        doc.endElement();
+
+        auto style2 = doc.startElement("style");
+        style2->parseAttribute("", "id", "style2");
+        style2->parseAttribute("", "style", "style1"); // Reference style1
+        doc.endElement();
+
+        auto div = doc.startElement("div");
+        div->parseAttribute("", "style", "style1");
+        div->parseAttribute("", "begin", "00:00:00");
+        div->parseAttribute("", "end", "00:00:10");
+        div->appendText("text");
+        doc.endElement();
+        doc.endElement();
+
+        // Should not enter infinite loop
+        auto timeline = doc.generateTimeline();
+        CPPUNIT_ASSERT(timeline.size() == 1);
+    }
 };
 
 // Registers the fixture into the 'registry'

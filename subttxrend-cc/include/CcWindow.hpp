@@ -28,6 +28,8 @@
 #include "CcGfx.hpp"
 #include "CcTextDrawer.hpp"
 
+#define SCALING_FACTOR 0.67
+
 namespace subttxrend
 {
 namespace cc

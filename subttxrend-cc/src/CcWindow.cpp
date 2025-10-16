@@ -37,8 +37,8 @@ namespace
 //720 x 486 -> 480 x 375 (4:3)  15x25 | 18x30 | 12x20
 //
 
-ScreenInfo screenInfo708 = {1280, 720, 1050, 600, 210, 75, {{15, 24}, {30, 48}, {25, 40}, {8, 12}}};
-ScreenInfo screenInfo608 = {1280, 720, 1050, 600, 32, 15, {{15, 24}, {30, 48}, {25, 40}, {8,12}}};
+ScreenInfo screenInfo708 = {1920, 1080, 1470, 825, 210, 75, {{18, 32}, {42, 66}, {35, 55}, {11, 17}}};
+ScreenInfo screenInfo608 = {1920, 1080, 1470, 825, 32, 15, {{18, 32}, {42, 66}, {35, 55}, {11, 17}}};
 static const int HorizontalMargin = 5;
 }
 
@@ -414,6 +414,10 @@ Point Window::calculateAnchorTopLeftPoint(const Dimensions& bDim)
             anchorCoords.y = anchorCoords.y - bDim.h;
             break;
     }
+
+    anchorCoords.x *= SCALING_FACTOR;
+    anchorCoords.y *= SCALING_FACTOR;
+
     return anchorCoords;
 }
 
@@ -588,6 +592,9 @@ void Window::draw()
 
     const auto anchorPoint = calculateAnchorTopLeftPoint(windowDimensions);
 
+    windowDimensions.w *= SCALING_FACTOR;
+    windowDimensions.h *= SCALING_FACTOR;
+
     logger.debug("%s window dimensions (%d %d) anchor point (%d %d)",
         __LOGGER_FUNC__,
         windowDimensions.w,
@@ -604,7 +611,7 @@ void Window::draw()
 Point Window::calculate(const ScreenInfo& screenInfo)
 {
     Point ret;
-    const auto screenSafeHeight = [&]{
+    /*const auto screenSafeHeight = [&]{
     if(m_608Enabled && m_textDrawers.size()>0 && m_textDrawers.back())
     {
         auto fH = m_textDrawers.back()->fontHeight();
@@ -617,19 +624,19 @@ Point Window::calculate(const ScreenInfo& screenInfo)
         return std::min(screenInfo.height, fH * screenInfo.heightSegments);
      } else
         return screenInfo.safeHeight;
-    }();
+    }();*/
 
     ret.x = (screenInfo.width - screenInfo.safeWidth)/2;
-    ret.y = (screenInfo.height - screenSafeHeight)/2;
+    ret.y = (screenInfo.height - screenInfo.safeHeight)/2;
     if (m_def.relative_pos)
     {
         ret.x += ((screenInfo.safeWidth * m_def.anchor_horizontal) / 100);
-        ret.y += ((screenSafeHeight * m_def.anchor_vertical) / 100);
+        ret.y += ((screenInfo.safeHeight * m_def.anchor_vertical) / 100);
     }
     else
     {
         ret.x += screenInfo.safeWidth/screenInfo.widthSegments * m_def.anchor_horizontal;
-        ret.y += screenSafeHeight/screenInfo.heightSegments * m_def.anchor_vertical;
+        ret.y += screenInfo.safeHeight/screenInfo.heightSegments * m_def.anchor_vertical;
     }
     return ret;
 }

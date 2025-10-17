@@ -539,8 +539,14 @@ Dimensions Window::calculateRects4Text(std::vector<Rect>& tdRects)
         biggestDimensions.h = std::max(biggestDimensions.h, dimWithMargin.h+textRelativeY);
     }
 
+    biggestDimensions.w *= 1.5;
+
     biggestDimensions.h = std::max(biggestDimensions.h, maxFontHeight * m_def.row_count);
     biggestDimensions.w = std::max(biggestDimensions.w, maxAdvance * m_def.col_count);
+
+    biggestDimensions.h *= SCALING_FACTOR;
+    biggestDimensions.w *= SCALING_FACTOR;
+
     return biggestDimensions;
 }
 
@@ -591,9 +597,6 @@ void Window::draw()
 
 
     const auto anchorPoint = calculateAnchorTopLeftPoint(windowDimensions);
-
-    windowDimensions.w *= SCALING_FACTOR;
-    windowDimensions.h *= SCALING_FACTOR;
 
     logger.debug("%s window dimensions (%d %d) anchor point (%d %d)",
         __LOGGER_FUNC__,

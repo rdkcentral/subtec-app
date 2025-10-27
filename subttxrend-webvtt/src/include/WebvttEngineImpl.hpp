@@ -133,7 +133,7 @@ private:
     CueList                                 m_timeline;
     std::list<CueSharedPtr>                 m_shownDocuments;
     RegionMap                               m_cachedRegionMap;
-    const gfx::Size                         DEFAULT_SURFACE_SIZE{1920, 1080};
+    const gfx::Size                         DEFAULT_SURFACE_SIZE{1280, 720};
     gfx::Size                               m_surfaceSize{DEFAULT_SURFACE_SIZE};
 
 };

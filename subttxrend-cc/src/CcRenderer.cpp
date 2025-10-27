@@ -134,7 +134,7 @@ void Renderer::clear()
 
 void Renderer::show()
 {
-    m_window->setSize(gfx::Size{1920, 1080});
+    m_window->setSize(gfx::Size{1280, 720});
     m_window->setVisible(true);
 }
 

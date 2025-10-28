@@ -208,7 +208,7 @@ void TextGfxDrawer::setPenAttributes(PenAttributes penattrs)
         break;
     }
 
-    m_font = m_fontCache->getFont(fontName, size, true, penattrs.italics);
+    m_font = m_fontCache->getFont(fontName, size * SCALING_FACTOR, true, penattrs.italics);
     m_attrs = penattrs;
 }
 

@@ -414,6 +414,10 @@ Point Window::calculateAnchorTopLeftPoint(const Dimensions& bDim)
             anchorCoords.y = anchorCoords.y - bDim.h;
             break;
     }
+
+    anchorCoords.x *= SCALING_FACTOR;
+    anchorCoords.y *= SCALING_FACTOR;
+
     return anchorCoords;
 }
 
@@ -535,8 +539,11 @@ Dimensions Window::calculateRects4Text(std::vector<Rect>& tdRects)
         biggestDimensions.h = std::max(biggestDimensions.h, dimWithMargin.h+textRelativeY);
     }
 
+    biggestDimensions.w *= 1.5;
+
     biggestDimensions.h = std::max(biggestDimensions.h, maxFontHeight * m_def.row_count);
     biggestDimensions.w = std::max(biggestDimensions.w, maxAdvance * m_def.col_count);
+
     return biggestDimensions;
 }
 
@@ -588,6 +595,9 @@ void Window::draw()
 
     const auto anchorPoint = calculateAnchorTopLeftPoint(windowDimensions);
 
+    windowDimensions.w *= SCALING_FACTOR;
+    windowDimensions.h *= SCALING_FACTOR;
+
     logger.debug("%s window dimensions (%d %d) anchor point (%d %d)",
         __LOGGER_FUNC__,
         windowDimensions.w,
@@ -604,7 +614,7 @@ void Window::draw()
 Point Window::calculate(const ScreenInfo& screenInfo)
 {
     Point ret;
-    const auto screenSafeHeight = [&]{
+    /*const auto screenSafeHeight = [&]{
     if(m_608Enabled && m_textDrawers.size()>0 && m_textDrawers.back())
     {
         auto fH = m_textDrawers.back()->fontHeight();
@@ -617,19 +627,19 @@ Point Window::calculate(const ScreenInfo& screenInfo)
         return std::min(screenInfo.height, fH * screenInfo.heightSegments);
      } else
         return screenInfo.safeHeight;
-    }();
+    }();*/
 
     ret.x = (screenInfo.width - screenInfo.safeWidth)/2;
-    ret.y = (screenInfo.height - screenSafeHeight)/2;
+    ret.y = (screenInfo.height - screenInfo.safeHeight)/2;
     if (m_def.relative_pos)
     {
         ret.x += ((screenInfo.safeWidth * m_def.anchor_horizontal) / 100);
-        ret.y += ((screenSafeHeight * m_def.anchor_vertical) / 100);
+        ret.y += ((screenInfo.safeHeight * m_def.anchor_vertical) / 100);
     }
     else
     {
         ret.x += screenInfo.safeWidth/screenInfo.widthSegments * m_def.anchor_horizontal;
-        ret.y += screenSafeHeight/screenInfo.heightSegments * m_def.anchor_vertical;
+        ret.y += screenInfo.safeHeight/screenInfo.heightSegments * m_def.anchor_vertical;
     }
     return ret;
 }

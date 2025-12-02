@@ -1,21 +1,21 @@
-/*********************************************************************
-* If not stated otherwise in this file or this component's LICENSE file the
-* following copyright and licenses apply:
-*
-* Copyright 2021 Liberty Global Service B.V.
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-* http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*****************************************************************************/
+/*
+ * If not stated otherwise in this file or this component's LICENSE file the
+ * following copyright and licenses apply:
+ *
+ * Copyright 2021 RDK Management
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+*/
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <limits>
@@ -72,7 +72,7 @@ public:
         m_presenter = std::make_unique<Presenter>(*m_decoderClient, *m_database);
         // Ensure allocator starts from a clean state once per test instead of resetting per region.
         m_pixmapAllocator->reset();
-        
+
         // Set up basic display bounds
         setupBasicDisplayBounds();
     }
@@ -92,9 +92,9 @@ public:
         DecoderClientMock client;
         PixmapAllocator allocator(Specification::VERSION_1_3_1, client);
         Database database(Specification::VERSION_1_3_1, allocator);
-        
+
         Presenter presenter(client, database);
-        
+
         // Should be able to call public methods without crashing
         presenter.invalidate();
         presenter.draw();
@@ -103,9 +103,9 @@ public:
     void testBasicDraw()
     {
         m_decoderClient->clearCallbackHistory();
-        
+
         m_presenter->draw();
-        
+
         // Should call gfxFinish at minimum
         auto history = m_decoderClient->getCallbackHistory();
         CPPUNIT_ASSERT(!history.empty());
@@ -115,10 +115,10 @@ public:
     {
         // Invalidate should not crash and should affect next draw
         m_presenter->invalidate();
-        
+
         m_decoderClient->clearCallbackHistory();
         m_presenter->draw();
-        
+
         auto history = m_decoderClient->getCallbackHistory();
         CPPUNIT_ASSERT(!history.empty());
     }
@@ -128,10 +128,10 @@ public:
         // First draw
         m_presenter->draw();
         m_decoderClient->clearCallbackHistory();
-        
+
         // Second draw without changes - should be optimized
         m_presenter->draw();
-        
+
         auto history = m_decoderClient->getCallbackHistory();
         // Should still call gfxFinish but minimize other operations
         CPPUNIT_ASSERT(!history.empty());
@@ -143,7 +143,7 @@ public:
         m_presenter->invalidate();
         m_presenter->invalidate();
         m_presenter->invalidate();
-        
+
         // Should still work normally
         m_presenter->draw();
     }
@@ -152,14 +152,14 @@ public:
     {
         // Setup some content
         setupTestPage();
-        
+
         m_presenter->draw();
         m_decoderClient->clearCallbackHistory();
-        
+
         // Invalidate and draw again
         m_presenter->invalidate();
         m_presenter->draw();
-        
+
         auto history = m_decoderClient->getCallbackHistory();
         CPPUNIT_ASSERT(!history.empty());
     }
@@ -169,7 +169,7 @@ public:
     {
         // Setup page with zero-dimension region
         setupPageWithZeroDimensionRegion();
-        
+
         // Should handle gracefully without crashing
         m_presenter->draw();
     }
@@ -178,7 +178,7 @@ public:
     {
         // Setup page with negative coordinates
         setupPageWithNegativeCoordinates();
-        
+
         // Should handle gracefully
         m_presenter->draw();
     }
@@ -187,7 +187,7 @@ public:
     {
         // Setup page with extreme coordinate values
         setupPageWithExtremeCoordinates();
-        
+
         // Should handle without overflow
         m_presenter->draw();
     }
@@ -196,7 +196,7 @@ public:
     {
         // Database with no regions - should handle empty state
         m_presenter->draw();
-        
+
         auto history = m_decoderClient->getCallbackHistory();
         CPPUNIT_ASSERT(!history.empty()); // Should at least call gfxFinish
     }
@@ -205,7 +205,7 @@ public:
     {
         // Setup page with many regions
         setupPageWithManyRegions();
-        
+
         // Should handle large number of regions
         m_presenter->draw();
     }
@@ -214,7 +214,7 @@ public:
     {
         // Setup invalid bounds relationship
         setupInvalidBoundsRelationship();
-        
+
         // Should handle gracefully
         m_presenter->draw();
     }
@@ -223,7 +223,7 @@ public:
     {
         // Setup window extending beyond display
         setupWindowBeyondDisplay();
-        
+
         // Should clip or handle appropriately
         m_presenter->draw();
     }
@@ -233,7 +233,7 @@ public:
     {
         // Setup page with references to non-existent regions
         setupPageWithInvalidRegionReferences();
-        
+
         // Should skip null regions without crashing
         m_presenter->draw();
     }
@@ -242,7 +242,7 @@ public:
     {
         // Setup page with malformed rectangles
         setupPageWithCorruptedRectangles();
-        
+
         // Should validate and handle safely
         m_presenter->draw();
     }
@@ -252,23 +252,23 @@ public:
     {
         // Setup identical current and previous states
         m_presenter->draw(); // First draw
-        
+
         m_decoderClient->clearCallbackHistory();
         m_presenter->draw(); // Second draw with identical state
-        
+
         // Should optimize redundant operations
         auto history = m_decoderClient->getCallbackHistory();
         CPPUNIT_ASSERT(!history.empty());
     }
-    
+
     void testBoundsChangeNotifications()
     {
         // Change display/window bounds
         changeBounds();
-        
+
         m_decoderClient->clearCallbackHistory();
         m_presenter->draw();
-        
+
         // Should notify bounds changes
         auto history = m_decoderClient->getCallbackHistory();
         bool foundBoundsCall = false;
@@ -286,7 +286,7 @@ public:
         // Setup regions and verify modified rectangle calculation
         setupTestPage();
         m_presenter->draw();
-        
+
         // Verify that gfxFinish is called with some rectangle
         auto history = m_decoderClient->getCallbackHistory();
         bool foundFinish = false;
@@ -303,10 +303,10 @@ public:
     {
         // Setup case where nothing is modified
         m_presenter->draw(); // Initial draw
-        
+
         m_decoderClient->clearCallbackHistory();
         m_presenter->draw(); // Second draw, nothing changed
-        
+
         // Should still call gfxFinish with empty rectangle
         auto history = m_decoderClient->getCallbackHistory();
         bool foundFinish = false;
@@ -324,7 +324,7 @@ public:
     {
         // Setup few large regions
         setupFewLargeRegions();
-        
+
         // Should handle large regions
         m_presenter->draw();
     }
@@ -358,7 +358,7 @@ public:
     {
         // Setup overlapping regions directly
         setupPageWithOverlappingRegions();
-        
+
         // Should handle overlap correctly
         m_presenter->draw();
     }
@@ -366,7 +366,7 @@ public:
     void testCoordinateTransformation()
     {
         setupTestPage();
-        
+
         // Should transform coordinates correctly
         m_presenter->draw();
     }
@@ -375,7 +375,7 @@ public:
     {
         // Setup rectangles at exact boundaries
         setupBoundaryRectangles();
-        
+
         // Should handle boundary conditions
         m_presenter->draw();
     }
@@ -499,14 +499,14 @@ private:
         createTestRegion(1, -50, -50); // skipped
     }
 
-    void changeBounds() { 
+    void changeBounds() {
         auto& display = m_database->getCurrentDisplay();
         Rectangle displayBounds = {0, 0, 800, 600};
         Rectangle windowBounds = {0, 0, 800, 600};
         display.set(0, displayBounds, windowBounds);
     }
 
-    void setupFewLargeRegions() { 
+    void setupFewLargeRegions() {
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
         page.addRegion(1, 0, 0);
@@ -514,7 +514,7 @@ private:
         createTestRegion(1, 500, 400);
     }
 
-    void setupBoundaryRectangles() { 
+    void setupBoundaryRectangles() {
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
         page.addRegion(1, 10, 10);

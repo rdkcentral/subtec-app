@@ -119,6 +119,51 @@ add_cppunit_test(PacketTeletextSelection_Test
                  ../src/Buffer.cpp
                  ../src/BufferReader.cpp)
 
+add_cppunit_test(PacketTtmlSelection_Test
+                 PacketTtmlSelection_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/PacketTtmlSelection.cpp
+                 ../src/Packet.cpp
+                 ../src/Buffer.cpp
+                 ../src/BufferReader.cpp)
+
+add_cppunit_test(PacketSetCCAttributes_Test
+                 PacketSetCCAttributes_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/PacketSetCCAttributes.cpp
+                 ../src/Packet.cpp
+                 ../src/Buffer.cpp
+                 ../src/BufferReader.cpp)
+
+add_cppunit_test(PacketTtmlTimestamp_Test
+                 PacketTtmlTimestamp_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/PacketTtmlTimestamp.cpp
+                 ../src/Packet.cpp
+                 ../src/Buffer.cpp
+                 ../src/BufferReader.cpp)
+
+add_cppunit_test(PacketWebvttSelection_Test
+                 PacketWebvttSelection_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/PacketWebvttSelection.cpp
+                 ../src/Packet.cpp
+                 ../src/Buffer.cpp
+                 ../src/BufferReader.cpp)
+
+add_cppunit_test(PacketWebvttTimestamp_Test
+                 PacketWebvttTimestamp_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/PacketWebvttTimestamp.cpp
+                 ../src/Packet.cpp
+                 ../src/Buffer.cpp
+                 ../src/BufferReader.cpp)
+
 add_cppunit_test(StreamValidator_Test
                  StreamValidator_test.cpp
                  TestRunner.cpp
@@ -126,5 +171,46 @@ add_cppunit_test(StreamValidator_Test
                  ../src/StreamValidator.cpp
                  ../src/PacketTimestamp.cpp
                  ../src/Packet.cpp
+                 ../src/Buffer.cpp
+                 ../src/BufferReader.cpp)
+
+add_cppunit_test(Buffer_Test
+                 Buffer_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/Buffer.cpp)
+
+add_cppunit_test(BufferReader_Test
+                 BufferReader_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/BufferReader.cpp
+                 ../src/Buffer.cpp)
+
+add_cppunit_test(Packet_Test
+                 Packet_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/Packet.cpp
+                 ../src/Buffer.cpp
+                 ../src/BufferReader.cpp)
+
+add_cppunit_test(PacketParser_Test
+                 PacketParser_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/PacketParser.cpp
+                 ../src/Packet.cpp
+                 ../src/PacketData.cpp
+                 ../src/PacketTimestamp.cpp
+                 ../src/PacketSubtitleSelection.cpp
+                 ../src/PacketTeletextSelection.cpp
+                 ../src/PacketTtmlSelection.cpp
+                 ../src/PacketTtmlTimestamp.cpp
+                 ../src/PacketWebvttSelection.cpp
+                 ../src/PacketWebvttTimestamp.cpp
+                 ../src/PacketTtmlInfo.cpp
+                 ../src/PacketInvalid.cpp
+                 ../src/PacketSetCCAttributes.cpp
                  ../src/Buffer.cpp
                  ../src/BufferReader.cpp)

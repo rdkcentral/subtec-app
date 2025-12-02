@@ -170,7 +170,7 @@ public:
     void testConstructorInitialState()
     {
         PacketResetChannel packet;
-        
+
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::RESET_CHANNEL); // Type should be set by constructor
     }
 
@@ -179,7 +179,7 @@ public:
     {
         PacketResetChannel packet;
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::RESET_CHANNEL);
-        
+
         // Type should remain consistent after successful parsing
         std::uint8_t packetData[] = {
             0x04, 0x00, 0x00, 0x00, // type
@@ -187,7 +187,7 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0xAA, 0xBB, 0xCC, 0xDD, // channel id
         };
-        
+
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetData), std::end(packetData));
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::RESET_CHANNEL);
@@ -202,10 +202,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel packet;
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetData), std::end(packetData));
-        
+
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.getCounter() == 0x78563412); // Little endian conversion
     }
@@ -219,10 +219,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size (must be 4 for reset channel)
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel packet;
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetData), std::end(packetData));
-        
+
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.getSize() == 4);
     }
@@ -236,10 +236,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x12, 0x34, 0x56, 0x78, // channel id (little endian)
         };
-        
+
         PacketResetChannel packet;
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetData), std::end(packetData));
-        
+
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.getChannelId() == 0x78563412); // Little endian conversion
     }
@@ -248,10 +248,10 @@ public:
     void testIsValidBasic()
     {
         PacketResetChannel packet;
-        
+
         // Should be invalid initially
         CPPUNIT_ASSERT(!packet.isValid());
-        
+
         // Should be valid after successful parse
         std::uint8_t validData[] = {
             0x04, 0x00, 0x00, 0x00,
@@ -259,7 +259,7 @@ public:
             0x04, 0x00, 0x00, 0x00,
             0x01, 0x02, 0x03, 0x04,
         };
-        
+
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(validData), std::end(validData));
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.isValid());
@@ -269,7 +269,7 @@ public:
     void testParseMethodBasic()
     {
         PacketResetChannel packet;
-        
+
         // Test successful parse returns true
         std::uint8_t validData[] = {
             0x04, 0x00, 0x00, 0x00,
@@ -277,10 +277,10 @@ public:
             0x04, 0x00, 0x00, 0x00,
             0xFF, 0xFF, 0xFF, 0xFF,
         };
-        
+
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(validData), std::end(validData));
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)) == true);
-        
+
         // Test failed parse returns false
         std::uint8_t invalidData[] = {
             0xFF, 0x00, 0x00, 0x00, // invalid type
@@ -288,13 +288,11 @@ public:
             0x04, 0x00, 0x00, 0x00,
             0x01, 0x02, 0x03, 0x04,
         };
-        
+
         PacketResetChannel packet2;
         DataBufferPtr buffer2 = std::make_unique<DataBuffer>(std::begin(invalidData), std::end(invalidData));
         CPPUNIT_ASSERT(packet2.parse(std::move(buffer2)) == false);
     }
-
-    // L2 - Edge cases and error handling
 
     // Test counter boundary values
     void testCounterBoundaryValues()
@@ -306,10 +304,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel maxPacket;
         DataBufferPtr maxBuffer = std::make_unique<DataBuffer>(std::begin(maxCounterData), std::end(maxCounterData));
-        
+
         CPPUNIT_ASSERT(maxPacket.parse(std::move(maxBuffer)));
         CPPUNIT_ASSERT(maxPacket.isValid());
         CPPUNIT_ASSERT(maxPacket.getCounter() == 0xFFFFFFFF);
@@ -321,10 +319,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel zeroPacket;
         DataBufferPtr zeroBuffer = std::make_unique<DataBuffer>(std::begin(zeroCounterData), std::end(zeroCounterData));
-        
+
         CPPUNIT_ASSERT(zeroPacket.parse(std::move(zeroBuffer)));
         CPPUNIT_ASSERT(zeroPacket.isValid());
         CPPUNIT_ASSERT(zeroPacket.getCounter() == 0);
@@ -336,10 +334,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel midPacket;
         DataBufferPtr midBuffer = std::make_unique<DataBuffer>(std::begin(midCounterData), std::end(midCounterData));
-        
+
         CPPUNIT_ASSERT(midPacket.parse(std::move(midBuffer)));
         CPPUNIT_ASSERT(midPacket.isValid());
         CPPUNIT_ASSERT(midPacket.getCounter() == 0x7F800000);
@@ -355,10 +353,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0xAA, 0xBB, 0xCC, 0xDD, // channel id
         };
-        
+
         PacketResetChannel packet;
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(endiannessData), std::end(endiannessData));
-        
+
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.isValid());
         CPPUNIT_ASSERT(packet.getCounter() == 0x04030201);
@@ -374,10 +372,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0xFF, 0xFF, 0xFF, 0xFF, // channel id (max uint32_t)
         };
-        
+
         PacketResetChannel maxPacket;
         DataBufferPtr maxBuffer = std::make_unique<DataBuffer>(std::begin(maxChannelData), std::end(maxChannelData));
-        
+
         CPPUNIT_ASSERT(maxPacket.parse(std::move(maxBuffer)));
         CPPUNIT_ASSERT(maxPacket.isValid());
         CPPUNIT_ASSERT(maxPacket.getChannelId() == 0xFFFFFFFF);
@@ -389,10 +387,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x00, 0x00, 0x00, 0x00, // channel id (0)
         };
-        
+
         PacketResetChannel zeroPacket;
         DataBufferPtr zeroBuffer = std::make_unique<DataBuffer>(std::begin(zeroChannelData), std::end(zeroChannelData));
-        
+
         CPPUNIT_ASSERT(zeroPacket.parse(std::move(zeroBuffer)));
         CPPUNIT_ASSERT(zeroPacket.isValid());
         CPPUNIT_ASSERT(zeroPacket.getChannelId() == 0);
@@ -408,10 +406,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x11, 0x22, 0x33, 0x44, // channel id (little endian: 0x44332211)
         };
-        
+
         PacketResetChannel packet;
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(endiannessData), std::end(endiannessData));
-        
+
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.isValid());
         CPPUNIT_ASSERT(packet.getChannelId() == 0x44332211);
@@ -426,10 +424,10 @@ public:
             0x01, 0x00, 0x00, 0x00, // counter
             0x00, 0x00, 0x00, 0x00, // size (0)
         };
-        
+
         PacketResetChannel size0Packet;
         DataBufferPtr size0Buffer = std::make_unique<DataBuffer>(std::begin(size0Data), std::end(size0Data));
-        
+
         CPPUNIT_ASSERT(!size0Packet.parse(std::move(size0Buffer)));
         CPPUNIT_ASSERT(!size0Packet.isValid());
 
@@ -440,10 +438,10 @@ public:
             0x03, 0x00, 0x00, 0x00, // size (3)
             0x01, 0x02, 0x03,       // partial channel id
         };
-        
+
         PacketResetChannel size3Packet;
         DataBufferPtr size3Buffer = std::make_unique<DataBuffer>(std::begin(size3Data), std::end(size3Data));
-        
+
         CPPUNIT_ASSERT(!size3Packet.parse(std::move(size3Buffer)));
         CPPUNIT_ASSERT(!size3Packet.isValid());
 
@@ -454,10 +452,10 @@ public:
             0xFF, 0xFF, 0xFF, 0x7F, // size (large value)
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel largeSizePacket;
         DataBufferPtr largeSizeBuffer = std::make_unique<DataBuffer>(std::begin(largeSizeData), std::end(largeSizeData));
-        
+
         CPPUNIT_ASSERT(!largeSizePacket.parse(std::move(largeSizeBuffer)));
         CPPUNIT_ASSERT(!largeSizePacket.isValid());
     }
@@ -472,10 +470,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel resetAllPacket;
         DataBufferPtr resetAllBuffer = std::make_unique<DataBuffer>(std::begin(resetAllData), std::end(resetAllData));
-        
+
         CPPUNIT_ASSERT(!resetAllPacket.parse(std::move(resetAllBuffer)));
         CPPUNIT_ASSERT(!resetAllPacket.isValid());
 
@@ -486,10 +484,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel pesPacket;
         DataBufferPtr pesBuffer = std::make_unique<DataBuffer>(std::begin(pesData), std::end(pesData));
-        
+
         CPPUNIT_ASSERT(!pesPacket.parse(std::move(pesBuffer)));
         CPPUNIT_ASSERT(!pesPacket.isValid());
 
@@ -500,10 +498,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel timestampPacket;
         DataBufferPtr timestampBuffer = std::make_unique<DataBuffer>(std::begin(timestampData), std::end(timestampData));
-        
+
         CPPUNIT_ASSERT(!timestampPacket.parse(std::move(timestampBuffer)));
         CPPUNIT_ASSERT(!timestampPacket.isValid());
     }
@@ -518,10 +516,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel type0Packet;
         DataBufferPtr type0Buffer = std::make_unique<DataBuffer>(std::begin(type0Data), std::end(type0Data));
-        
+
         CPPUNIT_ASSERT(!type0Packet.parse(std::move(type0Buffer)));
         CPPUNIT_ASSERT(!type0Packet.isValid());
 
@@ -532,10 +530,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel invalidPacket;
         DataBufferPtr invalidBuffer = std::make_unique<DataBuffer>(std::begin(invalidTypeData), std::end(invalidTypeData));
-        
+
         CPPUNIT_ASSERT(!invalidPacket.parse(std::move(invalidBuffer)));
         CPPUNIT_ASSERT(!invalidPacket.isValid());
 
@@ -546,10 +544,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel randomPacket;
         DataBufferPtr randomBuffer = std::make_unique<DataBuffer>(std::begin(randomTypeData), std::end(randomTypeData));
-        
+
         CPPUNIT_ASSERT(!randomPacket.parse(std::move(randomBuffer)));
         CPPUNIT_ASSERT(!randomPacket.isValid());
     }
@@ -561,10 +559,10 @@ public:
         std::uint8_t partialTypeData[] = {
             0x04, 0x00, // partial type
         };
-        
+
         PacketResetChannel partialTypePacket;
         DataBufferPtr partialTypeBuffer = std::make_unique<DataBuffer>(std::begin(partialTypeData), std::end(partialTypeData));
-        
+
         CPPUNIT_ASSERT(!partialTypePacket.parse(std::move(partialTypeBuffer)));
         CPPUNIT_ASSERT(!partialTypePacket.isValid());
 
@@ -573,10 +571,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // type
             0x01, 0x00, // partial counter
         };
-        
+
         PacketResetChannel missingCounterPacket;
         DataBufferPtr missingCounterBuffer = std::make_unique<DataBuffer>(std::begin(missingCounterData), std::end(missingCounterData));
-        
+
         CPPUNIT_ASSERT(!missingCounterPacket.parse(std::move(missingCounterBuffer)));
         CPPUNIT_ASSERT(!missingCounterPacket.isValid());
 
@@ -586,10 +584,10 @@ public:
             0x01, 0x00, 0x00, 0x00, // counter
             0x04, 0x00, // partial size
         };
-        
+
         PacketResetChannel missingSizePacket;
         DataBufferPtr missingSizeBuffer = std::make_unique<DataBuffer>(std::begin(missingSizeData), std::end(missingSizeData));
-        
+
         CPPUNIT_ASSERT(!missingSizePacket.parse(std::move(missingSizeBuffer)));
         CPPUNIT_ASSERT(!missingSizePacket.isValid());
 
@@ -600,10 +598,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, // partial channel id (1 byte)
         };
-        
+
         PacketResetChannel partial1ChannelPacket;
         DataBufferPtr partial1ChannelBuffer = std::make_unique<DataBuffer>(std::begin(partial1ChannelData), std::end(partial1ChannelData));
-        
+
         CPPUNIT_ASSERT(!partial1ChannelPacket.parse(std::move(partial1ChannelBuffer)));
         CPPUNIT_ASSERT(!partial1ChannelPacket.isValid());
     }
@@ -613,7 +611,7 @@ public:
     {
         PacketResetChannel emptyPacket;
         DataBufferPtr emptyBuffer = std::make_unique<DataBuffer>();
-        
+
         CPPUNIT_ASSERT(!emptyPacket.parse(std::move(emptyBuffer)));
         CPPUNIT_ASSERT(!emptyPacket.isValid());
     }
@@ -627,9 +625,9 @@ public:
             0x04, 0x00, 0x00, 0x00,
             0xAA, 0xBB, 0xCC, 0xDD,
         };
-        
+
         PacketResetChannel packet;
-        
+
         // First parse
         DataBufferPtr buffer1 = std::make_unique<DataBuffer>(std::begin(validData1), std::end(validData1));
         CPPUNIT_ASSERT(packet.parse(std::move(buffer1)));
@@ -644,7 +642,7 @@ public:
             0x04, 0x00, 0x00, 0x00,
             0x55, 0x66, 0x77, 0x88,
         };
-        
+
         DataBufferPtr buffer2 = std::make_unique<DataBuffer>(std::begin(validData2), std::end(validData2));
         CPPUNIT_ASSERT(packet.parse(std::move(buffer2)));
         CPPUNIT_ASSERT(packet.isValid());
@@ -656,7 +654,7 @@ public:
     void testParseAfterFailedParse()
     {
         PacketResetChannel packet;
-        
+
         // First parse with invalid data
         std::uint8_t invalidData[] = {
             0xFF, 0x00, 0x00, 0x00, // invalid type
@@ -664,7 +662,7 @@ public:
             0x04, 0x00, 0x00, 0x00,
             0x01, 0x02, 0x03, 0x04,
         };
-        
+
         DataBufferPtr invalidBuffer = std::make_unique<DataBuffer>(std::begin(invalidData), std::end(invalidData));
         CPPUNIT_ASSERT(!packet.parse(std::move(invalidBuffer)));
         CPPUNIT_ASSERT(!packet.isValid());
@@ -676,7 +674,7 @@ public:
             0x04, 0x00, 0x00, 0x00,
             0x11, 0x22, 0x33, 0x44,
         };
-        
+
         DataBufferPtr validBuffer = std::make_unique<DataBuffer>(std::begin(validData), std::end(validData));
         CPPUNIT_ASSERT(packet.parse(std::move(validBuffer)));
         CPPUNIT_ASSERT(packet.isValid());
@@ -688,7 +686,7 @@ public:
     void testSequentialFailures()
     {
         PacketResetChannel packet;
-        
+
         // First failure: invalid type
         std::uint8_t invalidType[] = {0xFF, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00};
         DataBufferPtr buffer1 = std::make_unique<DataBuffer>(std::begin(invalidType), std::end(invalidType));
@@ -726,10 +724,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel corruptedTypePacket;
         DataBufferPtr corruptedTypeBuffer = std::make_unique<DataBuffer>(std::begin(corruptedTypeData), std::end(corruptedTypeData));
-        
+
         CPPUNIT_ASSERT(!corruptedTypePacket.parse(std::move(corruptedTypeBuffer)));
         CPPUNIT_ASSERT(!corruptedTypePacket.isValid());
 
@@ -740,10 +738,10 @@ public:
             0x04, 0xFF, 0x00, 0x00, // size (corrupted)
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel corruptedSizePacket;
         DataBufferPtr corruptedSizeBuffer = std::make_unique<DataBuffer>(std::begin(corruptedSizeData), std::end(corruptedSizeData));
-        
+
         CPPUNIT_ASSERT(!corruptedSizePacket.parse(std::move(corruptedSizeBuffer)));
         CPPUNIT_ASSERT(!corruptedSizePacket.isValid());
 
@@ -754,10 +752,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size
             0x01, 0x02, 0x03, 0x04, // channel id
         };
-        
+
         PacketResetChannel corruptedCounterPacket;
         DataBufferPtr corruptedCounterBuffer = std::make_unique<DataBuffer>(std::begin(corruptedCounterData), std::end(corruptedCounterData));
-        
+
         CPPUNIT_ASSERT(corruptedCounterPacket.parse(std::move(corruptedCounterBuffer)));
         CPPUNIT_ASSERT(corruptedCounterPacket.isValid());
         CPPUNIT_ASSERT(corruptedCounterPacket.getCounter() == 0xFFFFFF01);
@@ -772,10 +770,10 @@ public:
             0x08, 0x00, 0x00, 0x00, // size (8, but only 4 bytes of data follow)
             0x01, 0x02, 0x03, 0x04, // channel id (4 bytes)
         };
-        
+
         PacketResetChannel sizeMismatchPacket;
         DataBufferPtr sizeMismatchBuffer = std::make_unique<DataBuffer>(std::begin(sizeMismatchData), std::end(sizeMismatchData));
-        
+
         CPPUNIT_ASSERT(!sizeMismatchPacket.parse(std::move(sizeMismatchBuffer)));
         CPPUNIT_ASSERT(!sizeMismatchPacket.isValid());
 
@@ -787,10 +785,10 @@ public:
             0x04, 0x00, 0x00, 0x00, // size (exactly 4)
             0x01, 0x02, 0x03, 0x04, // channel id (exactly 4 bytes)
         };
-        
+
         PacketResetChannel exactSizePacket;
         DataBufferPtr exactSizeBuffer = std::make_unique<DataBuffer>(std::begin(exactSizeData), std::end(exactSizeData));
-        
+
         CPPUNIT_ASSERT(exactSizePacket.parse(std::move(exactSizeBuffer)));
         CPPUNIT_ASSERT(exactSizePacket.isValid());
         CPPUNIT_ASSERT(exactSizePacket.getSize() == 4);

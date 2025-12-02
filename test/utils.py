@@ -214,7 +214,7 @@ def check_and_restart_subtec():
         start_subtec("../../subttxrend-app/x86_builder", "../subtec_console_common.log")
 
         # wait to be sure subtec has started
-        if not wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 600, 1):
+        if not wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 750, 1):
             raise CriticalSubtecError("Subtec not started, check !")
         validate_unittests_results()
 
@@ -239,15 +239,26 @@ def validate_unittests_results():
         '4/6 Test #4: LoggerManagerImpl_Test ...........   Passed',
         '5/6 Test #5: JsonData_Test ....................   Passed',
         '6/6 Test #6: Properties_Test ..................   Passed',
+        '100% tests passed, 0 tests failed out of',
         'tests-subttxrend-protocol',
-        '1/8 Test #1: PacketData_Test ..................   Passed',
-        '2/8 Test #2: PacketTimestamp_Test .............   Passed',
-        '3/8 Test #3: PacketTtmlInfo_Test ..............   Passed',
-        '4/8 Test #4: PacketResetAll_Test ..............   Passed',
-        '5/8 Test #5: PacketResetChannel_Test ..........   Passed',
-        '6/8 Test #6: PacketSubtitleSelection_Test .....   Passed',
-        '7/8 Test #7: PacketTeletextSelection_Test .....   Passed',
-        '8/8 Test #8: StreamValidator_Test .............   Passed',
+        '1/17 Test  #1: PacketData_Test ..................   Passed',
+        '2/17 Test  #2: PacketTimestamp_Test .............   Passed',
+        '3/17 Test  #3: PacketTtmlInfo_Test ..............   Passed',
+        '4/17 Test  #4: PacketResetAll_Test ..............   Passed',
+        '5/17 Test  #5: PacketResetChannel_Test ..........   Passed',
+        '6/17 Test  #6: PacketSubtitleSelection_Test .....   Passed',
+        '7/17 Test  #7: PacketTeletextSelection_Test .....   Passed',
+        '8/17 Test  #8: PacketTtmlSelection_Test .........   Passed',
+        '9/17 Test  #9: PacketSetCCAttributes_Test .......   Passed',
+        '10/17 Test #10: PacketTtmlTimestamp_Test .........   Passed',
+        '11/17 Test #11: PacketWebvttSelection_Test .......   Passed',
+        '12/17 Test #12: PacketWebvttTimestamp_Test .......   Passed',
+        '13/17 Test #13: StreamValidator_Test .............   Passed',
+        '14/17 Test #14: Buffer_Test ......................   Passed',
+        '15/17 Test #15: BufferReader_Test ................   Passed',
+        '16/17 Test #16: Packet_Test ......................   Passed',
+        '17/17 Test #17: PacketParser_Test ................   Passed',
+        '100% tests passed, 0 tests failed out of',
         'tests-dvbsubdecoder',
         '1/32 Test  #1: BitStream_Test ...................   Passed',
         '2/32 Test  #2: Clut_Test ........................   Passed',
@@ -281,11 +292,13 @@ def validate_unittests_results():
         '30/32 Test #30: Decoder_Test .....................   Passed',
         '31/32 Test #31: ColorCalculator_Test .............   Passed',
         '32/32 Test #32: Coverage_Test ....................   Passed',
+        '100% tests passed, 0 tests failed out of',
         'tests-subttxrend-ttml',
         '1/4 Test #1: TtmlTiming_Test ..................   Passed',
         '2/4 Test #2: StyleSet_Test ....................   Passed',
         '3/4 Test #3: DocumentInstance_Test ............   Passed',
         '4/4 Test #4: AttributeHandlers_test ...........   Passed',
+        '100% tests passed, 0 tests failed out of',
         'tests-subttxrend-webvtt',
         '1/6 Test #1: WebVTTCue_test ...................   Passed',
         '2/6 Test #2: WebVTTDocument_test ..............   Passed',
@@ -293,8 +306,28 @@ def validate_unittests_results():
         '4/6 Test #4: LineBuilder_test .................   Passed',
         '5/6 Test #5: WebVTTAttributes_test ............   Passed',
         '6/6 Test #6: WebVTTConfig_test ................   Passed',
+        '100% tests passed, 0 tests failed out of',
         'tests-ttxdecoder',
-        '1/1 Test #1: CacheImpl_Test ...................   Passed']
+        '1/1 Test #1: CacheImpl_Test ...................   Passed',
+        'tests-subttxrend-cc',
+        '1/8 Test #1: CcCaptionChannelPacket_Test ......   Passed',
+        '2/8 Test #2: CcCommand608Parser_Test ..........   Passed',
+        '3/8 Test #3: CcCommandParser_Test .............   Passed',
+        '4/8 Test #4: CcController_Test ................   Passed',
+        '5/8 Test #5: CcTextGfxDrawer_Test .............   Passed',
+        '6/8 Test #6: CcWindow_Test ....................   Passed',
+        '7/8 Test #7: CcWindowController_Test ..........   Passed',
+        '8/8 Test #8: CcUserData_Test ..................   Passed',
+        '100% tests passed, 0 tests failed out of',
+        'tests-subttxrend-gfx',
+        '1/7 Test #1: EngineImpl_Test ..................   Passed',
+        '2/7 Test #2: WindowImpl_Test ..................   Passed',
+        '3/7 Test #3: FontStripImpl_Test ...............   Passed',
+        '4/7 Test #4: Base64ToPixmap_Test ..............   Passed',
+        '5/7 Test #5: ColorArgb_Test ...................   Passed',
+        '6/7 Test #6: PrerenderedFontImpl_Test .........   Passed',
+        '7/7 Test #7: PrerenderedFontCache_Test ........   Passed',
+        '100% tests passed, 0 tests failed out of']
     if not monitor_log_for_sequence("../../test/subtec_console_common.log", log_sequence):
         raise CriticalSubtecError("Check and fix unit test failures before proceeding !")
     else:

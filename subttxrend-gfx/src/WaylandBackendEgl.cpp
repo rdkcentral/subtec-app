@@ -141,9 +141,9 @@ bool WaylandBackendEgl::initRendering()
 
 #ifdef USE_UPSTREAM_WAYLAND
 #ifdef EGL_PLATFORM_WAYLAND_EXT
-    PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT= (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
+    PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
     if (eglGetPlatformDisplayEXT)
-      m_eglDisplay = eglGetPlatformDisplayEXT(EGL_PLATFORM_WAYLAND_EXT, getDisplay()->getNativeObject(), NULL);
+        m_eglDisplay = eglGetPlatformDisplayEXT(EGL_PLATFORM_WAYLAND_EXT, getDisplay()->getNativeObject(), nullptr);
     else
 #endif
 #endif

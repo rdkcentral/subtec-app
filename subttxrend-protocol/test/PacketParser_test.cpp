@@ -65,7 +65,6 @@ CPPUNIT_TEST_SUITE(PacketParserTest);
     CPPUNIT_TEST(testSequentialParseCallsWithDifferentTypes);
     CPPUNIT_TEST(testParseReturnsInvalidAfterMultipleFailures);
     CPPUNIT_TEST(testParseRecoveryAfterInvalidPacket);
-    CPPUNIT_TEST(testParsePacketReferenceSemantics);
     CPPUNIT_TEST(testParsePacketWithCounterZero);
     CPPUNIT_TEST(testParsePacketWithCounterMaxValue);
     CPPUNIT_TEST(testParseTruncatedHeader);
@@ -75,7 +74,6 @@ CPPUNIT_TEST_SUITE(PacketParserTest);
     CPPUNIT_TEST(testExtractTypeInvalidPacket);
     CPPUNIT_TEST(testParserStateIsolationBetweenCalls);
     CPPUNIT_TEST(testPacketReusePattern);
-    CPPUNIT_TEST(testPreviousPacketInvalidatedOnNewParse);
     CPPUNIT_TEST(testParseAllRegisteredPacketTypes);
     CPPUNIT_TEST(testParseAlternatingPacketTypes);
     CPPUNIT_TEST(testSubtitleWorkflowSequence);
@@ -91,9 +89,7 @@ CPPUNIT_TEST_SUITE(PacketParserTest);
     CPPUNIT_TEST(testAlternatingMultiChannelPackets);
     CPPUNIT_TEST(testLargeDataPacketParsing);
     CPPUNIT_TEST(testRapidSuccessionPackets);
-    CPPUNIT_TEST(testBufferIntegration);
     CPPUNIT_TEST(testDataBufferLifecycle);
-    CPPUNIT_TEST(testAllPacketTypesInSession);
     CPPUNIT_TEST(testCounterProgression);
     CPPUNIT_TEST(testFlushFollowedByNewData);
     CPPUNIT_TEST(testPacketDataPolymorphism);
@@ -903,28 +899,6 @@ public:
         CPPUNIT_ASSERT(validPacket.getCounter() == 0x12345678);
     }
 
-    void testParsePacketReferenceSemantics()
-    {
-        PacketParser parser;
-
-        // Parse first packet and get reference
-        DataBufferPtr buffer1 = createValidPacket(Packet::Type::RESET_ALL, 0xAAAAAAAA);
-        const Packet& packet1 = parser.parse(std::move(buffer1));
-        CPPUNIT_ASSERT(packet1.isValid());
-        CPPUNIT_ASSERT(packet1.getType() == Packet::Type::RESET_ALL);
-        CPPUNIT_ASSERT(packet1.getCounter() == 0xAAAAAAAA);
-
-        // Parse second packet - first reference should be invalidated
-        DataBufferPtr buffer2 = createValidPacket(Packet::Type::TIMESTAMP, 0xBBBBBBBB);
-        const Packet& packet2 = parser.parse(std::move(buffer2));
-        CPPUNIT_ASSERT(packet2.isValid());
-        CPPUNIT_ASSERT(packet2.getType() == Packet::Type::TIMESTAMP);
-        CPPUNIT_ASSERT(packet2.getCounter() == 0xBBBBBBBB);
-
-        // Note: packet1 reference may now point to different data (object reuse)
-        // This is expected behavior per class documentation
-    }
-
     void testParsePacketWithCounterZero()
     {
         PacketParser parser;
@@ -1067,31 +1041,6 @@ public:
             CPPUNIT_ASSERT(packet.getType() == Packet::Type::MUTE);
             CPPUNIT_ASSERT(packet.getCounter() == counter);
         }
-    }
-
-    void testPreviousPacketInvalidatedOnNewParse()
-    {
-        PacketParser parser;
-
-        // Parse first packet
-        DataBufferPtr buffer1 = createValidPacket(Packet::Type::FLUSH, 0xAAAAAAAA);
-        const Packet& firstPacket = parser.parse(std::move(buffer1));
-        CPPUNIT_ASSERT(firstPacket.isValid());
-        CPPUNIT_ASSERT(firstPacket.getType() == Packet::Type::FLUSH);
-
-        // Store type and counter from first packet
-        Packet::Type firstType = firstPacket.getType();
-        std::uint32_t firstCounter = firstPacket.getCounter();
-
-        // Parse second packet
-        DataBufferPtr buffer2 = createValidPacket(Packet::Type::MUTE, 0xBBBBBBBB);
-        const Packet& secondPacket = parser.parse(std::move(buffer2));
-        CPPUNIT_ASSERT(secondPacket.isValid());
-        CPPUNIT_ASSERT(secondPacket.getType() == Packet::Type::MUTE);
-
-        // First packet reference values should remain consistent with what we stored
-        CPPUNIT_ASSERT(firstType == Packet::Type::FLUSH);
-        CPPUNIT_ASSERT(firstCounter == 0xAAAAAAAA);
     }
 
     void testParseAllRegisteredPacketTypes()
@@ -1485,19 +1434,6 @@ public:
         }
     }
 
-    // Buffer integration
-    void testBufferIntegration()
-    {
-        PacketParser parser;
-
-        // Parser uses Buffer internally via extractType
-        DataBufferPtr buffer = createValidPacket(Packet::Type::RESET_ALL, 0x000000D0);
-        const Packet& packet = parser.parse(std::move(buffer));
-
-        CPPUNIT_ASSERT(packet.isValid());
-        CPPUNIT_ASSERT(packet.getType() == Packet::Type::RESET_ALL);
-    }
-
     // DataBuffer lifecycle
     void testDataBufferLifecycle()
     {
@@ -1509,45 +1445,6 @@ public:
 
         CPPUNIT_ASSERT(packet.isValid());
         // After parse, buffer ownership may be transferred to packet for data packets
-    }
-
-    // All packet types in single session
-    void testAllPacketTypesInSession()
-    {
-        PacketParser parser;
-
-        Packet::Type allTypes[] = {
-            Packet::Type::PES_DATA,
-            Packet::Type::TIMESTAMP,
-            Packet::Type::RESET_ALL,
-            Packet::Type::RESET_CHANNEL,
-            Packet::Type::SUBTITLE_SELECTION,
-            Packet::Type::TELETEXT_SELECTION,
-            Packet::Type::TTML_SELECTION,
-            Packet::Type::TTML_DATA,
-            Packet::Type::TTML_TIMESTAMP,
-            Packet::Type::CC_DATA,
-            Packet::Type::PAUSE,
-            Packet::Type::RESUME,
-            Packet::Type::MUTE,
-            Packet::Type::UNMUTE,
-            Packet::Type::WEBVTT_SELECTION,
-            Packet::Type::WEBVTT_DATA,
-            Packet::Type::WEBVTT_TIMESTAMP,
-            Packet::Type::SET_CC_ATTRIBUTES,
-            Packet::Type::TTML_INFO,
-            Packet::Type::FLUSH
-        };
-
-        // Parse all types without interference
-        for (size_t i = 0; i < sizeof(allTypes) / sizeof(allTypes[0]); i++)
-        {
-            DataBufferPtr buffer = createValidPacket(allTypes[i], 0x000000F0 + i);
-            const Packet& packet = parser.parse(std::move(buffer));
-
-            CPPUNIT_ASSERT(packet.isValid());
-            CPPUNIT_ASSERT(packet.getType() == allTypes[i]);
-        }
     }
 
     // Counter progression

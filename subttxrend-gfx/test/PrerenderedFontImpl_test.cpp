@@ -2265,7 +2265,7 @@ public:
         font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
 
         // Test with complex script if font supports it
-        auto tokens = font->textToTokens("संस्कृत"); // Sanskrit (Devanagari)
+        auto tokens = font->textToTokens("संस्कृत"); // Sanskrit
 
         // Should create tokens without crashing
         CPPUNIT_ASSERT(tokens.size() >= 0);

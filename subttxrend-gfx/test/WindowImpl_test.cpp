@@ -186,8 +186,6 @@ CPPUNIT_TEST_SUITE( WindowImplTest );
     CPPUNIT_TEST(testUpdateWhenNotVisibleDoesNotCallRequestRedraw);
     CPPUNIT_TEST(testUpdateAcquiresLock);
     CPPUNIT_TEST(testUpdateMultipleTimes);
-    CPPUNIT_TEST(testClearClearsDrawingSurface);
-    CPPUNIT_TEST(testClearClearsBackgroundSurface);
     CPPUNIT_TEST(testClearCallsRequestRedraw);
     CPPUNIT_TEST(testClearAcquiresLock);
     CPPUNIT_TEST(testSetEngineHooksWithValidHooks);
@@ -902,29 +900,6 @@ public:
         Rectangle bounds = window.getBounds();
         CPPUNIT_ASSERT_EQUAL(100, bounds.m_w);
         CPPUNIT_ASSERT_EQUAL(100, bounds.m_h);
-    }
-
-    void testClearClearsDrawingSurface()
-    {
-        WindowImpl window;
-        window.setSize(Size{100, 100});
-
-        // Clear should not throw
-        window.clear();
-
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testClearClearsBackgroundSurface()
-    {
-        WindowImpl window;
-        window.setSize(Size{100, 100});
-
-        // Clear should clear both surfaces without crashing
-        window.clear();
-        window.update();
-
-        CPPUNIT_ASSERT(true);
     }
 
     void testClearCallsRequestRedraw()
@@ -1837,7 +1812,7 @@ public:
 
         DrawContext& context = window.getDrawContext();
 
-        // Create a font strip (simplified, real implementation would use actual font)
+        // Create a font strip
         FontStripPtr fontStrip = std::make_shared<FontStripImpl>(Size{16, 16}, 256);
 
         ColorArgb fgColor(255, 0, 0, 0);

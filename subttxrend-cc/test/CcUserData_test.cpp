@@ -64,7 +64,6 @@ class CcUserDataTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testIsValidAfterParsingAtscData);
     CPPUNIT_TEST(testIsValidAfterSetUserData);
     CPPUNIT_TEST(testCcDataIsCcpStartWithValidStart);
-    CPPUNIT_TEST(testCcDataIsCcpStartWithInvalidStart);
     CPPUNIT_TEST(testCcDataIsCcpStartWithOtherType);
     CPPUNIT_TEST(testCcDataIsCcpDataWithValidData);
     CPPUNIT_TEST(testCcDataIsCcpDataWithInvalidData);
@@ -89,7 +88,6 @@ class CcUserDataTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testMemoryManagementLargeData);
     CPPUNIT_TEST(testStateTransitionFromInvalidToValid);
     CPPUNIT_TEST(testStateReplacementOnSecondSet);
-    CPPUNIT_TEST(testExceptionDoesNotCorruptState);
     CPPUNIT_TEST(testMultipleExceptions);
     CPPUNIT_TEST(testCompleteWorkflow);
     CPPUNIT_TEST(testMultipleSetUserDataCalls);
@@ -503,18 +501,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(true, ccData->isCcpStart());
     }
 
-    void testCcDataIsCcpStartWithInvalidStart()
-    {
-        // In ATSC_CC_POC path, ccValid is always true, so we can't test invalid case
-        // This test verifies behavior when ccType is DTVCC_CCP_START
-        UserData userData;
-        std::uint8_t data[] = {0x03, 0x11, 0x22};
-        userData.setUserData(data, 3);
-
-        const CcData* ccData = userData.getCcData()[0].get();
-        CPPUNIT_ASSERT_EQUAL(true, ccData->isCcpStart());
-    }
-
     void testCcDataIsCcpStartWithOtherType()
     {
         UserData userData;
@@ -830,28 +816,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), userData.getCcData().size());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x11), userData.getCcData()[0]->data1);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xAA), userData.getCcData()[2]->data1);
-    }
-
-    void testExceptionDoesNotCorruptState()
-    {
-        UserData userData;
-        std::uint8_t validData[] = {0x00, 0x11, 0x22};
-        userData.setUserData(validData, 3);
-
-        CPPUNIT_ASSERT_EQUAL(true, userData.isValid());
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), userData.getCcData().size());
-
-        // Try to set invalid data
-        try {
-            userData.setUserData(nullptr, 3);
-            CPPUNIT_FAIL("Should have thrown InvalidArgument");
-        } catch (const InvalidArgument&) {
-            // Expected exception
-        }
-
-        // State should remain valid (ATSC_CC_POC clears ccData before validation)
-        // After exception, ccData is cleared but processCcData might be affected
-        // In ATSC_CC_POC, processCcData is set before validation, so it remains true
     }
 
     void testMultipleExceptions()

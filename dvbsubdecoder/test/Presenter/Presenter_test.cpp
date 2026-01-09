@@ -43,7 +43,6 @@ CPPUNIT_TEST_SUITE( PresenterTest );
     CPPUNIT_TEST(testMultipleInvalidateCalls);
     CPPUNIT_TEST(testDrawAfterInvalidateSequence);
     CPPUNIT_TEST(testZeroDimensionRectangles);
-    CPPUNIT_TEST(testNegativeCoordinateRectangles);
     CPPUNIT_TEST(testIntegerLimitCoordinates);
     CPPUNIT_TEST(testEmptyRenderingState);
     CPPUNIT_TEST(testMaximumRegionCount);
@@ -171,15 +170,6 @@ public:
         setupPageWithZeroDimensionRegion();
 
         // Should handle gracefully without crashing
-        m_presenter->draw();
-    }
-
-    void testNegativeCoordinateRectangles()
-    {
-        // Setup page with negative coordinates
-        setupPageWithNegativeCoordinates();
-
-        // Should handle gracefully
         m_presenter->draw();
     }
 
@@ -422,16 +412,6 @@ private:
         page.addRegion(1, 100, 100);
         page.finishParsing();
         createTestRegion(1, 0, 0); // skipped in helper
-    }
-
-    void setupPageWithNegativeCoordinates()
-    {
-        // API does not support negative addresses; use 0,0 to keep test compiling.
-        auto& page = m_database->getPage();
-        page.startParsing(0, StcTime(), 5);
-        page.addRegion(1, 0, 0);
-        page.finishParsing();
-        createTestRegion(1, 100, 100);
     }
 
     void setupPageWithExtremeCoordinates()

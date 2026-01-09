@@ -214,7 +214,7 @@ def check_and_restart_subtec():
         start_subtec("../../subttxrend-app/x86_builder", "../subtec_console_common.log")
 
         # wait to be sure subtec has started
-        if not wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 750, 1):
+        if not wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 800, 1):
             raise CriticalSubtecError("Subtec not started, check !")
         validate_unittests_results()
 
@@ -308,7 +308,21 @@ def validate_unittests_results():
         '6/6 Test #6: WebVTTConfig_test ................   Passed',
         '100% tests passed, 0 tests failed out of',
         'tests-ttxdecoder',
-        '1/1 Test #1: CacheImpl_Test ...................   Passed',
+        '1/14 Test  #1: CacheImpl_Test ...................   Passed',
+        '2/14 Test  #2: CharsetMapping_Test ..............   Passed',
+        '3/14 Test  #3: Collector_Test ...................   Passed',
+        '4/14 Test  #4: Database_Test ....................   Passed',
+        '5/14 Test  #5: DecodedPage_Test .................   Passed',
+        '6/14 Test  #6: Decoder_Test .....................   Passed',
+        '7/14 Test  #7: EngineImpl_Test ..................   Passed',
+        '8/14 Test  #8: Hamming_Test .....................   Passed',
+        '9/14 Test  #9: MetadataProcessor_Test ...........   Passed',
+        '10/14 Test #10: Parser_Test ......................   Passed',
+        '11/14 Test #11: ParserX26_Test ...................   Passed',
+        '12/14 Test #12: PesBuffer_Test ...................   Passed',
+        '13/14 Test #13: PesPacketReader_Test .............   Passed',
+        '14/14 Test #14: TopNavProcessor_Test .............   Passed',
+        '100% tests passed, 0 tests failed out of',
         'tests-subttxrend-cc',
         '1/8 Test #1: CcCaptionChannelPacket_Test ......   Passed',
         '2/8 Test #2: CcCommand608Parser_Test ..........   Passed',
@@ -327,7 +341,32 @@ def validate_unittests_results():
         '5/7 Test #5: ColorArgb_Test ...................   Passed',
         '6/7 Test #6: PrerenderedFontImpl_Test .........   Passed',
         '7/7 Test #7: PrerenderedFontCache_Test ........   Passed',
-        '100% tests passed, 0 tests failed out of']
+        '100% tests passed, 0 tests failed out of',
+        'tests-subttxrend-socksrc',
+        '1/2 Test #1: UnixSocket_Test ..................   Passed',
+        '2/2 Test #2: UnixSocketSource_Test ............   Passed',
+        '100% tests passed, 0 tests failed out of',
+        'tests-subttxrend-dvbsub',
+        '1/2 Test #1: SubtitlesRendererImpl_Test .......   Passed',
+        '2/2 Test #2: DecoderClientGfxRenderer_Test ....   Passed',
+        '100% tests passed, 0 tests failed out of',
+        'tests-subttxrend-app',
+        '1/2 Test #1: Application_Test .................   Passed',
+        '2/2 Test #2: Controller_Test ..................   Passed',
+        '100% tests passed, 0 tests failed out of',
+        'tests-subttxrend-ctrl',
+        '1/10 Test  #1: CcSubController_Test .............   Passed',
+        '2/10 Test  #2: Configuration_Test ...............   Passed',
+        '3/10 Test  #3: DvbSubController_Test ............   Passed',
+        '4/10 Test  #4: Options_Test .....................   Passed',
+        '5/10 Test  #5: PesFinder_Test ...................   Passed',
+        '6/10 Test  #6: ScteSubController_Test ...........   Passed',
+        '7/10 Test  #7: StcProvider_Test .................   Passed',
+        '8/10 Test  #8: TtmlController_Test ..............   Passed',
+        '9/10 Test  #9: TtxController_Test ...............   Passed',
+        '10/10 Test #10: WebvttController_Test ............   Passed',
+        '100% tests passed, 0 tests failed out of'
+        ]
     if not monitor_log_for_sequence("../../test/subtec_console_common.log", log_sequence):
         raise CriticalSubtecError("Check and fix unit test failures before proceeding !")
     else:

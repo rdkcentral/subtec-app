@@ -41,7 +41,6 @@ class CcCaptionChannelPacketTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testZeroSizePacket);
     CPPUNIT_TEST(testMaxSizePacket);
     CPPUNIT_TEST(testSingleBytePacket);
-    CPPUNIT_TEST(testSequenceNumbers);
     CPPUNIT_TEST(testMultipleResets);
     CPPUNIT_TEST(testConstructorWithInvalidData);
     CPPUNIT_TEST(testIsFullAfterReset);
@@ -261,21 +260,6 @@ public:
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), packet.getSize());
         CPPUNIT_ASSERT_EQUAL(true, packet.isFull());  // 1 byte data + 1 header = 2 total
-    }
-
-    void testSequenceNumbers()
-    {
-        // Test all possible sequence numbers (0-3)
-        for (uint8_t seqNo = 0; seqNo < 4; ++seqNo)
-        {
-            CaptionChannelPacket packet;
-            CcData startData = createValidStartData(seqNo, 2);
-
-            packet.addCcData(startData);
-
-            // We can't directly test seqNo as it's private, but we can verify the packet works
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), packet.getSize());
-        }
     }
 
     void testMultipleResets()

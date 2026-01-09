@@ -304,8 +304,6 @@ class CcTextGfxDrawerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testDimensionsWithEdgeUniform);
     CPPUNIT_TEST(testGetTextEmpty);
     CPPUNIT_TEST(testGetTextAfterReport);
-    CPPUNIT_TEST(testSetMaxWidthZero);
-    CPPUNIT_TEST(testSetMaxWidthPositive);
     CPPUNIT_TEST(testFontHeightDelegates);
     CPPUNIT_TEST(testMaxAdvanceDelegates);
     CPPUNIT_TEST(testSetFlashStateShow);
@@ -859,20 +857,6 @@ public:
     {
         drawer->report("Hello", windowDef);
         CPPUNIT_ASSERT_EQUAL(std::string("Hello"), drawer->getText());
-    }
-
-    void testSetMaxWidthZero()
-    {
-        drawer->setMaxWidth(0);
-        // No crash, width stored
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testSetMaxWidthPositive()
-    {
-        drawer->setMaxWidth(100);
-        // Width stored for use in draw
-        CPPUNIT_ASSERT(true);
     }
 
     void testFontHeightDelegates()

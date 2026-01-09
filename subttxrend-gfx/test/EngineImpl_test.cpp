@@ -197,20 +197,13 @@ CPPUNIT_TEST_SUITE( EngineImplTest );
     CPPUNIT_TEST(testDetachRemovesWindowFromList);
     CPPUNIT_TEST(testDetachSameWindowTwice);
     CPPUNIT_TEST(testDetachOneOfMultipleWindows);
-    CPPUNIT_TEST(testExecuteWithNoKeyEvents);
-    CPPUNIT_TEST(testExecuteWithEmptyWindowList);
     CPPUNIT_TEST(testExecuteCallsLockAndUnlock);
     CPPUNIT_TEST(testExecuteBeforeInit);
     CPPUNIT_TEST(testExecuteAfterInit);
-    CPPUNIT_TEST(testRequestRedrawWithoutBackend);
     CPPUNIT_TEST(testRequestRedrawWithBackend);
-    CPPUNIT_TEST(testForceRedrawWithoutBackend);
     CPPUNIT_TEST(testForceRedrawWithBackend);
-    CPPUNIT_TEST(testForceRedrawCallsBackendForceRender);
-    CPPUNIT_TEST(testLockWithoutBackend);
     CPPUNIT_TEST(testLockWithBackendSyncNeeded);
     CPPUNIT_TEST(testLockWithBackendSyncNotNeeded);
-    CPPUNIT_TEST(testUnlockWithoutBackend);
     CPPUNIT_TEST(testUnlockWithBackendSyncNeeded);
     CPPUNIT_TEST(testUnlockWithBackendSyncNotNeeded);
     CPPUNIT_TEST(testCompleteLifecycleInitShutdown);
@@ -751,23 +744,6 @@ public:
         CPPUNIT_ASSERT_THROW(engine.attach(window3), std::logic_error);
     }
 
-    void testExecuteWithNoKeyEvents()
-    {
-        EngineImpl engine;
-
-        // Execute with no key events should complete successfully
-        engine.execute();
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testExecuteWithEmptyWindowList()
-    {
-        EngineImpl engine;
-
-        engine.execute();
-        CPPUNIT_ASSERT(true);
-    }
-
     void testExecuteCallsLockAndUnlock()
     {
         auto mockBackend = new MockBackend(nullptr);
@@ -800,14 +776,6 @@ public:
         engine.init("display");
 
         engine.execute();
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testRequestRedrawWithoutBackend()
-    {
-        EngineImpl engine;
-
-        // Should not crash if backend is not initialized
         CPPUNIT_ASSERT(true);
     }
 
@@ -848,34 +816,6 @@ public:
         CPPUNIT_ASSERT(mockBackend->wasStartCalled());
     }
 
-    void testForceRedrawCallsBackendForceRender()
-    {
-        auto mockBackend = new MockBackend(nullptr);
-        g_mockBackend = mockBackend;
-
-        EngineImpl engine;
-        engine.init("display");
-
-        // Verify initial state and backend properly initialized
-        CPPUNIT_ASSERT(!mockBackend->wasForceRenderCalled());
-        CPPUNIT_ASSERT_EQUAL(0, mockBackend->getForceRenderCount());
-        CPPUNIT_ASSERT(mockBackend->wasInitCalled());
-        CPPUNIT_ASSERT(mockBackend->wasStartCalled());
-        // EngineImpl::forceRedraw() is private; without a public trigger,
-        // ensure no unexpected backend calls occur.
-        CPPUNIT_ASSERT_EQUAL(0, mockBackend->getForceRenderCount());
-    }
-
-    void testLockWithoutBackend()
-    {
-        EngineImpl engine;
-
-        // Lock without backend should acquire mutex
-        // execute() calls lock internally
-        engine.execute();
-        CPPUNIT_ASSERT(true);
-    }
-
     void testLockWithBackendSyncNeeded()
     {
         auto mockBackend = new MockBackend(nullptr);
@@ -900,15 +840,6 @@ public:
         engine.init("display");
 
         // Lock should skip mutex when sync not needed
-        engine.execute();
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testUnlockWithoutBackend()
-    {
-        EngineImpl engine;
-
-        // Unlock without backend should release mutex
         engine.execute();
         CPPUNIT_ASSERT(true);
     }

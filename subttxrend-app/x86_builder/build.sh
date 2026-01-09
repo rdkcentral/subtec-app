@@ -348,6 +348,10 @@ build_tests     $AV_PROJECTS_DIR/subttxrend-webvtt/test    build/tests-subttxren
 build_tests     $AV_PROJECTS_DIR/ttxdecoder/test           build/tests-ttxdecoder             $INSTALL_DIR
 build_tests     $AV_PROJECTS_DIR/subttxrend-cc/test        build/tests-subttxrend-cc          $INSTALL_DIR
 build_tests     $AV_PROJECTS_DIR/subttxrend-gfx/test       build/tests-subttxrend-gfx         $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-socksrc/test   build/tests-subttxrend-socksrc     $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-dvbsub/test    build/tests-subttxrend-dvbsub      $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-app/test       build/tests-subttxrend-app         $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-ctrl/test      build/tests-subttxrend-ctrl        $INSTALL_DIR
 
 elif [ "$COMMAND" == "dotest" ] ; then
 
@@ -364,6 +368,10 @@ run_tests       build/tests-subttxrend-webvtt
 run_tests       build/tests-ttxdecoder
 run_tests       build/tests-subttxrend-cc
 run_tests       build/tests-subttxrend-gfx
+run_tests       build/tests-subttxrend-socksrc
+run_tests       build/tests-subttxrend-dvbsub
+run_tests       build/tests-subttxrend-app
+run_tests       build/tests-subttxrend-ctrl
 
 elif [ "$COMMAND" == "testcoverage" ] ; then
 

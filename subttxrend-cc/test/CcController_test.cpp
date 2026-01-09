@@ -301,7 +301,6 @@ class CcControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testConstructor);
     CPPUNIT_TEST(testDestructor);
     CPPUNIT_TEST(testInitWithValidParameters);
-    CPPUNIT_TEST(testInitWithNullFontCache);
     CPPUNIT_TEST(testInitReturnValue);
     CPPUNIT_TEST(testStartAfterInit);
     CPPUNIT_TEST(testStartMultipleTimes);
@@ -420,13 +419,6 @@ public:
     void testInitWithValidParameters()
     {
         bool result = controller->init(static_cast<subttxrend::gfx::Window*>(mockWindow), fontCache);
-        CPPUNIT_ASSERT_EQUAL(true, result);
-    }
-
-    void testInitWithNullFontCache()
-    {
-        bool result = controller->init(static_cast<subttxrend::gfx::Window*>(mockWindow), nullptr);
-        // Controller::init() returns true regardless of font cache presence
         CPPUNIT_ASSERT_EQUAL(true, result);
     }
 

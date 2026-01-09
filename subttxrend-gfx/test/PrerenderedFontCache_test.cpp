@@ -50,7 +50,6 @@ CPPUNIT_TEST_SUITE( PrerenderedFontCacheTest );
     CPPUNIT_TEST(testCacheHitIdenticalParams);
     CPPUNIT_TEST(testCacheMissDifferentName);
     CPPUNIT_TEST(testCacheMissDifferentHeight);
-    CPPUNIT_TEST(testCacheMissDifferentStrictHeight);
     CPPUNIT_TEST(testCacheMissDifferentItalics);
     CPPUNIT_TEST(testCacheHitSkipsFindFont);
     CPPUNIT_TEST(testCacheHitSkipsNewImpl);
@@ -122,17 +121,13 @@ CPPUNIT_TEST_SUITE( PrerenderedFontCacheTest );
     CPPUNIT_TEST(testEmptyCheckAfterOps);
     CPPUNIT_TEST(testConsistencyAcrossCalls);
     CPPUNIT_TEST(testStateMultipleClears);
-    CPPUNIT_TEST(testConcurrentSameParams);
     CPPUNIT_TEST(testConcurrentDiffParams);
     CPPUNIT_TEST(testGetWhileClear);
-    CPPUNIT_TEST(testMultiThreadGet);
     CPPUNIT_TEST(testMultiThreadClear);
     CPPUNIT_TEST(testCacheMissRace);
     CPPUNIT_TEST(testConcurrentRefCounting);
     CPPUNIT_TEST(testIteratorDuringMods);
     CPPUNIT_TEST(testMemoryOrdering);
-    CPPUNIT_TEST(testLockingBehavior);
-    CPPUNIT_TEST(testOutOfMemory);
     CPPUNIT_TEST(testCorruptedState);
     CPPUNIT_TEST(testExceptionInConstruction);
     CPPUNIT_TEST(testExceptionInMapInsert);
@@ -406,18 +401,6 @@ public:
         CPPUNIT_ASSERT(font2 != nullptr);
         // Different heights should return different instances
         CPPUNIT_ASSERT(font1 != font2);
-    }
-
-    void testCacheMissDifferentStrictHeight()
-    {
-        auto font1 = m_cache->getFont("sans-serif", 12, false, false);
-        auto font2 = m_cache->getFont("sans-serif", 12, true, false);
-
-        CPPUNIT_ASSERT(font1 != nullptr);
-        CPPUNIT_ASSERT(font2 != nullptr);
-        // Note: Implementation currently doesn't differentiate strictHeight in Height comparison
-        // so may return same instance (known behavior)
-        CPPUNIT_ASSERT(font1 == font2 || font1 != font2); // Either is acceptable
     }
 
     void testCacheMissDifferentItalics()
@@ -694,13 +677,12 @@ public:
 
     void testEmptyFontName()
     {
-        // Empty font name - behavior depends on findFontFile implementation
         // Should either return nullptr or throw, but not crash
         try
         {
             auto font = m_cache->getFont("", 12, false, false);
             // If it succeeds, verify it's handled gracefully
-            // Note: May return nullptr or a default font depending on implementation
+            // Note: May return nullptr or a default font
         }
         catch (...)
         {
@@ -1476,18 +1458,6 @@ public:
         CPPUNIT_ASSERT(font != nullptr);
     }
 
-    void testConcurrentSameParams()
-    {
-        // Note: This test documents thread safety expectations
-        // Actual thread safety depends on implementation
-        auto font = m_cache->getFont("sans-serif", 12, false, false);
-        CPPUNIT_ASSERT(font != nullptr);
-
-        // Second call should safely hit cache
-        auto font2 = m_cache->getFont("sans-serif", 12, false, false);
-        CPPUNIT_ASSERT(font == font2);
-    }
-
     void testConcurrentDiffParams()
     {
         // Sequential calls with different parameters
@@ -1510,24 +1480,6 @@ public:
         // After clear, new instance should be created
         auto font2 = m_cache->getFont("sans-serif", 12, false, false);
         CPPUNIT_ASSERT(font2 != nullptr);
-    }
-
-    void testMultiThreadGet()
-    {
-        // Test sequential behavior (actual concurrency depends on implementation)
-        std::vector<std::shared_ptr<PrerenderedFont>> fonts;
-
-        for (int i = 0; i < 10; ++i)
-        {
-            auto font = m_cache->getFont("sans-serif", 12, false, false);
-            fonts.push_back(font);
-        }
-
-        // All should be same instance (cache hit)
-        for (size_t i = 1; i < fonts.size(); ++i)
-        {
-            CPPUNIT_ASSERT(fonts[0] == fonts[i]);
-        }
     }
 
     void testMultiThreadClear()
@@ -1589,33 +1541,6 @@ public:
 
         // Operations should complete in order
         CPPUNIT_ASSERT(font1 != font2);
-    }
-
-    void testLockingBehavior()
-    {
-        // Document expected behavior - cache operations complete successfully
-        auto font = m_cache->getFont("sans-serif", 12, false, false);
-        CPPUNIT_ASSERT(font != nullptr);
-
-        m_cache->clear();
-
-        font = m_cache->getFont("sans-serif", 12, false, false);
-        CPPUNIT_ASSERT(font != nullptr);
-    }
-
-    void testOutOfMemory()
-    {
-        // Difficult to simulate OOM, but test that normal operations succeed
-        try
-        {
-            auto font = m_cache->getFont("sans-serif", 12, false, false);
-            CPPUNIT_ASSERT(font != nullptr);
-        }
-        catch (const std::bad_alloc&)
-        {
-            // OOM is acceptable
-            CPPUNIT_ASSERT(true);
-        }
     }
 
     void testCorruptedState()

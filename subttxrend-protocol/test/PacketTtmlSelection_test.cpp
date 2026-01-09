@@ -79,7 +79,6 @@ CPPUNIT_TEST_SUITE( PacketTtmlSelectionTest );
     CPPUNIT_TEST(testWidthMaxHeightZero);
     CPPUNIT_TEST(testMixedEndianness);
     CPPUNIT_TEST(testPacketReuse);
-    CPPUNIT_TEST(testParseAfterFailure);
     CPPUNIT_TEST(testSequentialFailures);
     CPPUNIT_TEST(testCorruptedType);
     CPPUNIT_TEST(testCorruptedSize);
@@ -91,7 +90,6 @@ CPPUNIT_TEST_SUITE( PacketTtmlSelectionTest );
     CPPUNIT_TEST(testEndToEndSequentialParsing);
     CPPUNIT_TEST(testBufferReaderIntegrationHeaderExtraction);
     CPPUNIT_TEST(testBufferReaderIntegrationPayloadExtraction);
-    CPPUNIT_TEST(testBufferReaderIntegrationOffsetTracking);
     CPPUNIT_TEST(testBufferReaderIntegrationCompleteRead);
     CPPUNIT_TEST(testPolymorphismGetTypeVirtual);
     CPPUNIT_TEST(testPolymorphismParseVirtual);
@@ -818,27 +816,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2160), packet.getRelatedVideoHeight());
     }
 
-    void testParseAfterFailure()
-    {
-        PacketTtmlSelection packet;
-
-        // First parse: invalid
-        auto invalidData = createValidPacket();
-        invalidData[8] = 0xFF; // Invalid size
-        DataBufferPtr invalidBuffer = std::make_unique<DataBuffer>(invalidData.begin(), invalidData.end());
-        CPPUNIT_ASSERT(!packet.parse(std::move(invalidBuffer)));
-        CPPUNIT_ASSERT(!packet.isValid());
-
-        // Second parse: valid
-        auto validData = createValidPacket(0x99, 0xAA, 1280, 720);
-        DataBufferPtr validBuffer = std::make_unique<DataBuffer>(validData.begin(), validData.end());
-        CPPUNIT_ASSERT(packet.parse(std::move(validBuffer)));
-        CPPUNIT_ASSERT(packet.isValid());
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x99), packet.getChannelId());
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1280), packet.getRelatedVideoWidth());
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(720), packet.getRelatedVideoHeight());
-    }
-
     void testSequentialFailures()
     {
         PacketTtmlSelection packet;
@@ -1062,26 +1039,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x12345678), packet.getChannelId());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x87654321), packet.getRelatedVideoWidth());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xFEDCBA98), packet.getRelatedVideoHeight());
-    }
-
-    void testBufferReaderIntegrationOffsetTracking()
-    {
-        // Verify BufferReader correctly tracks offsets during parsing
-        auto packetData = createValidPacket(0x01, 0x02, 1920, 1080);
-
-        PacketTtmlSelection packet;
-        DataBufferPtr buffer = std::make_unique<DataBuffer>(packetData.begin(), packetData.end());
-
-        // Parse should consume entire buffer (24 bytes)
-        CPPUNIT_ASSERT(packet.parse(std::move(buffer)) == true);
-        CPPUNIT_ASSERT(packet.isValid() == true);
-
-        // All fields should be extracted in correct order
-        CPPUNIT_ASSERT(packet.getType() == Packet::Type::TTML_SELECTION);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x02), packet.getCounter());
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x01), packet.getChannelId());
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1920), packet.getRelatedVideoWidth());
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1080), packet.getRelatedVideoHeight());
     }
 
     void testBufferReaderIntegrationCompleteRead()

@@ -236,19 +236,11 @@ class CcWindowTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testHorizontalCarriageReturnWithoutText);
     CPPUNIT_TEST(testBackspaceOnEmptyWindow);
     CPPUNIT_TEST(testBackspaceWithText);
-    CPPUNIT_TEST(testTransparentSpaceNonbreaking);
-    CPPUNIT_TEST(testTransparentSpaceBreaking);
-    CPPUNIT_TEST(testSetPenLocationValid);
     CPPUNIT_TEST(testSetPenLocationOutOfBoundsRow);
     CPPUNIT_TEST(testSetPenLocationOutOfBoundsColumn);
     CPPUNIT_TEST(testSetPenLocationNegativeRow);
     CPPUNIT_TEST(testSetPenLocationNegativeColumn);
     CPPUNIT_TEST(testSetPenLocationBackwards);
-    CPPUNIT_TEST(testSetPenLocationSameRow);
-    CPPUNIT_TEST(testSetPenLocationDifferentRow);
-    CPPUNIT_TEST(testSetTabOffsetPositive);
-    CPPUNIT_TEST(testSetTabOffsetNegative);
-    CPPUNIT_TEST(testSetTabOffsetZero);
     CPPUNIT_TEST(testSetWindowAttributesChangePrintDirection);
     CPPUNIT_TEST(testSetWindowAttributesChangeScrollDirection);
     CPPUNIT_TEST(testSetWindowAttributesNoDirectionChange);
@@ -258,9 +250,7 @@ class CcWindowTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testSetPenAttributesMidText);
     CPPUNIT_TEST(testSetPenAttributesVisibleWindow);
     CPPUNIT_TEST(testSetPenAttributesHiddenWindow);
-    CPPUNIT_TEST(testActivePenAttributesReturnsCorrectly);
     CPPUNIT_TEST(testActivePenAttributesWithOverride);
-    CPPUNIT_TEST(testActivePenAttributesWithoutOverride);
     CPPUNIT_TEST(testOverridePenAttributesMidRow);
     CPPUNIT_TEST(testOverridePenAttributesNotMidRow);
     CPPUNIT_TEST(testOverridePenAttributesOnEmptyWindow);
@@ -279,8 +269,6 @@ class CcWindowTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testToggleFromVisible);
     CPPUNIT_TEST(testToggleFromHidden);
     CPPUNIT_TEST(testToggleRepeatedly);
-    CPPUNIT_TEST(testClearOnEmptyWindow);
-    CPPUNIT_TEST(testClearWithText);
     CPPUNIT_TEST(testClearWhenVisible);
     CPPUNIT_TEST(testClearWhenHidden);
     CPPUNIT_TEST(testHasFlashingTextWhenEmpty);
@@ -623,24 +611,6 @@ public:
         CPPUNIT_ASSERT(true); // No crash means success
     }
 
-    void testTransparentSpaceNonbreaking()
-    {
-        window->transparentSpace(true);
-        CPPUNIT_ASSERT(true); // No crash
-    }
-
-    void testTransparentSpaceBreaking()
-    {
-        window->transparentSpace(false);
-        CPPUNIT_ASSERT(true); // No crash
-    }
-
-    void testSetPenLocationValid()
-    {
-        window->setPenLocation(5, 10);
-        CPPUNIT_ASSERT(true); // No crash
-    }
-
     void testSetPenLocationOutOfBoundsRow()
     {
         window->setPenLocation(100, 5);
@@ -673,41 +643,6 @@ public:
     {
         window->report("Text");
         window->setPenLocation(0, 0); // Move back
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testSetPenLocationSameRow()
-    {
-        window->setPenLocation(5, 5);
-        window->setPenLocation(5, 10);
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testSetPenLocationDifferentRow()
-    {
-        window->setPenLocation(5, 5);
-        window->setPenLocation(10, 5);
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testSetTabOffsetPositive()
-    {
-        window->report("Text");
-        window->setTabOffset(5);
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testSetTabOffsetNegative()
-    {
-        window->report("Text");
-        window->setTabOffset(-3);
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testSetTabOffsetZero()
-    {
-        window->report("Text");
-        window->setTabOffset(0);
         CPPUNIT_ASSERT(true);
     }
 
@@ -816,14 +751,6 @@ public:
         delete testWin;
     }
 
-    void testActivePenAttributesReturnsCorrectly()
-    {
-        PenAttributes attrs;
-        window->activePenAttributes(attrs);
-        // Should return without crash
-        CPPUNIT_ASSERT(true);
-    }
-
     void testActivePenAttributesWithOverride()
     {
         PenAttributes setAttrs;
@@ -833,14 +760,6 @@ public:
         PenAttributes getAttrs;
         window->activePenAttributes(getAttrs);
         CPPUNIT_ASSERT_EQUAL(true, (bool)getAttrs.underline);
-    }
-
-    void testActivePenAttributesWithoutOverride()
-    {
-        PenAttributes attrs;
-        window->activePenAttributes(attrs);
-        // Should use window pen color
-        CPPUNIT_ASSERT(true);
     }
 
     void testOverridePenAttributesMidRow()
@@ -1001,19 +920,6 @@ public:
 
         window->toggle();
         CPPUNIT_ASSERT_EQUAL(firstState, window->isVisible());
-    }
-
-    void testClearOnEmptyWindow()
-    {
-        window->clear();
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testClearWithText()
-    {
-        window->report("Text");
-        window->clear();
-        CPPUNIT_ASSERT(true);
     }
 
     void testClearWhenVisible()

@@ -190,7 +190,6 @@ class CcWindowControllerTest : public CppUnit::TestFixture
 
     CPPUNIT_TEST(testConstructorInitialization);
     CPPUNIT_TEST(testConstructorNullSelectedWindow);
-    CPPUNIT_TEST(testConstructorFlashControlShow);
     CPPUNIT_TEST(testConstructorZeroTimeout);
     CPPUNIT_TEST(testDefineWindowValidID);
     CPPUNIT_TEST(testDefineWindowIDZero);
@@ -342,13 +341,6 @@ public:
         WindowDefinition wd;
         bool result = controller->getWindowDefinition(wd);
         CPPUNIT_ASSERT_EQUAL(false, result);
-    }
-
-    void testConstructorFlashControlShow()
-    {
-        // Flash control should be Show initially (verified by behavior)
-        // Note: redrawFlashingText() is private, so we verify indirectly
-        CPPUNIT_ASSERT(controller != nullptr);
     }
 
     void testConstructorZeroTimeout()

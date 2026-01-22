@@ -26,6 +26,14 @@ namespace ttxt
 {
 
 GfxTtxGridCell::GfxTtxGridCell()
+        : m_enabled(false)
+        , m_hidden(false)
+        , m_dirty(false)
+        , m_fgColor(0)
+        , m_bgColor(0)
+        , m_char('\0')
+        , m_xMultiplier(1)
+        , m_yMultiplier(1)
 {
     clear(0);
 }

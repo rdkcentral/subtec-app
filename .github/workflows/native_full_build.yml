@@ -20,7 +20,7 @@ jobs:
       - name: native build
         run: |
           chmod +x test/install_subtec_dependencies.sh subttxrend-app/x86_builder/build.sh
-          sh -e test/install_subtec_dependencies.sh
+          bash -e test/install_subtec_dependencies.sh
           sh -e subttxrend-app/x86_builder/build.sh build
         env:
           GITHUB_TOKEN: ${{ secrets.RDKCM_RDKE }}

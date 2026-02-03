@@ -242,6 +242,8 @@ void WebvttEngineImpl::addData(const std::uint8_t* buffer,
             m_cachedRegionMap = GetUnifiedRegionMap(m_timeline, regionMap, m_cachedRegionMap);
         } catch (const WebVTTException& e) {
             g_logger.oswarning(__LOGGER_FUNC__, e.what());
+        } catch (const std::exception& e) {
+            g_logger.osinfo(__LOGGER_FUNC__, e.what());
         }
         
         if (preParseTimeLineSize == m_timeline.size())

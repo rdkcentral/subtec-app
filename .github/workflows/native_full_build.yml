@@ -1,0 +1,26 @@
+name: Build Component in Native Environment
+
+on:
+  push:
+    branches: [ main, 'sprint/**', 'release/**', topic/RDK*, develop ]
+  pull_request:
+    branches: [ main, 'sprint/**', 'release/**', topic/RDK*, develop ]
+
+jobs:
+  build-subtec-on-pr:
+    name: Build subtec-app component in github rdkcentral
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/rdkcentral/docker-rdk-ci:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: native build
+        run: |
+          chmod +x test/install_subtec_dependencies.sh subttxrend-app/x86_builder/build.sh
+          bash -e test/install_subtec_dependencies.sh
+          bash -e subttxrend-app/x86_builder/build.sh build
+        env:
+          GITHUB_TOKEN: ${{ secrets.RDKCM_RDKE }}

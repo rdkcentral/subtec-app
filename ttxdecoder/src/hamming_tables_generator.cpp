@@ -33,7 +33,7 @@ void print_space_before_number(int number, int totalchars)
         totalchars--;
     for (int i=0;i<totalchars;i++)
         printf(" ");
-    printf("%d%d",number);
+    printf("%d",number);
 }
 
 /*

@@ -480,6 +480,7 @@ std::int8_t Hamming::decodeParity(std::uint8_t byte1)
     }
     else
     {
+        printf( "Parity check failed for byte: %d\n" );
         return -1;
     }
 }

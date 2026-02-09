@@ -84,6 +84,7 @@ void LoggerBackendStd::printMessage(LoggerLevel level,
         printf("%08u %s: [%s:%s] %s\n", static_cast<std::uint32_t>(timeDiff),
                 levelToString(level), component.c_str(),
                 element.c_str(), message.c_str());
+        printf("Make warning %s %d\n", message.c_str());
     }
 }
 

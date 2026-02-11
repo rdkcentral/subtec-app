@@ -24,6 +24,9 @@
 
 #include "Pixel.hpp"
 #include "Pixmap.hpp"
+#ifdef USE_UPSTREAM_WAYLAND
+#include <EGL/eglext.h>
+#endif
 
 namespace subttxrend
 {
@@ -136,7 +139,19 @@ bool WaylandBackendEgl::initRendering()
 
     g_logger.trace("%s", __func__);
 
-    m_eglDisplay = eglGetDisplay(getDisplay()->getNativeObject());
+#ifdef USE_UPSTREAM_WAYLAND
+#ifdef EGL_PLATFORM_WAYLAND_EXT
+    PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
+    if (eglGetPlatformDisplayEXT)
+        m_eglDisplay = eglGetPlatformDisplayEXT(EGL_PLATFORM_WAYLAND_EXT, getDisplay()->getNativeObject(), nullptr);
+    else
+#endif
+#endif
+    if (!m_eglDisplay)
+    {
+        m_eglDisplay = eglGetDisplay(getDisplay()->getNativeObject());
+    }
+
     if (!m_eglDisplay)
     {
         g_logger.error("%s - cannot get EGL display (%d)", __func__,

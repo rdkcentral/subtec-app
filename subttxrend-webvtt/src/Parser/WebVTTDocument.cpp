@@ -70,7 +70,7 @@ int parsePercentageHundredths(std::string value) {
 static Region::Position parsePosition(std::string position_string) {
     std::string token;
     std::istringstream iss(position_string);
-    Region::Position position;
+    Region::Position position{0,10000};
     int x, y;
     
     if (std::getline(iss, token, ',')) {

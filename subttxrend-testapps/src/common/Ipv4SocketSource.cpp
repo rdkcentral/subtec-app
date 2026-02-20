@@ -32,6 +32,19 @@ namespace subttxrend
 namespace testapps
 {
 
+namespace
+{
+bool getRemainingBytes(std::size_t total, std::size_t used, std::size_t& remaining)
+{
+    if (used > total)
+    {
+        return false;
+    }
+    remaining = total - used;
+    return true;
+}
+}
+
 Ipv4SocketSource::Ipv4SocketSource(const std::string& path) :
         DataSource(path),
         m_serverSocketHandle(-1),
@@ -141,7 +154,7 @@ bool Ipv4SocketSource::readPacket(DataPacket& packet)
     std::size_t bytesRead = 0;
 
     /* read header fist */
-    const int HEADER_SIZE = 12;
+    const std::size_t HEADER_SIZE = 12;
     if (bufferSize < HEADER_SIZE)
     {
         std::cerr << "Not enough space for header" << std::endl;
@@ -149,8 +162,14 @@ bool Ipv4SocketSource::readPacket(DataPacket& packet)
     }
     while (bytesRead < HEADER_SIZE)
     {
-        auto newBytesRead = ::recv(m_clientSocketHandle, &buffer[bytesRead],
-                12 - bytesRead, 0);
+        std::size_t remainingBytes = 0;
+        if (!getRemainingBytes(HEADER_SIZE, bytesRead, remainingBytes))
+        {
+            std::cerr << "Cannot read header data" << std::endl;
+            return false;
+        }
+        const ssize_t newBytesRead = ::recv(m_clientSocketHandle, &buffer[bytesRead],
+                remainingBytes, 0);
         if (newBytesRead < 0)
         {
             std::cerr << "Cannot read header data" << std::endl;
@@ -170,7 +189,12 @@ bool Ipv4SocketSource::readPacket(DataPacket& packet)
                 return false;
             }
         }
-        bytesRead += newBytesRead;
+        if (static_cast<std::size_t>(newBytesRead) > remainingBytes)
+        {
+            std::cerr << "Cannot read header data" << std::endl;
+            return false;
+        }
+        bytesRead += static_cast<std::size_t>(newBytesRead);
     }
 
     /* get size */
@@ -188,27 +212,40 @@ bool Ipv4SocketSource::readPacket(DataPacket& packet)
     dataSize <<= 8;
     dataSize |= dataSize1;
 
-    dataSize += HEADER_SIZE;
+    dataSize += static_cast<std::uint32_t>(HEADER_SIZE);
 
-    if (bufferSize < dataSize)
+    const std::size_t packetSize = static_cast<std::size_t>(dataSize);
+
+    if (bufferSize < packetSize)
     {
         std::cerr << "Not enough space for packet" << std::endl;
         return false;
     }
 
-    while (bytesRead < dataSize)
+    while (bytesRead < packetSize)
     {
-        auto newBytesRead = ::recv(m_clientSocketHandle, &buffer[bytesRead],
-                dataSize - bytesRead, 0);
+        std::size_t remainingBytes = 0;
+        if (!getRemainingBytes(packetSize, bytesRead, remainingBytes))
+        {
+            std::cerr << "Cannot read packet data" << std::endl;
+            return false;
+        }
+        const ssize_t newBytesRead = ::recv(m_clientSocketHandle, &buffer[bytesRead],
+                remainingBytes, 0);
         if (newBytesRead <= 0)
         {
             std::cerr << "Cannot read packet data" << std::endl;
             return false;
         }
-        bytesRead += newBytesRead;
+        if (static_cast<std::size_t>(newBytesRead) > remainingBytes)
+        {
+            std::cerr << "Cannot read packet data" << std::endl;
+            return false;
+        }
+        bytesRead += static_cast<std::size_t>(newBytesRead);
     }
 
-    packet.setSize(dataSize);
+    packet.setSize(packetSize);
 
     return true;
 }

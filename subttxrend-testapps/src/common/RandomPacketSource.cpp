@@ -20,8 +20,7 @@
 
 #include "RandomPacketSource.hpp"
 
-#include <ctime>
-#include <cstdlib>
+#include <random>
 
 #include <unistd.h>
 
@@ -30,6 +29,16 @@ namespace subttxrend
 namespace testapps
 {
 
+namespace
+{
+std::uint32_t randomInRange(std::uint32_t minInclusive, std::uint32_t maxInclusive)
+{
+    std::random_device rd;
+    std::uniform_int_distribution<std::uint32_t> dist(minInclusive, maxInclusive);
+    return dist(rd);
+}
+} // anonymous namespace
+
 RandomPacketSource::RandomPacketSource(const std::string& path) :
         DataSource(path),
         m_packetCount(0),
@@ -37,7 +46,6 @@ RandomPacketSource::RandomPacketSource(const std::string& path) :
         m_packetNo(0),
         m_nextPacketCounter(0)
 {
-    std::srand(std::time(nullptr));
 }
 
 bool RandomPacketSource::open()
@@ -56,7 +64,7 @@ bool RandomPacketSource::open()
         if (sscanf(params.c_str(), "%u%c%u%c", &packetCount, &separator,
                 &sleepTimeMs, &endmarker) == 3)
         {
-            if ((separator == ':') && (separator == ':'))
+            if (separator == ':')
             {
                 paramsValid = true;
             }
@@ -116,7 +124,7 @@ bool RandomPacketSource::readPacket(DataPacket& packet)
 
 bool RandomPacketSource::generatePacket(DataPacket& packet)
 {
-    const std::uint32_t type = (rand() % 6) + 1; // 1-6
+    const std::uint32_t type = randomInRange(1U, 6U); // 1-6
 
     switch (type)
     {
@@ -147,12 +155,13 @@ bool RandomPacketSource::generatePacket(DataPacket& packet)
 
 bool RandomPacketSource::generatePesData(DataPacket& packet)
 {
-    const std::uint32_t dataLen = rand() % (packet.getCapacity() - 12 - 8 + 1);
+    const std::uint32_t upperExclusive = packet.getCapacity() - 12 - 8 + 1;
+    const std::uint32_t dataLen = randomInRange(0U, upperExclusive - 1U);
 
     const std::uint32_t type = PACKET_TYPE_PES_DATA;
     const std::uint32_t counter = m_nextPacketCounter++;
     const std::uint32_t size = 8 + dataLen;
-    const std::uint32_t channelId = rand() % 10;
+    const std::uint32_t channelId = randomInRange(0U, 9U);
     const std::uint32_t channelType = (channelId == 1) ? 1 : 0;
 
     packet.reset();
@@ -204,7 +213,7 @@ bool RandomPacketSource::generateResetChannel(DataPacket& packet)
     const std::uint32_t type = PACKET_TYPE_RESET_CHANNEL;
     const std::uint32_t counter = m_nextPacketCounter++;
     const std::uint32_t size = 4;
-    const std::uint32_t channelId = rand() % 10;
+    const std::uint32_t channelId = randomInRange(0U, 9U);
 
     packet.reset();
     packet.appendLeUint32(type);
@@ -220,10 +229,10 @@ bool RandomPacketSource::generateSubtitleSelection(DataPacket& packet)
     const std::uint32_t type = PACKET_TYPE_SUBTITLE_SELECTION;
     const std::uint32_t counter = m_nextPacketCounter++;
     const std::uint32_t size = 16;
-    const std::uint32_t channelId = rand() % 10;
-    const std::uint32_t subtitlesType = rand() % 1;
-    const std::uint32_t auxId1 = rand();
-    const std::uint32_t auxId2 = rand();
+    const std::uint32_t channelId = randomInRange(0U, 9U);
+    const std::uint32_t subtitlesType = randomInRange(0U, 0U);
+    const std::uint32_t auxId1 = randomInRange(0U, std::numeric_limits<std::uint32_t>::max());
+    const std::uint32_t auxId2 = randomInRange(0U, std::numeric_limits<std::uint32_t>::max());
 
     packet.reset();
     packet.appendLeUint32(type);
@@ -242,7 +251,7 @@ bool RandomPacketSource::generateTeletextSelection(DataPacket& packet)
     const std::uint32_t type = PACKET_TYPE_TELETEXT_SELECTION;
     const std::uint32_t counter = m_nextPacketCounter++;
     const std::uint32_t size = 4;
-    const std::uint32_t channelId = rand() % 10;
+    const std::uint32_t channelId = randomInRange(0U, 9U);
 
     packet.reset();
     packet.appendLeUint32(type);

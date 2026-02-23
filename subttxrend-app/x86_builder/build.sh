@@ -352,7 +352,9 @@ build_tests     $AV_PROJECTS_DIR/subttxrend-socksrc/test   build/tests-subttxren
 build_tests     $AV_PROJECTS_DIR/subttxrend-dvbsub/test    build/tests-subttxrend-dvbsub      $INSTALL_DIR
 build_tests     $AV_PROJECTS_DIR/subttxrend-app/test       build/tests-subttxrend-app         $INSTALL_DIR
 build_tests     $AV_PROJECTS_DIR/subttxrend-ctrl/test      build/tests-subttxrend-ctrl        $INSTALL_DIR
-
+build_tests     $AV_PROJECTS_DIR/subttxrend-ttxt/test      build/tests-subttxrend-ttxt        $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-scte/test      build/tests-subttxrend-scte        $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-testapps/test  build/tests-subttxrend-testapps    $INSTALL_DIR
 elif [ "$COMMAND" == "dotest" ] ; then
 
 $0 buildtest
@@ -372,6 +374,9 @@ run_tests       build/tests-subttxrend-socksrc
 run_tests       build/tests-subttxrend-dvbsub
 run_tests       build/tests-subttxrend-app
 run_tests       build/tests-subttxrend-ctrl
+run_tests       build/tests-subttxrend-ttxt
+run_tests       build/tests-subttxrend-scte
+run_tests       build/tests-subttxrend-testapps
 
 elif [ "$COMMAND" == "testcoverage" ] ; then
 

@@ -214,7 +214,7 @@ def check_and_restart_subtec():
         start_subtec("../../subttxrend-app/x86_builder", "../subtec_console_common.log")
 
         # wait to be sure subtec has started
-        if not wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 800, 1):
+        if not wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 850, 1):
             raise CriticalSubtecError("Subtec not started, check !")
         validate_unittests_results()
 
@@ -365,6 +365,45 @@ def validate_unittests_results():
         '8/10 Test  #8: TtmlController_Test ..............   Passed',
         '9/10 Test  #9: TtxController_Test ...............   Passed',
         '10/10 Test #10: WebvttController_Test ............   Passed',
+        '100% tests passed, 0 tests failed out of',
+        'tests-subttxrend-ttxt',
+        '1/11 Test  #1: BrowserRendererImpl_Test .........   Passed',
+        '2/11 Test  #2: CharsetHandler_Test ..............   Passed',
+        '3/11 Test  #3: GfxConfig_Test ...................   Passed',
+        '4/11 Test  #4: GfxMosaicGenerator_Test ..........   Passed',
+        '5/11 Test  #5: GfxRenderer_Test .................   Passed',
+        '6/11 Test  #6: GfxTtxClut_Test ..................   Passed',
+        '7/11 Test  #7: GfxTtxGrid_Test ..................   Passed',
+        '8/11 Test  #8: GfxTtxGridCell_Test ..............   Passed',
+        '9/11 Test  #9: GfxTtxGridModel_Test .............   Passed',
+        '10/11 Test #10: RendererImpl_Test ................   Passed',
+        '11/11 Test #11: SubtitlesRendererImpl_Test .......   Passed',
+        '100% tests passed, 0 tests failed out of',
+        'tests-subttxrend-scte',
+        '1/10 Test  #1: ScteBitStream_Test ...............   Passed',
+        '2/10 Test  #2: ScteController_Test ..............   Passed',
+        '3/10 Test  #3: ScteRenderer_Test ................   Passed',
+        '4/10 Test  #4: ScteRawBitmapDecoder_Test ........   Passed',
+        '5/10 Test  #5: ScteSection_Test .................   Passed',
+        '6/10 Test  #6: ScteTable_Test ...................   Passed',
+        '7/10 Test  #7: ScteSectionAssembler_Test ........   Passed',
+        '8/10 Test  #8: ScteOutliner_Test ................   Passed',
+        '9/10 Test  #9: ScteSimpleBitmap_Test ............   Passed',
+        '10/10 Test #10: ScteRawBitmap_Test ...............   Passed',
+        '100% tests passed, 0 tests failed out of',
+        'tests-subttxrend-testapps',
+        '1/12 Test  #1: DataSourceFactory_Test ...........   Passed',
+        '2/12 Test  #2: DataTargetFactory_Test ...........   Passed',
+        '3/12 Test  #3: DataPacket_Test ..................   Passed',
+        '4/12 Test  #4: DataProxyApp_Test ................   Passed',
+        '5/12 Test  #5: SmartFileSource_Test .............   Passed',
+        '6/12 Test  #6: SmartFileTarget_Test .............   Passed',
+        '7/12 Test  #7: TtmlFileSource_Test ..............   Passed',
+        '8/12 Test  #8: WebvttFileSource_Test ............   Passed',
+        '9/12 Test  #9: Ipv4SocketTarget_Test ............   Passed',
+        '10/12 Test #10: Ipv4SocketSource_Test ............   Passed',
+        '11/12 Test #11: UnixSocketSource_Test ............   Passed',
+        '12/12 Test #12: UnixSocketTarget_Test ............   Passed',
         '100% tests passed, 0 tests failed out of'
         ]
     if not monitor_log_for_sequence("../../test/subtec_console_common.log", log_sequence):

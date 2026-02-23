@@ -86,7 +86,7 @@ bool UnixSocketSource::open()
 
     if (chmod(getPath().c_str(), S_IWUSR|S_IWGRP|S_IWOTH|S_IRUSR|S_IRGRP|S_IROTH) != 0)
     {
-        std::cerr << "Warning: cannot set socket permissions: " << std::endl;
+        std::cerr << "Warning: cannot set socket permissions" << std::endl;
     }
 
     return true;

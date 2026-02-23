@@ -26,6 +26,10 @@
 int main(int argc,
          char* argv[])
 {
+    if (argc < 1)
+    {
+        return EXIT_FAILURE;
+    }
     try
     {
         std::string appName = argv[0];

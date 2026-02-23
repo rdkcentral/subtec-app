@@ -21,6 +21,7 @@
 #include "RandomPacketSource.hpp"
 
 #include <random>
+#include <limits>
 
 #include <unistd.h>
 
@@ -33,9 +34,10 @@ namespace
 {
 std::uint32_t randomInRange(std::uint32_t minInclusive, std::uint32_t maxInclusive)
 {
-    std::random_device rd;
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
     std::uniform_int_distribution<std::uint32_t> dist(minInclusive, maxInclusive);
-    return dist(rd);
+    return dist(gen);
 }
 } // anonymous namespace
 
@@ -230,7 +232,7 @@ bool RandomPacketSource::generateSubtitleSelection(DataPacket& packet)
     const std::uint32_t counter = m_nextPacketCounter++;
     const std::uint32_t size = 16;
     const std::uint32_t channelId = randomInRange(0U, 9U);
-    const std::uint32_t subtitlesType = randomInRange(0U, 0U);
+    const std::uint32_t subtitlesType = 0U;
     const std::uint32_t auxId1 = randomInRange(0U, std::numeric_limits<std::uint32_t>::max());
     const std::uint32_t auxId2 = randomInRange(0U, std::numeric_limits<std::uint32_t>::max());
 

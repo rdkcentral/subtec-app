@@ -76,7 +76,7 @@ static Region::Position parsePosition(std::string position_string) {
     if (std::getline(iss, token, ',')) {
         x = parsePercentageHundredths(token);
         if (std::getline(iss, token, ',')) {
-            y = parsePercentageHundredths(token);
+            y = parsePercentageHundredths(std::move(token));
             position = {x, y};
         }
     }
@@ -142,7 +142,7 @@ uint64_t calculateRelativeTime(Time actualTime, Time localTime)
     relativeTime.minutes = actualTime.minutes-localTime.minutes;
     relativeTime.hours = actualTime.hours-localTime.hours;
 
-    totalMs = relativeTime.milliseconds + (1000 * (relativeTime.seconds + (60 * (relativeTime.minutes + (60 * relativeTime.hours)))));
+    totalMs = relativeTime.milliseconds + (1000ULL * (relativeTime.seconds + (60ULL * (relativeTime.minutes + (60ULL * relativeTime.hours)))));
 
     return totalMs;
 }
@@ -291,7 +291,7 @@ SettingsMap WebVTTDocument::parseRegionSettings(std::istream &is) {
     while (std::getline(is, line) && !line.empty()) {
         SettingsItem item;
         if (parsePropertyValuePair(line, item)) {
-            regionSettings.insert(item);
+            regionSettings.insert(std::move(item));
         }
     }
     
@@ -320,10 +320,10 @@ std::uint64_t WebVTTDocument::parseXTimestampMap(std::string line) {
 
         //Settings are in the format SETTING:VALUE,SETTING:VALUE
         //So split on ',' first, then use the standard methods
-        for (const auto& setting : getTokenVector(token, ',')) {
+        for (const auto& setting : getTokenVector(std::move(token), ',')) {
             SettingsItem propValPair;
             if (parsePropertyValuePair(setting, propValPair)) {
-                settingsMap.insert(propValPair);
+                settingsMap.insert(std::move(propValPair));
             }
         }
 
@@ -418,12 +418,12 @@ Timing WebVTTDocument::parseWebVTTCueTime(std::istringstream& iss) {
             iss >> token;
             try {
                 std::uint64_t endTimeMs;
-                Time endTime = parseHHMMSS(token);
+                Time endTime = parseHHMMSS(std::move(token));
                 endTimeMs = calculateRelativeTime(endTime, m_localTime);
                 end = TimePoint(endTimeMs);
             }
-            catch (const ParserException&) {
-                throw ParserException("Bad end time " + token);
+            catch (const ParserException& e) {
+                throw ParserException(std::string("Bad end time: ") + e.what());
             }
         }
         else {
@@ -453,7 +453,7 @@ SettingsMap WebVTTDocument::parseWebVTTCueSettings(std::istringstream& iss) {
             try {
                 SettingsItem propValPair;
                 if (parsePropertyValuePair(token, propValPair)) {
-                    settingsMap.insert(propValPair);
+                    settingsMap.insert(std::move(propValPair));
                 }
             }
             catch (const ParserException& e) {
@@ -542,13 +542,12 @@ Region ParseRegion(const SettingsMap& regionSettings) {
         std::string value = pair.second;
         
         if (!property.compare("id")) {
-            region.id = value;
+            region.id = std::move(value);
         } else if (!property.compare("width")) {
             try {
-                region.width_vw_h = parsePercentageHundredths(value);
+                region.width_vw_h = parsePercentageHundredths(std::move(value));
             } catch (const ParserException &e) {
-                g_logger.osinfo(__LOGGER_FUNC__, e.what());
-                g_logger.osinfo(__LOGGER_FUNC__, " - failed to parse width ", value);
+                g_logger.osinfo(__LOGGER_FUNC__, "Failed to parse width: ", e.what());
             }
         } else if (!property.compare("lines")) {
             try {
@@ -559,17 +558,15 @@ Region ParseRegion(const SettingsMap& regionSettings) {
             }
         } else if (!property.compare("regionanchor")) {
             try {
-                region.region_anchor = parsePosition(value);
+                region.region_anchor = parsePosition(std::move(value));
             } catch (const ParserException &e) {
-                g_logger.osinfo(__LOGGER_FUNC__, e.what());
-                g_logger.osinfo(__LOGGER_FUNC__, " - failed to parse region anchor ", value);
+                g_logger.osinfo(__LOGGER_FUNC__, "Failed to parse region anchor: ", e.what());
             }
         } else if (!property.compare("viewportanchor")) {
             try {
-                region.viewport_anchor = parsePosition(value);
+                region.viewport_anchor = parsePosition(std::move(value));
             } catch (const ParserException &e) {
-                g_logger.osinfo(__LOGGER_FUNC__, e.what());
-                g_logger.osinfo(__LOGGER_FUNC__, " - failed to parse viewport anchor ", value);
+                g_logger.osinfo(__LOGGER_FUNC__, "Failed to parse viewport anchor: ", e.what());
             }
         } else if (!property.compare("scroll")) {
             if (value == "up") {

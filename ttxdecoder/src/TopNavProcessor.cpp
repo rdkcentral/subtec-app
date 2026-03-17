@@ -37,7 +37,8 @@ subttxrend::common::Logger g_logger("TtxDecoder", "TopNavProcessor");
 } // namespace <anonymous>
 
 TopNavProcessor::TopNavProcessor(Database& database) :
-        m_database(database)
+        m_database(database),
+        m_pageTypes{}
 {
     // noop
 }

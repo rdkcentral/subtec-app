@@ -165,7 +165,7 @@ public:
     /**
      * Constructor.
      */
-    NationalSubsets()
+    NationalSubsets() : m_nationalSubsets{}
     {
         std::copy(std::begin(NATIONAL_SUBSETS), std::end(NATIONAL_SUBSETS), std::begin(m_nationalSubsets));
     }

@@ -108,7 +108,7 @@ private:
     BackgroundStyle     backgroundStyle  = BackgroundStyle::TRANSPARENT;
     OutlineStyle        outlineStyle     = OutlineStyle::NONE;
     Color               charColor        = {0, false, 0, 0};
-    Coords              charTop;         = {0, 0};
+    Coords              charTop          = {0, 0};
     Coords              charBottom       = {0, 0};
 
     // Valid if background style is "framed"

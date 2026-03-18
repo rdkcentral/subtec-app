@@ -19,6 +19,7 @@
 
 #include "ScteBitStream.hpp"
 #include "ScteExceptions.hpp"
+#include <utility>
 
 namespace subttxrend
 {

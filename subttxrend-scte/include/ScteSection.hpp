@@ -36,7 +36,7 @@ class Section
         uint16_t table_extension;
         uint16_t last_segment_number;
         uint16_t segment_number;
-    } segmentation_overlay;
+    } segmentation_overlay = {};
 
 
 public:

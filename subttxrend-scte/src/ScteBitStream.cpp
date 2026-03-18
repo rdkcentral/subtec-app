@@ -120,9 +120,9 @@ void BitStream::setOffset(uint32_t offset)
 }
 
 
-void BitStream::setData(const std::vector<uint8_t> stream)
+void BitStream::setData(std::vector<uint8_t> stream)
 {
-    bits = stream;
+    bits = std::move(stream);
     setOffset(0);
 }
 

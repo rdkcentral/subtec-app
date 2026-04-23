@@ -34,6 +34,14 @@ class WebVTTConverterTest : public CppUnit::TestFixture {
 CPPUNIT_TEST_SUITE(WebVTTConverterTest);
 CPPUNIT_TEST(testConverter);
 CPPUNIT_TEST(testConverterAttributes);
+CPPUNIT_TEST(testConfigAttributesConstructor);
+CPPUNIT_TEST(testSetDimensions);
+CPPUNIT_TEST(testScreenPaddingPixels);
+CPPUNIT_TEST(testVwVhToPixelsEdgeCases);
+CPPUNIT_TEST(testHorizontalVerticalPadding);
+CPPUNIT_TEST(testGetXForTextBoxAllAlignments);
+CPPUNIT_TEST(testMultipleSetAttributesAndSetDimensions);
+CPPUNIT_TEST(testZeroNegativeDimensions);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -194,6 +202,98 @@ public:
         CPPUNIT_ASSERT_EQUAL(defaultLineHeightPixels, converter.lineHeightPixels());
         CPPUNIT_ASSERT_EQUAL(defaultLineHeightVh, converter.lineHeightVh());
         CPPUNIT_ASSERT_EQUAL(false, converter.isTopPositioningSet());
+    }
+
+    void testConfigAttributesConstructor() {
+        WebVTTConfig config;
+        config.lineHeightH = 1234;
+        config.fontHeightH = 567;
+        config.horizontalPaddingEm = 8.0f;
+        config.verticalPaddingEm = 6.0f;
+        config.screenPadding = 200;
+        WebVTTAttributes attributes;
+        attributes.setInteger(WebVTTAttributes::AttributeType::FONT_SIZE, static_cast<uint32_t>(WebVTTAttributes::FontSize::MEDIUM));
+        Converter converter(1280, 720, config, attributes);
+        CPPUNIT_ASSERT_EQUAL(constants::kLineHeight[static_cast<uint32_t>(WebVTTAttributes::FontSize::MEDIUM)], converter.lineHeightVh());
+        CPPUNIT_ASSERT_EQUAL((int)((float)converter.height() / 100.0f * (constants::kFontHeight[static_cast<uint32_t>(WebVTTAttributes::FontSize::MEDIUM)] / 100.0f)),
+            converter.fontSizePixels());
+
+        CPPUNIT_ASSERT(converter.width() > 0);
+        CPPUNIT_ASSERT(converter.height() > 0);
+    }
+
+    void testSetDimensions() {
+        Converter converter(800, 600);
+        float pad = constants::kScreenPaddingVmH / 100.0f;
+        int expectedWidth = (int)(800 * (100.0f - pad * 2.0f) / 100.0f);
+        int expectedHeight = (int)(600 * (100.0f - pad * 2.0f) / 100.0f);
+        CPPUNIT_ASSERT_EQUAL(expectedWidth, converter.width());
+        CPPUNIT_ASSERT_EQUAL(expectedHeight, converter.height());
+        converter.SetDimensions(1024, 768);
+        // SetDimensions sets the width/height directly, no padding applied
+        CPPUNIT_ASSERT_EQUAL(1024, converter.width());
+        CPPUNIT_ASSERT_EQUAL(768, converter.height());
+    }
+
+    void testScreenPaddingPixels() {
+        Converter converter(1920, 1080);
+        int padW = converter.screenPaddingWidthPixels();
+        int padH = converter.screenPaddingHeightPixels();
+        CPPUNIT_ASSERT(padW > 0);
+        CPPUNIT_ASSERT(padH > 0);
+    }
+
+    void testVwVhToPixelsEdgeCases() {
+        Converter converter(1920, 1080);
+        CPPUNIT_ASSERT_EQUAL(0, converter.vwToWidthPixels(0));
+        CPPUNIT_ASSERT_EQUAL(0, converter.vhToHeightPixels(0));
+        CPPUNIT_ASSERT(converter.vwToWidthPixels(10000) <= converter.width());
+        CPPUNIT_ASSERT(converter.vhToHeightPixels(10000) <= converter.height());
+    }
+
+    void testHorizontalVerticalPadding() {
+        WebVTTConfig config;
+        config.horizontalPaddingEm = 10.0f;
+        config.verticalPaddingEm = 5.0f;
+        WebVTTAttributes attributes;
+        Converter converter(1920, 1080, config, attributes);
+        CPPUNIT_ASSERT(converter.horizontalPadding() >= 0);
+        CPPUNIT_ASSERT(converter.verticalPadding() >= 0);
+    }
+
+    void testGetXForTextBoxAllAlignments() {
+        Converter converter(1920, 1080);
+        int width = converter.width();
+        int line_width = width / 4;
+        int pos = width / 2;
+        CPPUNIT_ASSERT_EQUAL(pos, converter.getXForTextBox(line_width, WebVTTCue::AlignType::kLeft, pos));
+        CPPUNIT_ASSERT_EQUAL(pos, converter.getXForTextBox(line_width, WebVTTCue::AlignType::kStart, pos));
+        CPPUNIT_ASSERT_EQUAL(pos - line_width, converter.getXForTextBox(line_width, WebVTTCue::AlignType::kRight, pos));
+        CPPUNIT_ASSERT_EQUAL(pos - line_width, converter.getXForTextBox(line_width, WebVTTCue::AlignType::kEnd, pos));
+        CPPUNIT_ASSERT_EQUAL(pos - (line_width / 2), converter.getXForTextBox(line_width, WebVTTCue::AlignType::kCenter, pos));
+    }
+
+    void testMultipleSetAttributesAndSetDimensions() {
+        WebVTTAttributes attributes;
+        attributes.setInteger(WebVTTAttributes::AttributeType::FONT_SIZE, static_cast<uint32_t>(WebVTTAttributes::FontSize::SMALL));
+        Converter converter(1920, 1080);
+        converter.setAttributes(attributes);
+        int origFontSize = converter.fontSizePixels();
+        converter.SetDimensions(1280, 720);
+        int newFontSize = converter.fontSizePixels();
+        CPPUNIT_ASSERT(origFontSize != newFontSize);
+        attributes.setInteger(WebVTTAttributes::AttributeType::FONT_SIZE, static_cast<uint32_t>(WebVTTAttributes::FontSize::LARGE));
+        converter.setAttributes(attributes);
+        CPPUNIT_ASSERT(converter.fontSizePixels() != newFontSize);
+    }
+
+    void testZeroNegativeDimensions() {
+        Converter converter(0, 0);
+        CPPUNIT_ASSERT_EQUAL(0, converter.width());
+        CPPUNIT_ASSERT_EQUAL(0, converter.height());
+        converter.SetDimensions(-100, -100);
+        CPPUNIT_ASSERT(converter.width() <= 0);
+        CPPUNIT_ASSERT(converter.height() <= 0);
     }
 };
 

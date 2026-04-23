@@ -344,10 +344,17 @@ build_tests     $AV_PROJECTS_DIR/subttxrend-common/test    build/tests-subttxren
 build_tests     $AV_PROJECTS_DIR/subttxrend-protocol/test  build/tests-subttxrend-protocol    $INSTALL_DIR
 build_tests     $AV_PROJECTS_DIR/dvbsubdecoder/test        build/tests-dvbsubdecoder          $INSTALL_DIR
 build_tests     $AV_PROJECTS_DIR/subttxrend-ttml/test      build/tests-subttxrend-ttml        $INSTALL_DIR
-build_tests     $AV_PROJECTS_DIR/subttxrend-webvtt/test      build/tests-subttxrend-webvtt        $INSTALL_DIR 1
+build_tests     $AV_PROJECTS_DIR/subttxrend-webvtt/test    build/tests-subttxrend-webvtt      $INSTALL_DIR 1
 build_tests     $AV_PROJECTS_DIR/ttxdecoder/test           build/tests-ttxdecoder             $INSTALL_DIR
-#uild_tests     $AV_PROJECTS_DIR/subttxrend-cc/tests       build/tests-subttxrend-cc          $INSTALL_DIR
-
+build_tests     $AV_PROJECTS_DIR/subttxrend-cc/test        build/tests-subttxrend-cc          $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-gfx/test       build/tests-subttxrend-gfx         $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-socksrc/test   build/tests-subttxrend-socksrc     $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-dvbsub/test    build/tests-subttxrend-dvbsub      $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-app/test       build/tests-subttxrend-app         $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-ctrl/test      build/tests-subttxrend-ctrl        $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-ttxt/test      build/tests-subttxrend-ttxt        $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-scte/test      build/tests-subttxrend-scte        $INSTALL_DIR
+build_tests     $AV_PROJECTS_DIR/subttxrend-testapps/test  build/tests-subttxrend-testapps    $INSTALL_DIR
 elif [ "$COMMAND" == "dotest" ] ; then
 
 $0 buildtest
@@ -361,7 +368,15 @@ run_tests       build/tests-dvbsubdecoder
 run_tests       build/tests-subttxrend-ttml
 run_tests       build/tests-subttxrend-webvtt
 run_tests       build/tests-ttxdecoder
-#run_tests       build/tests-subttxrend-cc
+run_tests       build/tests-subttxrend-cc
+run_tests       build/tests-subttxrend-gfx
+run_tests       build/tests-subttxrend-socksrc
+run_tests       build/tests-subttxrend-dvbsub
+run_tests       build/tests-subttxrend-app
+run_tests       build/tests-subttxrend-ctrl
+run_tests       build/tests-subttxrend-ttxt
+run_tests       build/tests-subttxrend-scte
+run_tests       build/tests-subttxrend-testapps
 
 elif [ "$COMMAND" == "testcoverage" ] ; then
 

@@ -56,10 +56,7 @@ endmacro()
 #
 # Data files
 #
-configure_file("test1.ini" "test1.ini" COPYONLY)
-configure_file("test1a.ini" "test1a.ini" COPYONLY)
-configure_file("test2.ini" "test2.ini" COPYONLY)
-configure_file("test3.ini" "test3.ini" COPYONLY)
+file(COPY "testdata" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
 #
 # Tests
@@ -84,3 +81,67 @@ add_cppunit_test(IniFile_Test
                  ../src/LoggerBackendStd.cpp
                  ../src/LoggerManagerImpl.cpp
                  ../src/StringUtils.cpp)
+
+add_cppunit_test(ConfigProvider_Test
+                 ConfigProvider_test.cpp
+                 TestRunner.cpp
+                 rdk_debug.cpp
+                 ../src/ConfigProvider.cpp
+                 ../src/ConfigProviderStorage.cpp
+                 ../src/Logger.cpp
+                 ../src/LoggerBackendRdk.cpp
+                 ../src/LoggerBackendStd.cpp
+                 ../src/LoggerManagerImpl.cpp
+                 ../src/StringUtils.cpp)
+
+#
+# LoggerManagerImpl Tests
+#
+add_cppunit_test(LoggerManagerImpl_Test
+                 LoggerManagerImpl_test.cpp
+                 TestRunner.cpp
+                 rdk_debug.cpp
+                 ../src/ConfigProvider.cpp
+                 ../src/ConfigProviderStorage.cpp
+                 ../src/Logger.cpp
+                 ../src/LoggerBackendRdk.cpp
+                 ../src/LoggerBackendStd.cpp
+                 ../src/LoggerManagerImpl.cpp
+                 ../src/StringUtils.cpp)
+
+#
+# JsonData Tests
+#
+add_cppunit_test(JsonData_Test
+                 JsonData_test.cpp
+                 TestRunner.cpp
+                 rdk_debug.cpp
+                 ../src/utils/JsonData.cpp
+                 ../src/Logger.cpp
+                 ../src/LoggerBackendRdk.cpp
+                 ../src/LoggerBackendStd.cpp
+                 ../src/LoggerManagerImpl.cpp
+                 ../src/ConfigProvider.cpp
+                 ../src/ConfigProviderStorage.cpp
+                 ../src/StringUtils.cpp)
+
+# Upgrade C++ standard for JsonData_Test only (JsonData.cpp uses std::make_unique)
+set_property(TARGET JsonData_Test PROPERTY CXX_STANDARD 14)
+
+#
+# Properties Tests
+#
+add_cppunit_test(Properties_Test
+                 Properties_test.cpp
+                 TestRunner.cpp
+                 rdk_debug.cpp
+                 ../src/utils/Properties.cpp
+                 ../src/utils/Utils.cpp
+                 ../src/Logger.cpp
+                 ../src/LoggerBackendRdk.cpp
+                 ../src/LoggerBackendStd.cpp
+                 ../src/LoggerManagerImpl.cpp
+                 ../src/ConfigProvider.cpp
+                 ../src/ConfigProviderStorage.cpp
+                 ../src/StringUtils.cpp)
+set_property(TARGET Properties_Test PROPERTY CXX_STANDARD 14)

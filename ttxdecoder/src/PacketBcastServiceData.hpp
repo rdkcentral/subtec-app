@@ -194,7 +194,7 @@ private:
     static const std::size_t STATUS_DISPLAY_BUFFER_LENGTH = 20;
 
     /** Designation code. */
-    std::int8_t m_designationCode;
+    std::int8_t m_designationCode = -1;
 
     /** Initial page. */
     PageId m_initialPage;

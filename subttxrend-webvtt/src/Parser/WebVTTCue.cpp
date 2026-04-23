@@ -346,7 +346,7 @@ void WebVTTCue::position(const std::string& value) {
         m_position = parsePercentageHundredths(token);
     }
     else {
-        throw ParserException("First position arg has to be \%age" + value);
+        throw ParserException("First position arg has to be %age" + value);
     }
 
     //Get align if present

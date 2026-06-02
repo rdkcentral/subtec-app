@@ -42,7 +42,7 @@ class TextDrawer
 {
 public:
     TextDrawer(std::shared_ptr<Gfx> gfx, std::shared_ptr<gfx::PrerenderedFontCache> fontCache, FontGroup fonts,  int row = 0, int column = 0):
-        column(column), row(row), m_gfx(gfx), m_fontCache{fontCache}, m_fonts(fonts), midrow(false), padding(0)
+        column(column), row(row), m_gfx(std::move(gfx)), m_fontCache{std::move(fontCache)}, m_fonts(fonts), midrow(false), padding(0)
     {}
     virtual ~TextDrawer() = default;
 

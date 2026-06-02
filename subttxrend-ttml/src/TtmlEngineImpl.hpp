@@ -109,11 +109,21 @@ private:
 
     /**
      * Calculates current media time taking into account time passed media time was received.
+     * Use this overload when the caller does not already hold m_mutex.
      *
      * @return
      *      Estimated mediatime.
      */
     TimePoint getCurrentMediatime() const;
+
+    /**
+     * Calculates current media time while the caller already holds m_mutex.
+     * Use this helper only from code paths that already own m_mutex.
+     *
+     * @return
+     *      Estimated mediatime.
+     */
+    TimePoint getCurrentMediatimeLocked() const;
 
     /**
      * Merge last document of m_shownDocuments with first of m_timeline

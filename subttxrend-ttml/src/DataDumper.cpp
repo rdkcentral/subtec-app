@@ -24,11 +24,13 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <ctime>
 #include <iomanip>
 #include <memory>
+#include <utility>
 #include <sstream>
 
 #include <sys/stat.h>
@@ -53,10 +55,16 @@ void DataDumper::setup(const common::ConfigProvider* provider)
     std::string dumpDir = provider->get("DUMP_DIR");
     if (dumpDir != "")
     {
-        mkdir(dumpDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-        dirPath.assign(dumpDir);
-        dumpToFile = true;
-        g_logger.info("ttml dump directory created: %s", dirPath.c_str());
+        if ((mkdir(dumpDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0) || (errno == EEXIST))
+        {
+            dirPath.assign(dumpDir);
+            dumpToFile = true;
+            g_logger.info("ttml dump directory created: %s", dirPath.c_str());
+        }
+        else
+        {
+            g_logger.error("could not create dump directory: %s errno: %d", dumpDir.c_str(), errno);
+        }
     }
 }
 
@@ -155,7 +163,7 @@ void DataDumper::dumpXml(const std::uint8_t* buffer, std::size_t bufferSize) con
 
     filename += ".xml";
 
-    toFile(filename, buffer, bufferSize);
+    toFile(std::move(filename), buffer, bufferSize);
 }
 
 void DataDumper::toLog(const std::uint8_t* buffer, std::size_t bufferSize) const

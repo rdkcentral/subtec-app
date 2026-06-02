@@ -20,6 +20,7 @@
 #include <cassert>
 
 #include <inttypes.h>
+#include <utility>
 
 #include "TtmlEngineImpl.hpp"
 #include "Parser/Parser.hpp"
@@ -297,7 +298,7 @@ void TtmlEngineImpl::process()
 
             assert(m_renderer);
 
-            auto const currentMediaTime = getCurrentMediatime();
+            auto const currentMediaTime = getCurrentMediatimeLocked();
             auto currentMediaTimeMs = currentMediaTime.toMilliseconds();
 
             // merge if possible to extend image duration prior
@@ -399,11 +400,10 @@ std::chrono::milliseconds TtmlEngineImpl::getWaitTime() const
 {
     auto waitTime = std::chrono::milliseconds::zero();
 
-    auto anythingToDraw = !m_timeline.empty();
-    auto anythingToHide = !m_shownDocuments.empty() || m_startTimer;
-
     {
         std::lock_guard<std::mutex> lock{m_mutex};
+        auto anythingToDraw = !m_timeline.empty();
+        auto anythingToHide = !m_shownDocuments.empty() || m_startTimer;
         if ((m_lastMediatimeMs != -1) && (anythingToDraw || anythingToHide)) {
             // TimePoint const currentMediaTime = getCurrentMediatime();
 
@@ -436,6 +436,12 @@ std::chrono::milliseconds TtmlEngineImpl::getWaitTime() const
 
 TimePoint TtmlEngineImpl::getCurrentMediatime() const
 {
+    std::lock_guard<std::mutex> lock{m_mutex};
+    return getCurrentMediatimeLocked();
+}
+
+TimePoint TtmlEngineImpl::getCurrentMediatimeLocked() const
+{
     using namespace std::chrono;
 
     std::uint64_t mediatimeDiffMs = duration_cast<milliseconds>(system_clock::now() - m_lastMediatimeTimestamp).count();
@@ -451,12 +457,12 @@ void TtmlEngineImpl::createTimingDoc()
     IntermediateDocument::TextLine timingLine;
     IntermediateDocument::Entity timingEntity;
 
-    timingLine.push_back(timingText);
-    timingEntity.m_textLines.push_back(timingLine);
+    timingLine.push_back(std::move(timingText));
+    timingEntity.m_textLines.push_back(std::move(timingLine));
     timingEntity.m_imageChunk.m_image = std::make_shared<ImageElement>();
     timingEntity.m_region = std::make_shared<RegionElement>(1000, 1000, 9000, 9000);
 
-    m_timingDoc->m_entites.push_back(timingEntity);
+    m_timingDoc->m_entites.push_back(std::move(timingEntity));
 
     m_displayedText = &m_timingDoc->m_entites.front().m_textLines.front().front().m_text;
 }
@@ -473,7 +479,7 @@ bool TtmlEngineImpl::timingUpdate()
     {
         lastUpdate = clockNow;
         assert(m_displayedText);
-        *m_displayedText = getCurrentMediatime().toStr();
+        *m_displayedText = getCurrentMediatimeLocked().toStr();
         m_logger.osinfo(__LOGGER_FUNC__, " timing str: ", *m_displayedText);
         return true;
     }

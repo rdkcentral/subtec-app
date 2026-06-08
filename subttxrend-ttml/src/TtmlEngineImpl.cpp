@@ -34,6 +34,21 @@ namespace ttmlengine
 
 #define DISPLAY_TIMEOUT 1
 
+namespace
+{
+
+TimePoint calculateCurrentMediatime(std::int64_t lastMediatimeMs,
+                                    std::chrono::system_clock::time_point lastMediatimeTimestamp,
+                                    std::uint64_t pauseTimeMs)
+{
+    using namespace std::chrono;
+
+    std::uint64_t mediatimeDiffMs = duration_cast<milliseconds>(system_clock::now() - lastMediatimeTimestamp).count();
+    return TimePoint(lastMediatimeMs + mediatimeDiffMs - pauseTimeMs);
+}
+
+}
+
 TtmlEngineImpl::TtmlEngineImpl() :
         m_logger("TtmlEngine", "TtmlEngineImpl", this)
 {
@@ -298,7 +313,9 @@ void TtmlEngineImpl::process()
 
             assert(m_renderer);
 
-            auto const currentMediaTime = getCurrentMediatimeLocked();
+            auto const currentMediaTime = calculateCurrentMediatime(m_lastMediatimeMs,
+                                                                    m_lastMediatimeTimestamp,
+                                                                    m_pauseTimeMs);
             auto currentMediaTimeMs = currentMediaTime.toMilliseconds();
 
             // merge if possible to extend image duration prior
@@ -437,15 +454,9 @@ std::chrono::milliseconds TtmlEngineImpl::getWaitTime() const
 TimePoint TtmlEngineImpl::getCurrentMediatime() const
 {
     std::lock_guard<std::mutex> lock{m_mutex};
-    return getCurrentMediatimeLocked();
-}
-
-TimePoint TtmlEngineImpl::getCurrentMediatimeLocked() const
-{
-    using namespace std::chrono;
-
-    std::uint64_t mediatimeDiffMs = duration_cast<milliseconds>(system_clock::now() - m_lastMediatimeTimestamp).count();
-    return TimePoint(m_lastMediatimeMs + mediatimeDiffMs - m_pauseTimeMs);
+    return calculateCurrentMediatime(m_lastMediatimeMs,
+                                     m_lastMediatimeTimestamp,
+                                     m_pauseTimeMs);
 }
 
 void TtmlEngineImpl::createTimingDoc()
@@ -479,7 +490,9 @@ bool TtmlEngineImpl::timingUpdate()
     {
         lastUpdate = clockNow;
         assert(m_displayedText);
-        *m_displayedText = getCurrentMediatimeLocked().toStr();
+        *m_displayedText = calculateCurrentMediatime(m_lastMediatimeMs,
+                                                     m_lastMediatimeTimestamp,
+                                                     m_pauseTimeMs).toStr();
         m_logger.osinfo(__LOGGER_FUNC__, " timing str: ", *m_displayedText);
         return true;
     }

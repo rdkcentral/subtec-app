@@ -155,11 +155,11 @@ private:
               Mode mode,
               std::string defaultValue = std::string()) :
                 m_key(key),
-                m_longName(longName),
-                m_shortName(shortName),
-                m_description(description),
+                m_longName(std::move(longName)),
+                m_shortName(std::move(shortName)),
+                m_description(std::move(description)),
                 m_mode(mode),
-                m_defaultValue(defaultValue)
+                m_defaultValue(std::move(defaultValue))
         {
             // noop
         }

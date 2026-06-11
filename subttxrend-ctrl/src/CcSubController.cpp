@@ -23,6 +23,7 @@
 #include <subttxrend/protocol/PacketData.hpp>
 
 #include <cassert>
+#include <utility>
 
 namespace subttxrend {
 namespace ctrl {

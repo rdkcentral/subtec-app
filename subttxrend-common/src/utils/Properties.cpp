@@ -78,15 +78,15 @@ Properties& paramsToProperties(Properties& p, std::string const& params)
     auto kv = [&p](std::string s) {
         if (s.empty())
             return;
-        auto k_v = [&p, cnt = 0, k = std::string()](std::string s) mutable {
+        auto k_v = [&p, cnt = 0, k = std::string()](std::string value) mutable {
             if (cnt == 0) {
-                k = s;
+                k = std::move(value);
             } else {
-                p.setString(k, s);
+                p.setString(k, value);
             }
             cnt++;
         };
-        split(s, ':', k_v, 1);
+        split(s, ':', std::move(k_v), 1);
     };
     split(params, ';', kv);
     return p;

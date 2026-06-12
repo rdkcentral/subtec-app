@@ -89,8 +89,13 @@ void RDK_LOG(rdk_LogLevel level,
     std::va_list arguments;
 
     va_start(arguments, format);
-    vsnprintf(buffer, sizeof(buffer), format, arguments);
+    int ret = vsnprintf(buffer, sizeof(buffer), format, arguments);
     va_end(arguments);
+
+    if (ret < 0)
+    {
+        return;
+    }
 
     printf("%s\n", buffer);
 }

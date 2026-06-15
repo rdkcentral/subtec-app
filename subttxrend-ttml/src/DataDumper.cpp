@@ -55,11 +55,26 @@ void DataDumper::setup(const common::ConfigProvider* provider)
     std::string dumpDir = provider->get("DUMP_DIR");
     if (dumpDir != "")
     {
-        if ((mkdir(dumpDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0) || (errno == EEXIST))
+        errno = 0;
+        if (mkdir(dumpDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0)
         {
             dirPath.assign(dumpDir);
             dumpToFile = true;
             g_logger.info("ttml dump directory created: %s", dirPath.c_str());
+        }
+        else if (errno == EEXIST)
+        {
+            struct stat st{};
+            if ((stat(dumpDir.c_str(), &st) == 0) && S_ISDIR(st.st_mode))
+            {
+                dirPath.assign(dumpDir);
+                dumpToFile = true;
+                g_logger.info("ttml dump directory exists: %s", dirPath.c_str());
+            }
+            else
+            {
+                g_logger.error("dump directory path exists but is not a directory: %s", dumpDir.c_str());
+            }
         }
         else
         {

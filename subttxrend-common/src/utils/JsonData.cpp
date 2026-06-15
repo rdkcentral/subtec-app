@@ -102,7 +102,7 @@ class JsonData::Impl final
         try {
             for (auto& item : m_data.get_child(path)) {
                 std::string value;
-                for (auto node : nodes) {
+                for (const auto& node : nodes) {
                     try {
                         value += item.second.get<std::string>(node);
                     } catch (std::exception const& e) {
@@ -114,7 +114,7 @@ class JsonData::Impl final
                 if (!value.empty()){
                     value.pop_back();
                 }
-                values.push_back(value);
+                values.push_back(std::move(value));
             }
         } catch (std::exception const& e) {
             logger.error("%s couldn't get %s: %s", __LOGGER_FUNC__, path.c_str(), e.what());

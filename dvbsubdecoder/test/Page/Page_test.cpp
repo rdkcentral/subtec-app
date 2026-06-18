@@ -414,11 +414,22 @@ public:
         CPPUNIT_ASSERT(page.addRegion(0, 100, 200));
         CPPUNIT_ASSERT(page.getRegionCount() == 1);
         CPPUNIT_ASSERT(page.getRegion(0).m_regionId == 0);
-        
+
         // Test maximum region ID (255)
         CPPUNIT_ASSERT(page.addRegion(255, 300, 400));
         CPPUNIT_ASSERT(page.getRegionCount() == 2);
         CPPUNIT_ASSERT(page.getRegion(1).m_regionId == 255);
+
+        // Test negative region ID
+        // If addRegion takes uint8_t, this cast will wrap to 255
+        CPPUNIT_ASSERT(page.addRegion(static_cast<std::uint8_t>(-1), 500, 600));
+        CPPUNIT_ASSERT(page.getRegionCount() == 3);
+        CPPUNIT_ASSERT(page.getRegion(2).m_regionId == 255);
+
+        // Test overflow region ID (>255)
+        CPPUNIT_ASSERT(page.addRegion(static_cast<std::uint8_t>(300), 700, 800));
+        CPPUNIT_ASSERT(page.getRegionCount() == 4);
+        CPPUNIT_ASSERT(page.getRegion(3).m_regionId == 44); // 300 mod 256 = 44
     }
 
     void testGetRegionBoundaryConditions()
@@ -439,6 +450,9 @@ public:
         
         // Large invalid index should throw
         CPPUNIT_ASSERT_THROW(page.getRegion(SIZE_MAX), std::range_error);
+
+        // Negative index (converted to large unsigned) should throw
+        CPPUNIT_ASSERT_THROW(page.getRegion(static_cast<std::size_t>(-1)), std::range_error);
     }
 
     void testDataPersistenceAcrossTransitions()
@@ -458,7 +472,12 @@ public:
         CPPUNIT_ASSERT(page.getPts() == pts);
         CPPUNIT_ASSERT(page.getTimeout() == timeout);
         CPPUNIT_ASSERT(page.getRegionCount() == 1);
-        
+        // Check region data is unchanged
+        const auto& regionBefore = page.getRegion(0);
+        CPPUNIT_ASSERT(regionBefore.m_regionId == 5);
+        CPPUNIT_ASSERT(regionBefore.m_positionX == 500);
+        CPPUNIT_ASSERT(regionBefore.m_positionY == 600);
+
         // Version, PTS, timeout should persist through TIMEDOUT state
         // (but regions are cleared)
         page.setTimedOut();
@@ -466,6 +485,8 @@ public:
         CPPUNIT_ASSERT(page.getPts() == pts);
         CPPUNIT_ASSERT(page.getTimeout() == timeout);
         CPPUNIT_ASSERT(page.getRegionCount() == 0);
+        // Ensure no stale region data remains (access should throw)
+        CPPUNIT_ASSERT_THROW(page.getRegion(0), std::range_error);
     }
 
     void testResetFromAllStates()

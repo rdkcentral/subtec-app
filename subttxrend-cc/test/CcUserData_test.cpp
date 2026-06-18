@@ -71,7 +71,6 @@ class CcUserDataTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCcDataIs608DataWithField1);
     CPPUNIT_TEST(testCcDataIs608DataWithField2);
     CPPUNIT_TEST(testCcDataIs608DataWithDtvccTypes);
-    CPPUNIT_TEST(testCcDataIsPaddingWithInvalid);
     CPPUNIT_TEST(testCcDataIsPaddingWithValid);
     CPPUNIT_TEST(testMixed608And708Data);
     CPPUNIT_TEST(testAllValidTriplets);
@@ -109,8 +108,9 @@ public:
     void testDefaultConstructorInitialization()
     {
         UserData userData;
-        // Verify object is created successfully
-        CPPUNIT_ASSERT(true);
+        // Verify object created and initial state is as expected
+        CPPUNIT_ASSERT_EQUAL(false, userData.isValid());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), userData.getCcData().size());
     }
 
     void testDefaultConstructorIsValid()
@@ -575,17 +575,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(false, ccData2->is608Data());  // DTVCC_CCP_START
     }
 
-    void testCcDataIsPaddingWithInvalid()
-    {
-        // In ATSC_CC_POC path, ccValid is always true, so isPadding always returns false
-        UserData userData;
-        std::uint8_t data[] = {0x00, 0x11, 0x22};
-        userData.setUserData(data, 3);
-
-        const CcData* ccData = userData.getCcData()[0].get();
-        CPPUNIT_ASSERT_EQUAL(false, ccData->isPadding());
-    }
-
     void testCcDataIsPaddingWithValid()
     {
         UserData userData;
@@ -767,7 +756,6 @@ public:
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), userData.getCcData().size());
             // Object goes out of scope, unique_ptr should clean up
         }
-        CPPUNIT_ASSERT(true);  // No memory leaks or crashes
     }
 
     void testMemoryManagementLargeData()

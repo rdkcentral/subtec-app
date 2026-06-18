@@ -21,10 +21,16 @@
 #include <stdexcept>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <limits>
 
 #include "DataTargetFactory.hpp"
+#include "ConsoleLogTarget.hpp"
+#include "Ipv4SocketTarget.hpp"
+#include "PlainFileTarget.hpp"
+#include "SmartFileTarget.hpp"
+#include "UnixSocketTarget.hpp"
 
 using namespace subttxrend::testapps;
 
@@ -93,6 +99,23 @@ public:
     }
 
 protected:
+    template<typename TargetType>
+    std::unique_ptr<DataTarget> assertCreatedTarget(const std::string& factoryPath,
+                                                    const std::string& expectedPath)
+    {
+        static_assert(std::is_base_of<DataTarget, TargetType>::value,
+                      "TargetType must derive from DataTarget");
+
+        DataTargetFactory factory;
+        std::unique_ptr<DataTarget> target = factory.createTarget(factoryPath);
+
+        CPPUNIT_ASSERT(target != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<TargetType*>(target.get()) != nullptr);
+        CPPUNIT_ASSERT_EQUAL(expectedPath, target->getPath());
+
+        return target;
+    }
+
     void testFactoryConstruction()
     {
         // Verify factory can be constructed without exceptions
@@ -284,67 +307,57 @@ protected:
 
     void testCreateTargetWithIpv4Path()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("ipv4:192.168.1.1:8080");
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<Ipv4SocketTarget>("ipv4:192.168.1.1:8080", "192.168.1.1:8080");
     }
 
     void testCreateTargetWithUnixPath()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("unix:/tmp/socket");
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<UnixSocketTarget>("unix:/tmp/socket", "/tmp/socket");
     }
 
     void testCreateTargetWithFilePath()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("file:/path/to/file.txt");
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<PlainFileTarget>("file:/path/to/file.txt", "/path/to/file.txt");
     }
 
     void testCreateTargetWithSfilePath()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("sfile:/path/to/file");
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<SmartFileTarget>("sfile:/path/to/file", "/path/to/file");
     }
 
     void testCreateTargetWithConsolePath()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("console:");
-        CPPUNIT_ASSERT(target != nullptr);
+        std::unique_ptr<DataTarget> target = assertCreatedTarget<ConsoleLogTarget>("console:", "");
+        CPPUNIT_ASSERT(target->open());
+        CPPUNIT_ASSERT(target->wantsMorePackets());
+
+        DataPacket packet(8);
+        packet.appendLeUint32(0x12345678);
+
+        CPPUNIT_ASSERT(target->writePacket(packet));
+        target->close();
     }
 
     void testCreateTargetWithMinimalPathAfterColon()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("file:");
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<PlainFileTarget>("file:", "");
     }
 
     void testCreateTargetWithMultipleColons()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("file:path:with:colons");
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<PlainFileTarget>("file:path:with:colons", "path:with:colons");
     }
 
     void testCreateTargetWithPathContainingSpaces()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("file:/path/with spaces/file.txt");
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<PlainFileTarget>("file:/path/with spaces/file.txt", "/path/with spaces/file.txt");
     }
 
     void testCreateTargetWithVeryLongPath()
     {
-        DataTargetFactory factory;
         std::string longPath = "file:";
         longPath.append(2000, 'x');
-        std::unique_ptr<DataTarget> target = factory.createTarget(longPath);
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<PlainFileTarget>(longPath, std::string(2000, 'x'));
     }
 
     void testCreateTargetWithEmptyString()
@@ -377,9 +390,7 @@ protected:
 
     void testCreateTargetWithColonAtEnd()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("ipv4");
-        CPPUNIT_ASSERT(target == nullptr);
+        assertCreatedTarget<Ipv4SocketTarget>("ipv4:", "");
     }
 
     void testCreateTargetWithUppercasePrefix()
@@ -419,40 +430,22 @@ protected:
 
     void testCreateTargetWithSpecialCharacters()
     {
-        DataTargetFactory factory;
-        std::unique_ptr<DataTarget> target = factory.createTarget("file:/path/file@#$.txt");
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<PlainFileTarget>("file:/path/file@#$.txt", "/path/file@#$.txt");
     }
 
     void testFactoryCanCreateMultipleDifferentTargetsSequentially()
     {
-        DataTargetFactory factory;
-
-        std::unique_ptr<DataTarget> target1 = factory.createTarget("file:/path1");
-        CPPUNIT_ASSERT(target1 != nullptr);
-
-        std::unique_ptr<DataTarget> target2 = factory.createTarget("unix:/tmp/socket");
-        CPPUNIT_ASSERT(target2 != nullptr);
-
-        std::unique_ptr<DataTarget> target3 = factory.createTarget("ipv4:127.0.0.1:9000");
-        CPPUNIT_ASSERT(target3 != nullptr);
-
-        std::unique_ptr<DataTarget> target4 = factory.createTarget("console:");
-        CPPUNIT_ASSERT(target4 != nullptr);
+        std::unique_ptr<DataTarget> target1 = assertCreatedTarget<PlainFileTarget>("file:/path1", "/path1");
+        std::unique_ptr<DataTarget> target2 = assertCreatedTarget<UnixSocketTarget>("unix:/tmp/socket", "/tmp/socket");
+        std::unique_ptr<DataTarget> target3 = assertCreatedTarget<Ipv4SocketTarget>("ipv4:127.0.0.1:9000", "127.0.0.1:9000");
+        std::unique_ptr<DataTarget> target4 = assertCreatedTarget<ConsoleLogTarget>("console:", "");
     }
 
     void testFactoryCanCreateSameTargetTypeMultipleTimes()
     {
-        DataTargetFactory factory;
-
-        std::unique_ptr<DataTarget> target1 = factory.createTarget("file:/path1");
-        CPPUNIT_ASSERT(target1 != nullptr);
-
-        std::unique_ptr<DataTarget> target2 = factory.createTarget("file:/path2");
-        CPPUNIT_ASSERT(target2 != nullptr);
-
-        std::unique_ptr<DataTarget> target3 = factory.createTarget("file:/path3");
-        CPPUNIT_ASSERT(target3 != nullptr);
+        std::unique_ptr<DataTarget> target1 = assertCreatedTarget<PlainFileTarget>("file:/path1", "/path1");
+        std::unique_ptr<DataTarget> target2 = assertCreatedTarget<PlainFileTarget>("file:/path2", "/path2");
+        std::unique_ptr<DataTarget> target3 = assertCreatedTarget<PlainFileTarget>("file:/path3", "/path3");
 
         // Verify they are different instances
         CPPUNIT_ASSERT(target1.get() != target2.get());
@@ -462,19 +455,11 @@ protected:
 
     void testAllFiveTargetTypesCanBeCreated()
     {
-        DataTargetFactory factory;
-
-        std::unique_ptr<DataTarget> ipv4 = factory.createTarget("ipv4:127.0.0.1:8080");
-        std::unique_ptr<DataTarget> unixSock = factory.createTarget("unix:/tmp/sock");
-        std::unique_ptr<DataTarget> file = factory.createTarget("file:/file");
-        std::unique_ptr<DataTarget> sfile = factory.createTarget("sfile:/sfile");
-        std::unique_ptr<DataTarget> console = factory.createTarget("console:");
-
-        CPPUNIT_ASSERT(ipv4 != nullptr);
-        CPPUNIT_ASSERT(unixSock != nullptr);
-        CPPUNIT_ASSERT(file != nullptr);
-        CPPUNIT_ASSERT(sfile != nullptr);
-        CPPUNIT_ASSERT(console != nullptr);
+        std::unique_ptr<DataTarget> ipv4 = assertCreatedTarget<Ipv4SocketTarget>("ipv4:127.0.0.1:8080", "127.0.0.1:8080");
+        std::unique_ptr<DataTarget> unixSock = assertCreatedTarget<UnixSocketTarget>("unix:/tmp/sock", "/tmp/sock");
+        std::unique_ptr<DataTarget> file = assertCreatedTarget<PlainFileTarget>("file:/file", "/file");
+        std::unique_ptr<DataTarget> sfile = assertCreatedTarget<SmartFileTarget>("sfile:/sfile", "/sfile");
+        std::unique_ptr<DataTarget> console = assertCreatedTarget<ConsoleLogTarget>("console:", "");
 
         // Verify all are different instances
         CPPUNIT_ASSERT(ipv4.get() != unixSock.get());
@@ -485,13 +470,9 @@ protected:
 
     void testCreatedTargetsAreDifferentInstances()
     {
-        DataTargetFactory factory;
+        std::unique_ptr<DataTarget> target1 = assertCreatedTarget<PlainFileTarget>("file:/path1", "/path1");
+        std::unique_ptr<DataTarget> target2 = assertCreatedTarget<PlainFileTarget>("file:/path2", "/path2");
 
-        std::unique_ptr<DataTarget> target1 = factory.createTarget("file:/path1");
-        std::unique_ptr<DataTarget> target2 = factory.createTarget("file:/path2");
-
-        CPPUNIT_ASSERT(target1 != nullptr);
-        CPPUNIT_ASSERT(target2 != nullptr);
         CPPUNIT_ASSERT(target1.get() != target2.get());
 
         // Get raw pointers to verify they are different
@@ -507,6 +488,8 @@ protected:
         // Create a target
         std::unique_ptr<DataTarget> target1 = factory.createTarget("file:/first");
         CPPUNIT_ASSERT(target1 != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<PlainFileTarget*>(target1.get()) != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("/first"), target1->getPath());
 
         // Destroy it by resetting
         target1.reset();
@@ -514,6 +497,8 @@ protected:
         // Factory should still work
         std::unique_ptr<DataTarget> target2 = factory.createTarget("file:/second");
         CPPUNIT_ASSERT(target2 != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<PlainFileTarget*>(target2.get()) != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("/second"), target2->getPath());
 
         // Factory state should be unchanged
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(5), factory.getTypeCount());
@@ -521,15 +506,14 @@ protected:
 
     void testCreateManyTargetsRapidly()
     {
-        DataTargetFactory factory;
         std::vector<std::unique_ptr<DataTarget>> targets;
 
         // Create 100 targets rapidly
         for (int i = 0; i < 100; ++i)
         {
             std::string path = "file:/path" + std::to_string(i);
-            std::unique_ptr<DataTarget> target = factory.createTarget(path);
-            CPPUNIT_ASSERT(target != nullptr);
+            std::unique_ptr<DataTarget> target = assertCreatedTarget<PlainFileTarget>(path,
+                                                                                       "/path" + std::to_string(i));
             targets.push_back(std::move(target));
         }
 
@@ -565,6 +549,12 @@ protected:
         CPPUNIT_ASSERT(target1 != nullptr);
         CPPUNIT_ASSERT(target2 != nullptr);
         CPPUNIT_ASSERT(target3 != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<PlainFileTarget*>(target1.get()) != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<PlainFileTarget*>(target2.get()) != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<PlainFileTarget*>(target3.get()) != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("/path1"), target1->getPath());
+        CPPUNIT_ASSERT_EQUAL(std::string("/path2"), target2->getPath());
+        CPPUNIT_ASSERT_EQUAL(std::string("/path3"), target3->getPath());
 
         // All targets should be different instances
         CPPUNIT_ASSERT(target1.get() != target2.get());
@@ -600,20 +590,14 @@ protected:
 
     void testCreateTargetWithPathContainingNewline()
     {
-        DataTargetFactory factory;
         std::string pathWithNewline = "file:/path\nwith\nnewlines";
-        std::unique_ptr<DataTarget> target = factory.createTarget(pathWithNewline);
-        // Should still create target as newlines are in the path data portion
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<PlainFileTarget>(pathWithNewline, "/path\nwith\nnewlines");
     }
 
     void testCreateTargetWithPathContainingTabs()
     {
-        DataTargetFactory factory;
         std::string pathWithTabs = "file:/path\twith\ttabs";
-        std::unique_ptr<DataTarget> target = factory.createTarget(pathWithTabs);
-        // Should still create target as tabs are in the path data portion
-        CPPUNIT_ASSERT(target != nullptr);
+        assertCreatedTarget<PlainFileTarget>(pathWithTabs, "/path\twith\ttabs");
     }
 };
 

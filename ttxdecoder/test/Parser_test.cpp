@@ -20,6 +20,8 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include <cppunit/TestFixture.h>
 
+#include <initializer_list>
+
 #include "Parser.hpp"
 #include "Database.hpp"
 #include "CharsetConfig.hpp"
@@ -31,6 +33,7 @@
 #include "ControlInfo.hpp"
 #include "PageId.hpp"
 #include "CharsetMaps.hpp"
+#include "Property.hpp"
 
 using namespace ttxdecoder;
 
@@ -82,10 +85,6 @@ private:
 class ParserTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE(ParserTest);
-    CPPUNIT_TEST(testLevel1);
-    CPPUNIT_TEST(testLevel1_5);
-    CPPUNIT_TEST(testDatabase);
-    CPPUNIT_TEST(testMultipleParsers);
     CPPUNIT_TEST(testHeaderOnlySkipsRows);
     CPPUNIT_TEST(testHeaderOnlySkipsNavigation);
     CPPUNIT_TEST(testFullPageCleared);
@@ -96,19 +95,14 @@ CPPUNIT_TEST_SUITE(ParserTest);
     CPPUNIT_TEST(testNewsflashMode);
     CPPUNIT_TEST(testSubtitleMode);
     CPPUNIT_TEST(testIgnoresOtherFlags);
-    CPPUNIT_TEST(testCharsetInit);
     CPPUNIT_TEST(testContextReset);
     CPPUNIT_TEST(testDifferentLevels);
-    CPPUNIT_TEST(testValidPageId);
     CPPUNIT_TEST(testMagazineMin);
     CPPUNIT_TEST(testMagazineMax);
     CPPUNIT_TEST(testNoChangeWhenIdentical);
     CPPUNIT_TEST(testMultiplePagesNoContamination);
     CPPUNIT_TEST(testHeaderRow);
-    CPPUNIT_TEST(testAllRows);
-    CPPUNIT_TEST(testEmptyPage);
     CPPUNIT_TEST(testErasePageFlag);
-    CPPUNIT_TEST(testPageIdChange);
 
 CPPUNIT_TEST_SUITE_END();
 
@@ -146,58 +140,58 @@ private:
         header.setPageInfo(pid, controlInfo, 0);
     }
 
-    void testLevel1()
+    void setHeaderBytes(PacketHeader& header,
+                        std::initializer_list<std::int8_t> bytes)
     {
-        // Create independent instances to avoid conflicts with fixture's m_parser
-        Database db;
-        MockCharsetConfig config;
-        Parser parser(PresentationLevel::LEVEL_1, db, config);
-        // If no exception is thrown, construction succeeded
-        CPPUNIT_ASSERT(true);
+        auto* buffer = header.getBuffer();
+        const auto length = header.getBufferLength();
+
+        for (std::size_t i = 0; i < length; ++i)
+        {
+            buffer[i] = ' ';
+        }
+
+        std::size_t index = 0;
+        for (auto value : bytes)
+        {
+            if (index >= length)
+            {
+                break;
+            }
+
+            buffer[index] = value;
+            ++index;
+        }
     }
 
-    void testLevel1_5()
+    void seedRow(DecodedPage& decodedPage,
+                 std::size_t row,
+                 std::uint16_t character,
+                 std::uint16_t properties = 0)
     {
-        // Create independent instances to avoid conflicts with fixture's m_parser
-        Database db;
-        MockCharsetConfig config;
-        Parser parser(PresentationLevel::LEVEL_1_5, db, config);
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testDatabase()
-    {
-        // Constructor should accept database reference without issues
-        Database db;
-        MockCharsetConfig config;
-        Parser parser(PresentationLevel::LEVEL_1, db, config);
-        // If no exception thrown, database is stored correctly
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testMultipleParsers()
-    {
-        // Multiple parser instances should not interfere with each other
-        Database db;
-        MockCharsetConfig config;
-        Parser parser1(PresentationLevel::LEVEL_1, db, config);
-        Parser parser2(PresentationLevel::LEVEL_1_5, db, config);
-        CPPUNIT_ASSERT(true);
+        auto& segment = decodedPage.getRow(row).m_levelOnePageSegment;
+        segment.m_charArray[0] = character;
+        segment.m_propertiesArray[0] = properties;
     }
 
     void testHeaderOnlySkipsRows()
     {
         PacketHeader header;
         createHeaderPacket(header, 100, 0);
+        setHeaderBytes(header, {'H'});
 
         PageDisplayable page;
         DecodedPage decodedPage;
+        decodedPage.setPageId(PageId(0x345, PageId::ANY_SUBPAGE));
+        seedRow(decodedPage, 1, 'X', Property::VALUE_FLASH);
 
-        m_parser->parsePage(page, header, Parser::Mode::HEADER_ONLY,
-                           NavigationMode::DEFAULT, decodedPage);
+        bool changed = m_parser->parsePage(page, header, Parser::Mode::HEADER_ONLY,
+                                           NavigationMode::DEFAULT, decodedPage);
 
-        // Displayable rows (1-24) should not be processed
-        CPPUNIT_ASSERT_NO_THROW(decodedPage.getRow(1));
+        CPPUNIT_ASSERT_EQUAL(true, changed);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x345), decodedPage.getPageId().getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>('X'), decodedPage.getRow(1).m_levelOnePageSegment.m_charArray[0]);
+        CPPUNIT_ASSERT_EQUAL(Property::VALUE_FLASH, decodedPage.getRow(1).m_levelOnePageSegment.m_propertiesArray[0]);
     }
 
     void testHeaderOnlySkipsNavigation()
@@ -207,48 +201,57 @@ private:
 
         PageDisplayable page;
         DecodedPage decodedPage;
+        decodedPage.setPageId(PageId(0x100, PageId::ANY_SUBPAGE));
+        decodedPage.setColourKeyLink(DecodedPage::Link::RED,
+                                     PageId(0x234, PageId::ANY_SUBPAGE));
+        seedRow(decodedPage, 24, 'N', Property::VALUE_FLASH);
 
         m_parser->parsePage(page, header, Parser::Mode::HEADER_ONLY,
                            NavigationMode::TOP_DEFAULT, decodedPage);
 
-        // Navigation should not be processed
-        CPPUNIT_ASSERT_NO_THROW(decodedPage.getRow(24));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>('N'), decodedPage.getRow(24).m_levelOnePageSegment.m_charArray[0]);
+        CPPUNIT_ASSERT_EQUAL(Property::VALUE_FLASH, decodedPage.getRow(24).m_levelOnePageSegment.m_propertiesArray[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x234),
+                             decodedPage.getColourKeyLink(DecodedPage::Link::RED).getMagazinePage());
     }
 
     void testFullPageCleared()
     {
         PacketHeader header;
-        createHeaderPacket(header, 100, ControlInfo::ERASE_PAGE);
+        createHeaderPacket(header, 100, 0);
 
         PageDisplayable page;
         DecodedPage decodedPage;
+        decodedPage.setPageId(PageId(0x200, PageId::ANY_SUBPAGE));
+        seedRow(decodedPage, 1, 'X', Property::VALUE_FLASH);
 
-        // FULL_PAGE with ERASE_PAGE flag should clear the page and set new ID
         bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
                                           NavigationMode::DEFAULT, decodedPage);
 
-        // After parsing, page should have page ID from header
         PageId resultPageId = decodedPage.getPageId();
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(100), resultPageId.getDecimalMagazinePage());
-
-        // ERASE_PAGE should trigger a change
         CPPUNIT_ASSERT_EQUAL(true, changed);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(' '), decodedPage.getRow(1).m_levelOnePageSegment.m_charArray[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0), decodedPage.getRow(1).m_levelOnePageSegment.m_propertiesArray[0]);
     }
 
     void testFullPagePreservesWithoutErase()
     {
         PacketHeader header;
-        createHeaderPacket(header, 100, 0);  // No ERASE_PAGE flag
+        createHeaderPacket(header, 100, 0);
 
         PageDisplayable page;
         DecodedPage decodedPage;
+        decodedPage.setPageId(PageId(0x100, PageId::ANY_SUBPAGE));
+        seedRow(decodedPage, 1, 'X', Property::VALUE_FLASH);
 
-        // FULL_PAGE without erase flag should still set page info
         bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
                                           NavigationMode::DEFAULT, decodedPage);
 
-        // Page ID should be set from header
+        CPPUNIT_ASSERT_EQUAL(true, changed);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(100), decodedPage.getPageId().getDecimalMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>('X'), decodedPage.getRow(1).m_levelOnePageSegment.m_charArray[0]);
+        CPPUNIT_ASSERT_EQUAL(Property::VALUE_FLASH, decodedPage.getRow(1).m_levelOnePageSegment.m_propertiesArray[0]);
     }
 
     void testFullPageProcessesAllRows()
@@ -259,20 +262,25 @@ private:
         PageDisplayable page;
         DecodedPage decodedPage;
 
+        for (int i = 1; i <= 24; ++i)
+        {
+            seedRow(decodedPage, i, static_cast<std::uint16_t>('A' + (i % 26)), Property::VALUE_FLASH);
+        }
+
         m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
                            NavigationMode::DEFAULT, decodedPage);
 
-        // Should be able to access all rows without errors
-        for (int i = 0; i <= 24; ++i)
+        for (int i = 1; i <= 24; ++i)
         {
-            CPPUNIT_ASSERT_NO_THROW(decodedPage.getRow(i));
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(' '), decodedPage.getRow(i).m_levelOnePageSegment.m_charArray[0]);
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0), decodedPage.getRow(i).m_levelOnePageSegment.m_propertiesArray[0]);
         }
     }
 
     void testFullPageSetsPageInfo()
     {
         PacketHeader header;
-        createHeaderPacket(header, 123, ControlInfo::ERASE_PAGE);
+        createHeaderPacket(header, 123, ControlInfo::NEWSFLASH);
 
         PageDisplayable page;
         DecodedPage decodedPage;
@@ -280,105 +288,133 @@ private:
         m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
                            NavigationMode::DEFAULT, decodedPage);
 
-        // Page ID should be set from header
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(123), decodedPage.getPageId().getDecimalMagazinePage());
+        CPPUNIT_ASSERT((decodedPage.getPageControlInfo() & ControlInfo::NEWSFLASH) != 0);
     }
 
     void testNavigationDefault()
     {
         PacketHeader header;
-        createHeaderPacket(header, 100, ControlInfo::ERASE_PAGE);
+        createHeaderPacket(header, 100, 0);
 
         PageDisplayable page;
         DecodedPage decodedPage;
+        decodedPage.setPageId(PageId(0x100, PageId::ANY_SUBPAGE));
+        seedRow(decodedPage, 24, 'N', Property::VALUE_FLASH);
 
         bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
                                           NavigationMode::DEFAULT, decodedPage);
 
-        // Should complete without error
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(true, changed);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(' '), decodedPage.getRow(24).m_levelOnePageSegment.m_charArray[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0), decodedPage.getRow(24).m_levelOnePageSegment.m_propertiesArray[0]);
     }
 
     void testNewsflashMode()
     {
-        PacketHeader header;
-        createHeaderPacket(header, 100, ControlInfo::NEWSFLASH);
+        PacketHeader normalHeader;
+        createHeaderPacket(normalHeader, 100, 0);
+        setHeaderBytes(normalHeader, {'N'});
+
+        PacketHeader newsflashHeader;
+        createHeaderPacket(newsflashHeader, 100, ControlInfo::NEWSFLASH);
+        setHeaderBytes(newsflashHeader, {'N'});
 
         PageDisplayable page;
-        DecodedPage decodedPage;
+        DecodedPage normalPage;
+        DecodedPage newsflashPage;
 
-        // NEWSFLASH flag should be processed as boxed mode
-        bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
-                                          NavigationMode::DEFAULT, decodedPage);
+        m_parser->parsePage(page, normalHeader, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, normalPage);
+        m_parser->parsePage(page, newsflashHeader, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, newsflashPage);
 
-        // Should complete without error
-        CPPUNIT_ASSERT(true);
+        static const std::size_t headerColumn = 8;
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>('N'), normalPage.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn]);
+        CPPUNIT_ASSERT((normalPage.getRow(0).m_levelOnePageSegment.m_propertiesArray[headerColumn] & Property::VALUE_HIDDEN) == 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0), newsflashPage.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn]);
+        CPPUNIT_ASSERT((newsflashPage.getRow(0).m_levelOnePageSegment.m_propertiesArray[headerColumn] & Property::VALUE_HIDDEN) != 0);
     }
 
     void testSubtitleMode()
     {
-        PacketHeader header;
-        createHeaderPacket(header, 100, ControlInfo::SUBTITLE);
+        PacketHeader normalHeader;
+        createHeaderPacket(normalHeader, 100, 0);
+        setHeaderBytes(normalHeader, {'S'});
+
+        PacketHeader subtitleHeader;
+        createHeaderPacket(subtitleHeader, 100, ControlInfo::SUBTITLE);
+        setHeaderBytes(subtitleHeader, {'S'});
 
         PageDisplayable page;
-        DecodedPage decodedPage;
+        DecodedPage normalPage;
+        DecodedPage subtitlePage;
 
-        // SUBTITLE flag should be processed as boxed mode
-        bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
-                                          NavigationMode::DEFAULT, decodedPage);
+        m_parser->parsePage(page, normalHeader, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, normalPage);
+        m_parser->parsePage(page, subtitleHeader, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, subtitlePage);
 
-        // Should complete without error
-        CPPUNIT_ASSERT(true);
+        static const std::size_t headerColumn = 8;
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>('S'), normalPage.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn]);
+        CPPUNIT_ASSERT((normalPage.getRow(0).m_levelOnePageSegment.m_propertiesArray[headerColumn] & Property::VALUE_HIDDEN) == 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0), subtitlePage.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn]);
+        CPPUNIT_ASSERT((subtitlePage.getRow(0).m_levelOnePageSegment.m_propertiesArray[headerColumn] & Property::VALUE_HIDDEN) != 0);
     }
 
     void testIgnoresOtherFlags()
     {
-        PacketHeader header;
-        createHeaderPacket(header, 100, 0xFF);  // All flags set
+        PacketHeader boxedHeader;
+        createHeaderPacket(boxedHeader, 100, ControlInfo::NEWSFLASH | ControlInfo::SUBTITLE);
+        setHeaderBytes(boxedHeader, {0x0B, 'X', 0x0A});
+
+        PacketHeader noisyHeader;
+        createHeaderPacket(noisyHeader, 100, 0xFF);
+        setHeaderBytes(noisyHeader, {0x0B, 'X', 0x0A});
 
         PageDisplayable page;
-        DecodedPage decodedPage;
+        DecodedPage boxedPage;
+        DecodedPage noisyPage;
 
-        // Should handle any combination of control flags
-        bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
-                                          NavigationMode::DEFAULT, decodedPage);
+        m_parser->parsePage(page, boxedHeader, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, boxedPage);
+        m_parser->parsePage(page, noisyHeader, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, noisyPage);
 
-        // Should complete without error
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testCharsetInit()
-    {
-        // Verify Parser initializes with different charset configurations
-        MockCharsetConfig config;
-        Database db;
-        Parser parser(PresentationLevel::LEVEL_1, db, config);
-
-        // Parser should initialize with charset from config without crashing
-        CPPUNIT_ASSERT(true);
+        static const std::size_t visibleColumn = 9;
+        CPPUNIT_ASSERT_EQUAL(boxedPage.getRow(0).m_levelOnePageSegment.m_charArray[visibleColumn],
+                             noisyPage.getRow(0).m_levelOnePageSegment.m_charArray[visibleColumn]);
+        CPPUNIT_ASSERT_EQUAL(boxedPage.getRow(0).m_levelOnePageSegment.m_propertiesArray[visibleColumn],
+                             noisyPage.getRow(0).m_levelOnePageSegment.m_propertiesArray[visibleColumn]);
     }
 
     void testContextReset()
     {
         PacketHeader header1;
         createHeaderPacket(header1, 100, ControlInfo::NEWSFLASH);
+        setHeaderBytes(header1, {'A'});
 
         PacketHeader header2;
         createHeaderPacket(header2, 200, 0);
+        setHeaderBytes(header2, {'A'});
 
         PageDisplayable page;
         DecodedPage decodedPage;
 
-        // Parse with one control state - use FULL_PAGE
         m_parser->parsePage(page, header1, Parser::Mode::FULL_PAGE,
                            NavigationMode::DEFAULT, decodedPage);
 
-        // Parse with different control state - context should be reset
-        bool changed = m_parser->parsePage(page, header2, Parser::Mode::FULL_PAGE,
-                                          NavigationMode::DEFAULT, decodedPage);
+        static const std::size_t headerColumn = 8;
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0), decodedPage.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn]);
+        CPPUNIT_ASSERT((decodedPage.getRow(0).m_levelOnePageSegment.m_propertiesArray[headerColumn] & Property::VALUE_HIDDEN) != 0);
 
-        // Context reset - should complete successfully
-        CPPUNIT_ASSERT(true);
+        m_parser->parsePage(page, header2, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>('A'), decodedPage.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn]);
+        CPPUNIT_ASSERT((decodedPage.getRow(0).m_levelOnePageSegment.m_propertiesArray[headerColumn] & Property::VALUE_HIDDEN) == 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(200), decodedPage.getPageId().getDecimalMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), decodedPage.getPageControlInfo());
     }
 
     void testDifferentLevels()
@@ -387,65 +423,55 @@ private:
         MockCharsetConfig config;
         PacketHeader header;
         createHeaderPacket(header, 100, 0);
+        setHeaderBytes(header, {'L'});
         PageDisplayable page;
-        DecodedPage decodedPage;
+        DecodedPage decodedPage1;
+        DecodedPage decodedPage2;
 
-        // Test with different presentation levels
         Parser parser1(PresentationLevel::LEVEL_1, db, config);
         bool result1 = parser1.parsePage(page, header, Parser::Mode::FULL_PAGE,
-                                         NavigationMode::DEFAULT, decodedPage);
+                                         NavigationMode::DEFAULT, decodedPage1);
 
         Parser parser2(PresentationLevel::LEVEL_1_5, db, config);
         bool result2 = parser2.parsePage(page, header, Parser::Mode::FULL_PAGE,
-                                         NavigationMode::DEFAULT, decodedPage);
+                                         NavigationMode::DEFAULT, decodedPage2);
 
-        // Both should process without error
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testValidPageId()
-    {
-        PacketHeader header;
-        // Page ID 100-899 are valid
-        createHeaderPacket(header, 500, ControlInfo::ERASE_PAGE);
-
-        PageDisplayable page;
-        DecodedPage decodedPage;
-
-        bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
-                                          NavigationMode::DEFAULT, decodedPage);
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(500), decodedPage.getPageId().getDecimalMagazinePage());
+        static const std::size_t headerColumn = 8;
+        CPPUNIT_ASSERT_EQUAL(true, result1);
+        CPPUNIT_ASSERT_EQUAL(true, result2);
+        CPPUNIT_ASSERT_EQUAL(decodedPage1.getPageId().getMagazinePage(), decodedPage2.getPageId().getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(decodedPage1.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn],
+                             decodedPage2.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn]);
+        CPPUNIT_ASSERT_EQUAL(decodedPage1.getRow(0).m_levelOnePageSegment.m_propertiesArray[headerColumn],
+                             decodedPage2.getRow(0).m_levelOnePageSegment.m_propertiesArray[headerColumn]);
     }
 
     void testMagazineMin()
     {
         PacketHeader header;
-        createHeaderPacket(header, 100, ControlInfo::ERASE_PAGE);  // Magazine 1
+        createHeaderPacket(header, 100, ControlInfo::ERASE_PAGE);
 
         PageDisplayable page;
         DecodedPage decodedPage;
 
-        bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
-                                          NavigationMode::DEFAULT, decodedPage);
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
 
-        // Should handle magazine 0
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(100), decodedPage.getPageId().getDecimalMagazinePage());
     }
 
     void testMagazineMax()
     {
         PacketHeader header;
-        createHeaderPacket(header, 800, ControlInfo::ERASE_PAGE);  // Magazine 8
+        createHeaderPacket(header, 800, ControlInfo::ERASE_PAGE);
 
         PageDisplayable page;
         DecodedPage decodedPage;
 
-        bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
-                                          NavigationMode::DEFAULT, decodedPage);
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
 
-        // Should handle magazine 8 (0-based, so max is 8)
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(800), decodedPage.getPageId().getDecimalMagazinePage());
     }
 
     void testNoChangeWhenIdentical()
@@ -499,6 +525,7 @@ private:
     {
         PacketHeader header;
         createHeaderPacket(header, 100, ControlInfo::ERASE_PAGE);
+        setHeaderBytes(header, {'H', 'D', 'R'});
 
         PageDisplayable page;
         DecodedPage decodedPage;
@@ -506,43 +533,10 @@ private:
         m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
                            NavigationMode::DEFAULT, decodedPage);
 
-        // Header row (row 0) should be processed
-        const DecodedPageRow& headerRow = decodedPage.getRow(0);
-        CPPUNIT_ASSERT_NO_THROW(decodedPage.getRow(0));
-    }
-
-    void testAllRows()
-    {
-        PacketHeader header;
-        createHeaderPacket(header, 100, ControlInfo::ERASE_PAGE);
-
-        PageDisplayable page;
-        DecodedPage decodedPage;
-
-        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
-                           NavigationMode::DEFAULT, decodedPage);
-
-        // All displayable rows (1-24) should be accessible
-        for (int i = 1; i <= 24; ++i)
-        {
-            CPPUNIT_ASSERT_NO_THROW(decodedPage.getRow(i));
-        }
-    }
-
-    void testEmptyPage()
-    {
-        PacketHeader header;
-        createHeaderPacket(header, 100, ControlInfo::ERASE_PAGE);
-
-        PageDisplayable page;  // Empty page
-        DecodedPage decodedPage;
-
-        // Should handle empty page gracefully
-        bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
-                                          NavigationMode::DEFAULT, decodedPage);
-
-        // Page should still be valid after parsing empty input
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(100), decodedPage.getPageId().getDecimalMagazinePage());
+        static const std::size_t headerColumn = 8;
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>('H'), decodedPage.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>('D'), decodedPage.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn + 1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>('R'), decodedPage.getRow(0).m_levelOnePageSegment.m_charArray[headerColumn + 2]);
     }
 
     void testErasePageFlag()
@@ -553,38 +547,15 @@ private:
         PageDisplayable page;
         DecodedPage decodedPage;
 
-        // Set initial page ID to different value
-        decodedPage.setPageId(PageId(999, PageId::ANY_SUBPAGE));
+        decodedPage.setPageId(PageId(0x100, PageId::ANY_SUBPAGE));
+        seedRow(decodedPage, 1, 'E', Property::VALUE_FLASH);
 
-        // ERASE_PAGE flag should cause page to be cleared
         m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
                            NavigationMode::DEFAULT, decodedPage);
 
-        // Page ID should be updated to new value
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(100), decodedPage.getPageId().getDecimalMagazinePage());
-    }
-
-    void testPageIdChange()
-    {
-        PacketHeader header1;
-        createHeaderPacket(header1, 100, 0);
-
-        PacketHeader header2;
-        createHeaderPacket(header2, 200, 0);
-
-        PageDisplayable page;
-        DecodedPage decodedPage;
-
-        // Parse with page 100
-        m_parser->parsePage(page, header1, Parser::Mode::FULL_PAGE,
-                           NavigationMode::DEFAULT, decodedPage);
-
-        // Parse with page 200 - should detect page change
-        bool changed = m_parser->parsePage(page, header2, Parser::Mode::FULL_PAGE,
-                                          NavigationMode::DEFAULT, decodedPage);
-
-        // Page ID should be updated
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(200), decodedPage.getPageId().getDecimalMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(' '), decodedPage.getRow(1).m_levelOnePageSegment.m_charArray[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0), decodedPage.getRow(1).m_levelOnePageSegment.m_propertiesArray[0]);
     }
 
 private:

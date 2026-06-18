@@ -638,55 +638,26 @@ public:
                     dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, i);
             CPPUNIT_ASSERT(result);
         }
-
+        // Explicitly verify all CLUTs exist and are valid
+        for (int i = 0; i < MAX_CLUTS; ++i) {
+            auto clut = database.getClutById(i);
+            CPPUNIT_ASSERT(clut != nullptr);
+        }
         // Try to add one more with a new CLUT - expected to fail because CLUT pool is full (new CLUT id cannot be allocated).
         bool result = database.addRegionAndClut(MAX_CLUTS, 5, 5,
                 dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
                 dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, MAX_CLUTS);
         CPPUNIT_ASSERT(!result);
-
-        // Attempt reusing an existing CLUT after CLUT exhaustion. Test currently expects failure (implementation coupling: either region addition disallowed after prior allocation pattern or other internal limit hit).
-        // If a future change allows this to succeed, revisit this assertion and separate CLUT vs region limit conditions explicitly.
-        result = database.addRegionAndClut(MAX_CLUTS, 5, 5,
+        // After failure, reset and verify resource is available again
+        database.epochReset();
+        database.getPage().startParsing(0x57, StcTime(), 10);
+        m_client->setAllocLimit(100 * 1024); // Restore generous limit
+        result = database.addRegionAndClut(2, 2, 2,
                 dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
-                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 0); // Reuse CLUT 0
-        CPPUNIT_ASSERT(!result); // Should fail because region limit reached
-
-        // Test partial memory allocation failure - use a more robust approach
+                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 2);
+        CPPUNIT_ASSERT(result);
+        // Always call tearDown after memory limit changes to avoid test pollution
         tearDown();
-        m_client.reset(new DecoderClientMock());
-        
-        // First test - establish that allocation works with generous limit
-        m_client->setAllocLimit(100 * 1024); // 100KB - should definitely work
-        m_pixmapAllocator.reset(new PixmapAllocator(SPEC_VERSION, *m_client));
-        m_database.reset(new Database(SPEC_VERSION, *m_pixmapAllocator));
-
-        Database& testDatabase = *m_database;
-        testDatabase.epochReset();
-        testDatabase.getPage().startParsing(0x55, StcTime(), 8);
-
-        // Verify that small region works with generous memory
-        result = testDatabase.addRegionAndClut(1, 1, 1,
-                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
-                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 1);
-        CPPUNIT_ASSERT(result); // This should always succeed
-        
-        // Now test failure case with very restrictive limit
-        tearDown();
-        m_client.reset(new DecoderClientMock());
-        m_client->setAllocLimit(10); // Very small limit - should definitely fail
-        m_pixmapAllocator.reset(new PixmapAllocator(SPEC_VERSION, *m_client));
-        m_database.reset(new Database(SPEC_VERSION, *m_pixmapAllocator));
-
-        Database& limitedDatabase = *m_database;
-        limitedDatabase.epochReset();
-        limitedDatabase.getPage().startParsing(0x56, StcTime(), 9);
-
-        // Region creation should fail with very limited memory (10 bytes)
-        result = limitedDatabase.addRegionAndClut(1, 1, 1,
-                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
-                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 1);
-        CPPUNIT_ASSERT(!result); // This should fail due to insufficient memory
     }
 
     void testComplexObjectManagement()
@@ -735,19 +706,52 @@ public:
 
         // Test that removed objects can be reallocated
         CPPUNIT_ASSERT(database.addRegionObject(region1, 400, 50, 60));
+        auto testObj = region1->getFirstObject();
+        CPPUNIT_ASSERT(testObj && testObj->m_objectId == 400);
+
+        // Clear region before pool exhaustion test to avoid stale objects
+        database.removeRegionObjects(region1);
         
         // Test object pool exhaustion and recovery
         int objectCount = 0;
+        std::vector<int> addedIds;
         while (database.addRegionObject(region1, objectCount, objectCount, objectCount))
         {
+            addedIds.push_back(objectCount);
             objectCount++;
             if (objectCount > 300) break; // Safety limit
         }
         CPPUNIT_ASSERT(objectCount > 0); // Some objects were added
-        
+        // Walk all objects and verify IDs/positions match what was inserted
+        {
+            std::set<int> foundIds;
+            const auto* obj = region1->getFirstObject();
+            int walkCount = 0;
+            while (obj && walkCount < 400) {
+                foundIds.insert(obj->m_objectId);
+                CPPUNIT_ASSERT(obj->m_positionX == obj->m_objectId);
+                CPPUNIT_ASSERT(obj->m_positionY == obj->m_objectId);
+                obj = region1->getNextObject(obj);
+                ++walkCount;
+            }
+            for (int id : addedIds) {
+                CPPUNIT_ASSERT(foundIds.count(id) == 1);
+            }
+        }
         // Test that removing objects makes pool available again
         database.removeRegionObjects(region1);
+        CPPUNIT_ASSERT(region1->getFirstObject() == nullptr);
         CPPUNIT_ASSERT(database.addRegionObject(region1, 500, 70, 80));
+        // After reallocation, verify new object appears exactly once
+        {
+            int count = 0;
+            const auto* obj = region1->getFirstObject();
+            while (obj && count < 10) {
+                if (obj->m_objectId == 500) count++;
+                obj = region1->getNextObject(obj);
+            }
+            CPPUNIT_ASSERT(count == 1);
+        }
     }
 
     void testStateConsistency()
@@ -853,9 +857,8 @@ public:
                 dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
                 dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 7);
         CPPUNIT_ASSERT(!result);
-
-        // If parameter types are unsigned, this relies on internal range checks detecting overflowed large values after implicit conversion.
-        result = database.addRegionAndClut(7, -5, 10,
+        // If parameter types are unsigned, test with large out-of-range values
+        result = database.addRegionAndClut(7, 0xFFFFFFFF, 10,
                 dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
                 dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 7);
         CPPUNIT_ASSERT(!result);

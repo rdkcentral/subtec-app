@@ -21,7 +21,6 @@
 #include "ScteSection.hpp"
 #include "ScteExceptions.hpp"
 #include <vector>
-#include <cstring>
 
 extern "C"
 {
@@ -84,11 +83,6 @@ public:
     }
 
 protected:
-    uint32_t calculateCrc32(const std::vector<uint8_t>& data, size_t length)
-    {
-        return ::crc32(0, data.data(), length);
-    }
-
     void setSectionCrcToZero(std::vector<uint8_t>& data)
     {
         if (data.size() < 3)
@@ -272,15 +266,13 @@ protected:
     void testConstructorWithInsufficientSize1Byte()
     {
         uint8_t data[1] = {0xC6};
-        // Will fail when trying to read section_length from data[1] and data[2]
-        CPPUNIT_ASSERT_THROW(Section section(data, 1), std::exception);
+        CPPUNIT_ASSERT_THROW(Section section(data, 1), InvalidArgument);
     }
 
     void testConstructorWithInsufficientSize2Bytes()
     {
         uint8_t data[2] = {0xC6, 0x00};
-        // Will fail when trying to read section_length from data[2]
-        CPPUNIT_ASSERT_THROW(Section section(data, 2), std::exception);
+        CPPUNIT_ASSERT_THROW(Section section(data, 2), InvalidArgument);
     }
 
     void testConstructorWithInvalidTableIdBelow()

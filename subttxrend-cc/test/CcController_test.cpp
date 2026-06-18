@@ -126,144 +126,44 @@ public:
 class CCDataBuilder
 {
 public:
-    // Build CEA-608 field 1 data with H.264 SEI container format
+    // Build raw CC triplets to match the active UserData parser path.
     static std::vector<uint8_t> buildCEA608Field1(uint8_t byte1, uint8_t byte2, bool valid = true)
     {
-        std::vector<uint8_t> data;
+        if (!valid)
+        {
+            return {0x00, 0x00, 0x00};
+        }
 
-        // H.264 start code: 0x00 0x00 0x01
-        data.push_back(0x00);
-        data.push_back(0x00);
-        data.push_back(0x01);
-
-        // SEI NAL unit type (0x06)
-        data.push_back(0x06);
-
-        // SEI payload type (0x04 = user_data_registered_itu_t_t35)
-        data.push_back(0x04);
-
-        // Padding to reach expected offset
-        for (int i = 0; i < 6; ++i) data.push_back(0x00);
-
-        // User data type code (0x03 = cc_data) at offset+11
-        data.push_back(0x03);
-
-        // CEA-708 header
-        data.push_back(0x40);  // process_cc_data_flag = 1
-        data.push_back(0x01);  // cc_count = 1
-
-        // CC data triplet for CEA-608 field 1
-        uint8_t cc_valid_type = valid ? 0xFC : 0xF8;  // marker(5) + cc_valid(1) + cc_type(2)
-        data.push_back(cc_valid_type);  // cc_valid=1, cc_type=0 (608 field 1)
-        data.push_back(byte1);
-        data.push_back(byte2);
-
-        return data;
+        return {0x00, byte1, byte2};
     }
 
-    // Build CEA-608 field 2 data with H.264 SEI container format
+    // Build raw CC triplets to match the active UserData parser path.
     static std::vector<uint8_t> buildCEA608Field2(uint8_t byte1, uint8_t byte2, bool valid = true)
     {
-        std::vector<uint8_t> data;
+        if (!valid)
+        {
+            return {0x01, 0x00, 0x00};
+        }
 
-        // H.264 start code: 0x00 0x00 0x01
-        data.push_back(0x00);
-        data.push_back(0x00);
-        data.push_back(0x01);
-
-        // SEI NAL unit type (0x06)
-        data.push_back(0x06);
-
-        // SEI payload type (0x04)
-        data.push_back(0x04);
-
-        // Padding
-        for (int i = 0; i < 6; ++i) data.push_back(0x00);
-
-        // User data type code (0x03 = cc_data)
-        data.push_back(0x03);
-
-        data.push_back(0x40);
-        data.push_back(0x01);
-
-        uint8_t cc_valid_type = valid ? 0xFD : 0xF8;  // cc_type=1 (608 field 2)
-        data.push_back(cc_valid_type);
-        data.push_back(byte1);
-        data.push_back(byte2);
-
-        return data;
+        return {0x01, byte1, byte2};
     }
 
-    // Build CEA-708 CCP start packet with H.264 SEI container format
+    // Build raw CC triplets to match the active UserData parser path.
     static std::vector<uint8_t> buildCEA708CCPStart(uint8_t serviceNo, uint8_t seqNo, uint8_t packetSize)
     {
-        std::vector<uint8_t> data;
-
-        // H.264 start code: 0x00 0x00 0x01
-        data.push_back(0x00);
-        data.push_back(0x00);
-        data.push_back(0x01);
-
-        // SEI NAL unit type (0x06)
-        data.push_back(0x06);
-
-        // SEI payload type (0x04)
-        data.push_back(0x04);
-
-        // Padding
-        for (int i = 0; i < 6; ++i) data.push_back(0x00);
-
-        // User data type code (0x03 = cc_data)
-        data.push_back(0x03);
-
-        data.push_back(0x40);
-        data.push_back(0x01);
-
-        // DTVCC_CCP_START (cc_type = 2)
-        data.push_back(0xFE);  // cc_valid=1, cc_type=2
-
         // CCP header: sequence_no (2 bits) | packet_size_code (6 bits)
         uint8_t header = ((seqNo & 0x03) << 6) | (packetSize & 0x3F);
-        data.push_back(header);
 
         // First service block header: service_number (3 bits) | block_size (5 bits)
         uint8_t sbHeader = ((serviceNo & 0x07) << 5) | 0x02;  // block_size = 2
-        data.push_back(sbHeader);
 
-        return data;
+        return {0x03, header, sbHeader};
     }
 
-    // Build CEA-708 CCP data continuation with H.264 SEI container format
+    // Build raw CC triplets to match the active UserData parser path.
     static std::vector<uint8_t> buildCEA708CCPData(uint8_t data1, uint8_t data2)
     {
-        std::vector<uint8_t> data;
-
-        // H.264 start code: 0x00 0x00 0x01
-        data.push_back(0x00);
-        data.push_back(0x00);
-        data.push_back(0x01);
-
-        // SEI NAL unit type (0x06)
-        data.push_back(0x06);
-
-        // SEI payload type (0x04)
-        data.push_back(0x04);
-
-        // Padding
-        for (int i = 0; i < 6; ++i) data.push_back(0x00);
-
-        // User data type code (0x03 = cc_data)
-        data.push_back(0x03);
-
-        data.push_back(0x40);
-        data.push_back(0x01);
-
-        // DTVCC_CCP_DATA (cc_type = 3)
-        data.push_back(0xFF);  // cc_valid=1, cc_type=3
-        data.push_back(data1);
-        data.push_back(data2);
-
-        return data;
+        return {0x02, data1, data2};
     }
 
     // Build padding data
@@ -360,8 +260,6 @@ class CcControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testStateTransitionMuteDuringProcessing);
     CPPUNIT_TEST(testStateTransitionStopClearsQueues);
     CPPUNIT_TEST(testStateTransitionRapidChanges);
-    CPPUNIT_TEST(testQueueClearedWhenMuted);
-    CPPUNIT_TEST(testQueueClearedWhenStopped);
     CPPUNIT_TEST(testQueueClearedAfterProcess);
     CPPUNIT_TEST(testQueuePurgeOnShutdown);
     CPPUNIT_TEST(testRendererClearedOnStart);
@@ -1195,33 +1093,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(false, controller->isStarted());
     }
 
-    void testQueueClearedWhenMuted()
-    {
-        controller->init(static_cast<subttxrend::gfx::Window*>(mockWindow), fontCache);
-        controller->start();
-        CPPUNIT_ASSERT_EQUAL(true, controller->isMuted());
-
-        auto data = CCDataBuilder::buildCEA608Field1(0x94, 0x20);
-        TestPacketData packet(data);
-        controller->addData(packet);
-
-        controller->process();  // Should clear queues when muted
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testQueueClearedWhenStopped()
-    {
-        controller->init(static_cast<subttxrend::gfx::Window*>(mockWindow), fontCache);
-        controller->start();
-
-        auto data = CCDataBuilder::buildCEA608Field1(0x94, 0x20);
-        TestPacketData packet(data);
-        controller->addData(packet);
-
-        controller->process();  // Muted, so clears queues
-        CPPUNIT_ASSERT(true);
-    }
-
     void testQueueClearedAfterProcess()
     {
         controller->init(static_cast<subttxrend::gfx::Window*>(mockWindow), fontCache);
@@ -1344,7 +1215,7 @@ public:
 
         // Try to reinit
         bool result = controller->init(static_cast<subttxrend::gfx::Window*>(mockWindow), fontCache);
-        CPPUNIT_ASSERT(result == true || result == false);
+        CPPUNIT_ASSERT_EQUAL(true, result);
     }
 
     void testErrorHandlingInvalidUserData()

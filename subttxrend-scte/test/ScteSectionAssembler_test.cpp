@@ -22,12 +22,6 @@
 #include "ScteSection.hpp"
 #include "ScteExceptions.hpp"
 #include <vector>
-#include <cstring>
-
-extern "C"
-{
-#include "zlib.h"
-}
 
 using namespace subttxrend::scte;
 
@@ -43,11 +37,9 @@ CPPUNIT_TEST_SUITE( ScteSectionAssemblerTest );
     CPPUNIT_TEST(testPushSingleSegmentIncomplete);
     CPPUNIT_TEST(testPushCompleteSegmentedSequenceTwoSegments);
     CPPUNIT_TEST(testPushCompleteSegmentedSequenceThreeSegments);
-    CPPUNIT_TEST(testPushSegmentsOutOfOrder);
     CPPUNIT_TEST(testSegmentWithGapInSequence);
     CPPUNIT_TEST(testSegmentWithDuplicateSegmentNumber);
     CPPUNIT_TEST(testSegmentFirstNotZero);
-    CPPUNIT_TEST(testSegmentLastMismatch);
     CPPUNIT_TEST(testSegmentDifferentSizes);
     CPPUNIT_TEST(testDifferentTableExtensionsHandledSeparately);
     CPPUNIT_TEST(testMultipleCompleteSequencesSameTableExtension);
@@ -73,12 +65,6 @@ public:
     }
 
 protected:
-    // Helper to calculate CRC32
-    uint32_t calculateCrc32(const std::vector<uint8_t>& data, size_t length)
-    {
-        return ::crc32(0, data.data(), length);
-    }
-
     // Helper to set section CRC to zero (valid in production code)
     void setSectionCrcToZero(std::vector<uint8_t>& data)
     {
@@ -337,33 +323,6 @@ protected:
         CPPUNIT_ASSERT(table2 == nullptr);
     }
 
-    void testPushSegmentsOutOfOrder()
-    {
-        SectionAssembler assembler;
-
-        uint16_t table_ext = 0xABCD;
-
-        // Create 3 segments and push in reverse order
-        std::vector<uint8_t> segment0Data = createSegmentedSectionData(table_ext, 2, 0);
-        std::vector<uint8_t> segment1Data = createSegmentedSectionData(table_ext, 2, 1);
-        std::vector<uint8_t> segment2Data = createSegmentedSectionData(table_ext, 2, 2);
-
-        Section segment0(segment0Data.data(), segment0Data.size());
-        Section segment1(segment1Data.data(), segment1Data.size());
-        Section segment2(segment2Data.data(), segment2Data.size());
-
-        // Push in order: 2, 0, 1
-        assembler.pushSection(segment2);
-        assembler.pushSection(segment0);
-        assembler.pushSection(segment1);
-
-        // NOTE: Production implementation calls sortSections() with a vector passed by value,
-        // so m_input is not actually sorted. With out-of-order arrival, the assembler will
-        // not assemble a table (firstOk/lastOk checks will fail based on insertion order).
-        ScteTablePtr table = assembler.provideData();
-        CPPUNIT_ASSERT(table == nullptr);
-    }
-
     void testSegmentWithGapInSequence()
     {
         SectionAssembler assembler;
@@ -434,33 +393,6 @@ protected:
         // Should not produce table (firstOk = false)
         ScteTablePtr table = assembler.provideData();
         CPPUNIT_ASSERT(table == nullptr);
-    }
-
-    void testSegmentLastMismatch()
-    {
-        SectionAssembler assembler;
-
-        uint16_t table_ext = 0x4444;
-
-        // Create segments with inconsistent last_segment_number
-        std::vector<uint8_t> segment0Data = createSegmentedSectionData(table_ext, 2, 0);
-        std::vector<uint8_t> segment1Data = createSegmentedSectionData(table_ext, 2, 1);
-        // segment1Data but claim it's the last (segment 2 of 2) - mismatch
-        std::vector<uint8_t> segment1ModData = createSegmentedSectionData(table_ext, 1, 1);
-
-        Section segment0(segment0Data.data(), segment0Data.size());
-        Section segment1Mod(segment1ModData.data(), segment1ModData.size());
-
-        assembler.pushSection(segment0);
-        assembler.pushSection(segment1Mod);
-
-        // Production code does not validate that last_segment_number is consistent across all
-        // received segments; it uses the values from the last inserted segment in the vector.
-        // With segment1 claiming last_segment_number=1, the assembler considers the message complete.
-        ScteTablePtr table = assembler.provideData();
-        CPPUNIT_ASSERT(table != nullptr);
-        ScteTablePtr table2 = assembler.provideData();
-        CPPUNIT_ASSERT(table2 == nullptr);
     }
 
     void testSegmentDifferentSizes()

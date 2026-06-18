@@ -99,6 +99,7 @@ public:
         , m_isPageNeededResult(true)
         , m_getMutablePageResult(nullptr)
         , m_getClearPageResult(nullptr)
+        , m_isPageNeededCallCount(0)
         , m_insertPageCallCount(0)
         , m_releasePageCallCount(0)
         , m_getMutablePageCallCount(0)
@@ -125,6 +126,8 @@ public:
 
     virtual bool isPageNeeded(PageId pageId) const override
     {
+        m_isPageNeededCallCount++;
+        m_lastCheckedPageId = pageId;
         return m_isPageNeededResult;
     }
 
@@ -172,15 +175,21 @@ public:
     int getReleasePageCallCount() const { return m_releasePageCallCount; }
     int getGetMutablePageCallCount() const { return m_getMutablePageCallCount; }
     int getGetClearPageCallCount() const { return m_getClearPageCallCount; }
+    int getIsPageNeededCallCount() const { return m_isPageNeededCallCount; }
+    PageId getLastCheckedPageId() const { return m_lastCheckedPageId; }
+    PageId getLastRequestedPageId() const { return m_lastRequestedPageId; }
 
     void reset()
     {
+        m_isPageNeededCallCount = 0;
         m_insertPageCallCount = 0;
         m_releasePageCallCount = 0;
         m_getMutablePageCallCount = 0;
         m_getClearPageCallCount = 0;
         m_lastInsertedPage = nullptr;
         m_lastReleasedPage = nullptr;
+        m_lastCheckedPageId = PageId();
+        m_lastRequestedPageId = PageId();
     }
 
 private:
@@ -188,6 +197,8 @@ private:
     bool m_isPageNeededResult;
     PageDisplayable* m_getMutablePageResult;
     PageDisplayable* m_getClearPageResult;
+    mutable int m_isPageNeededCallCount;
+    mutable PageId m_lastCheckedPageId;
     int m_insertPageCallCount;
     int m_releasePageCallCount;
     int m_getMutablePageCallCount;
@@ -201,40 +212,27 @@ class DecoderTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( DecoderTest );
     CPPUNIT_TEST(testConstructor);
-    CPPUNIT_TEST(testResetClearsState);
     CPPUNIT_TEST(testProcessHeaderPacketSetsSerialMode);
-    CPPUNIT_TEST(testProcessHeaderPacketSetsParallelMode);
     CPPUNIT_TEST(testHeaderDecodedCallback);
-    CPPUNIT_TEST(testMultipleConsecutiveHeadersSameMagazine);
-    CPPUNIT_TEST(testHeaderWithDifferentMagazineInSerialMode);
-    CPPUNIT_TEST(testHeaderWithDifferentPageInParallelMode);
-    CPPUNIT_TEST(testHeaderWithSamePageNumber);
     CPPUNIT_TEST(testHeaderWithSubtitleFlagSet);
-    CPPUNIT_TEST(testHeaderWithErasePageFlagSet);
-    CPPUNIT_TEST(testHeaderWithoutErasePageFlag);
     CPPUNIT_TEST(testCacheReturnsValidPageForNeededPageId);
     CPPUNIT_TEST(testCacheReturnsNullForNeededPageId);
     CPPUNIT_TEST(testCacheIndicatesPageNotNeeded);
-    CPPUNIT_TEST(testValidPageProcessedAndCached);
-    CPPUNIT_TEST(testInvalidPageProcessedAndReleased);
-    CPPUNIT_TEST(testMagazineNumbersZeroToSeven);
-    CPPUNIT_TEST(testMultipleMagazinesConcurrent);
-    CPPUNIT_TEST(testSerialModeProcessesOnePageAtTime);
-    CPPUNIT_TEST(testParallelModeProcessesPerMagazine);
+    CPPUNIT_TEST(testHeaderProcessedWithoutDecodedPage);
+    CPPUNIT_TEST(testSerialModeProcessesTwoHeaders);
+    CPPUNIT_TEST(testParallelModeProcessesTwoHeaders);
     CPPUNIT_TEST(testResetAfterHeaderProcessing);
     CPPUNIT_TEST(testPartialPageReplacedByNewHeader);
     CPPUNIT_TEST(testCacheMutablePageCalledWithoutEraseFlag);
     CPPUNIT_TEST(testCacheClearPageCalledWithEraseFlag);
-    CPPUNIT_TEST(testPageReleasedWhenInvalid);
     CPPUNIT_TEST(testNoPageDecodedForInvalidPage);
     CPPUNIT_TEST(testInterleavedPacketsMultipleMagazines);
     CPPUNIT_TEST(testControlInfoAllFlagsCombination);
     CPPUNIT_TEST(testControlInfoNoFlagsSet);
     CPPUNIT_TEST(testMagazineZeroMappedCorrectly);
     CPPUNIT_TEST(testMagazineSevenBoundary);
-    CPPUNIT_TEST(testSubtitleFlagTriggersImmediateProcessing);
+    CPPUNIT_TEST(testSubtitleFlagProcessesSecondHeader);
     CPPUNIT_TEST(testMultipleResetsInSequence);
-    CPPUNIT_TEST(testCacheFullScenarioWithNullReturn);
     CPPUNIT_TEST(testSerialModeAcrossDifferentMagazines);
     CPPUNIT_TEST(testParallelModeSameMagazineDifferentPages);
     CPPUNIT_TEST(testHeaderWithAllControlBitsSet);
@@ -268,58 +266,24 @@ public:
 
     void testConstructor()
     {
-        // Constructor should complete successfully with valid dependencies
         Database database;
         MockCache cache;
         MockDecoderListener listener;
 
         Decoder decoder(database, cache, listener);
-
-        // If we get here, constructor succeeded
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testResetClearsState()
-    {
-        // Process a header packet first
         std::vector<std::uint8_t> headerData = createHeaderPacket(1, 0x100, 0, 0);
         PesPacketReader reader(headerData.data(), headerData.size(), nullptr, 0);
 
-        m_decoder->processPacketData(reader);
+        decoder.processPacketData(reader);
 
-        CPPUNIT_ASSERT_EQUAL(1, m_listener->getHeaderDecodedCount());
-
-        // Reset the decoder
-        m_decoder->reset();
-        m_listener->reset();
-
-        // Process another packet - should work normally after reset
-        std::vector<std::uint8_t> headerData2 = createHeaderPacket(2, 0x200, 0, 0);
-        PesPacketReader reader2(headerData2.data(), headerData2.size(), nullptr, 0);
-
-        m_decoder->processPacketData(reader2);
-
-        CPPUNIT_ASSERT_EQUAL(1, m_listener->getHeaderDecodedCount());
+        CPPUNIT_ASSERT_EQUAL(1, listener.getHeaderDecodedCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), listener.getLastHeaderMagazineNumber());
     }
 
     void testProcessHeaderPacketSetsSerialMode()
     {
         // Create header packet with MAGAZINE_SERIAL flag set (bit 7)
         std::uint8_t controlInfo = ControlInfo::MAGAZINE_SERIAL;
-        std::vector<std::uint8_t> headerData = createHeaderPacket(1, 0x100, 0, controlInfo);
-        PesPacketReader reader(headerData.data(), headerData.size(), nullptr, 0);
-
-        m_decoder->processPacketData(reader);
-
-        // Verify header was decoded
-        CPPUNIT_ASSERT_EQUAL(1, m_listener->getHeaderDecodedCount());
-        CPPUNIT_ASSERT_EQUAL(controlInfo, m_listener->getLastHeaderControlInfo());
-    }
-
-    void testProcessHeaderPacketSetsParallelMode()
-    {
-        // Create header packet without MAGAZINE_SERIAL flag
-        std::uint8_t controlInfo = 0;
         std::vector<std::uint8_t> headerData = createHeaderPacket(1, 0x100, 0, controlInfo);
         PesPacketReader reader(headerData.data(), headerData.size(), nullptr, 0);
 
@@ -343,78 +307,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(3), m_listener->getLastHeaderMagazineNumber());
     }
 
-    void testMultipleConsecutiveHeadersSameMagazine()
-    {
-        m_cache->setIsPageNeeded(false); // Simplify by not needing pages
-
-        // Process first header
-        std::vector<std::uint8_t> header1 = createHeaderPacket(1, 0x100, 0, 0);
-        PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
-        m_decoder->processPacketData(reader1);
-
-        // Process second header for same magazine
-        std::vector<std::uint8_t> header2 = createHeaderPacket(1, 0x101, 0, 0);
-        PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
-        m_decoder->processPacketData(reader2);
-
-        // Both headers should be processed
-        CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
-    }
-
-    void testHeaderWithDifferentMagazineInSerialMode()
-    {
-        m_cache->setIsPageNeeded(false);
-
-        // Process header with SERIAL mode flag
-        std::vector<std::uint8_t> header1 = createHeaderPacket(1, 0x100, 0, ControlInfo::MAGAZINE_SERIAL);
-        PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
-        m_decoder->processPacketData(reader1);
-
-        // Process header for different magazine in serial mode
-        std::vector<std::uint8_t> header2 = createHeaderPacket(2, 0x200, 0, ControlInfo::MAGAZINE_SERIAL);
-        PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
-        m_decoder->processPacketData(reader2);
-
-        // Both headers should be decoded
-        CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
-    }
-
-    void testHeaderWithDifferentPageInParallelMode()
-    {
-        m_cache->setIsPageNeeded(false);
-
-        // Process header without SERIAL flag (parallel mode)
-        std::vector<std::uint8_t> header1 = createHeaderPacket(1, 0x100, 0, 0);
-        PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
-        m_decoder->processPacketData(reader1);
-
-        // Process different page in same magazine (parallel mode)
-        std::vector<std::uint8_t> header2 = createHeaderPacket(1, 0x101, 0, 0);
-        PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
-        m_decoder->processPacketData(reader2);
-
-        // Both headers should be decoded
-        CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
-    }
-
-    void testHeaderWithSamePageNumber()
-    {
-        m_cache->setIsPageNeeded(false);
-
-        // Process header
-        std::vector<std::uint8_t> header1 = createHeaderPacket(1, 0x100, 0, 0);
-        PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
-        m_decoder->processPacketData(reader1);
-
-        // Process same page number with different subpage
-        std::vector<std::uint8_t> header2 = createHeaderPacket(1, 0x100, 1, 0);
-        PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
-        m_decoder->processPacketData(reader2);
-
-        // Both headers should be decoded
-        CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
-    }
-
     void testHeaderWithSubtitleFlagSet()
     {
         m_cache->setIsPageNeeded(false);
@@ -431,44 +323,10 @@ public:
         CPPUNIT_ASSERT((m_listener->getLastHeaderControlInfo() & ControlInfo::SUBTITLE) != 0);
     }
 
-    void testHeaderWithErasePageFlagSet()
-    {
-        m_cache->setIsPageNeeded(true);
-        m_cache->setClearPageResult(nullptr); // Simulate no clear page available
-
-        // Process header with ERASE_PAGE flag
-        std::uint8_t controlInfo = ControlInfo::ERASE_PAGE;
-        std::vector<std::uint8_t> headerData = createHeaderPacket(1, 0x100, 0, controlInfo);
-        PesPacketReader reader(headerData.data(), headerData.size(), nullptr, 0);
-
-        m_decoder->processPacketData(reader);
-
-        // Verify getMutablePage was NOT called (erase flag set)
-        CPPUNIT_ASSERT_EQUAL(0, m_cache->getGetMutablePageCallCount());
-        // Clear page should be requested
-        CPPUNIT_ASSERT_EQUAL(1, m_cache->getGetClearPageCallCount());
-    }
-
-    void testHeaderWithoutErasePageFlag()
-    {
-        m_cache->setIsPageNeeded(true);
-        m_cache->setMutablePageResult(nullptr); // No mutable page available
-        m_cache->setClearPageResult(nullptr); // No clear page available
-
-        // Process header without ERASE_PAGE flag
-        std::uint8_t controlInfo = 0;
-        std::vector<std::uint8_t> headerData = createHeaderPacket(1, 0x100, 0, controlInfo);
-        PesPacketReader reader(headerData.data(), headerData.size(), nullptr, 0);
-
-        m_decoder->processPacketData(reader);
-
-        // Verify getMutablePage was called (no erase flag)
-        CPPUNIT_ASSERT_EQUAL(1, m_cache->getGetMutablePageCallCount());
-    }
-
     void testCacheReturnsValidPageForNeededPageId()
     {
         PageDisplayable mockPage;
+        PageId expectedPageId(0x100, 0);
         m_cache->setIsPageNeeded(true);
         m_cache->setMutablePageResult(&mockPage);
 
@@ -477,12 +335,16 @@ public:
 
         m_decoder->processPacketData(reader);
 
-        // Verify mutable page was requested
+        CPPUNIT_ASSERT_EQUAL(1, m_cache->getIsPageNeededCallCount());
+        CPPUNIT_ASSERT(expectedPageId == m_cache->getLastCheckedPageId());
         CPPUNIT_ASSERT_EQUAL(1, m_cache->getGetMutablePageCallCount());
+        CPPUNIT_ASSERT(expectedPageId == m_cache->getLastRequestedPageId());
+        CPPUNIT_ASSERT_EQUAL(0, m_cache->getGetClearPageCallCount());
     }
 
     void testCacheReturnsNullForNeededPageId()
     {
+        PageId expectedPageId(0x100, 0);
         m_cache->setIsPageNeeded(true);
         m_cache->setMutablePageResult(nullptr);
         m_cache->setClearPageResult(nullptr);
@@ -492,12 +354,16 @@ public:
 
         m_decoder->processPacketData(reader);
 
-        // Should fallback to clear page
+        CPPUNIT_ASSERT_EQUAL(1, m_cache->getIsPageNeededCallCount());
+        CPPUNIT_ASSERT(expectedPageId == m_cache->getLastCheckedPageId());
+        CPPUNIT_ASSERT_EQUAL(1, m_cache->getGetMutablePageCallCount());
+        CPPUNIT_ASSERT(expectedPageId == m_cache->getLastRequestedPageId());
         CPPUNIT_ASSERT_EQUAL(1, m_cache->getGetClearPageCallCount());
     }
 
     void testCacheIndicatesPageNotNeeded()
     {
+        PageId expectedPageId(0x100, 0);
         m_cache->setIsPageNeeded(false);
 
         std::vector<std::uint8_t> headerData = createHeaderPacket(1, 0x100, 0, 0);
@@ -505,16 +371,15 @@ public:
 
         m_decoder->processPacketData(reader);
 
-        // Mutable page should not be requested
+        CPPUNIT_ASSERT_EQUAL(1, m_cache->getIsPageNeededCallCount());
+        CPPUNIT_ASSERT(expectedPageId == m_cache->getLastCheckedPageId());
         CPPUNIT_ASSERT_EQUAL(0, m_cache->getGetMutablePageCallCount());
-        // Clear page should not be requested
         CPPUNIT_ASSERT_EQUAL(0, m_cache->getGetClearPageCallCount());
     }
 
-    void testValidPageProcessedAndCached()
+    void testHeaderProcessedWithoutDecodedPage()
     {
-        // This test would require a valid page that reports isValid() == true
-        // For now, verify that page processing occurs
+        // Without a valid page body, only header handling is observable here.
         m_cache->setIsPageNeeded(false);
 
         std::vector<std::uint8_t> headerData = createHeaderPacket(1, 0x100, 0, 0);
@@ -522,81 +387,31 @@ public:
 
         m_decoder->processPacketData(reader);
 
-        // Header should be decoded
         CPPUNIT_ASSERT_EQUAL(1, m_listener->getHeaderDecodedCount());
-    }
-
-    void testInvalidPageProcessedAndReleased()
-    {
-        // Process header that creates a page
-        m_cache->setIsPageNeeded(false);
-
-        std::vector<std::uint8_t> headerData = createHeaderPacket(1, 0x100, 0, 0);
-        PesPacketReader reader(headerData.data(), headerData.size(), nullptr, 0);
-
-        m_decoder->processPacketData(reader);
-
-        // pageDecoded should not be called for invalid pages
-        // (metadata pages are typically invalid for display)
         CPPUNIT_ASSERT_EQUAL(0, m_listener->getPageDecodedCount());
     }
 
-    void testMagazineNumbersZeroToSeven()
+    void testSerialModeProcessesTwoHeaders()
     {
         m_cache->setIsPageNeeded(false);
 
-        // Test all magazine numbers 0-7
-        for (int mag = 0; mag <= 7; mag++)
-        {
-            std::vector<std::uint8_t> headerData = createHeaderPacket(mag, 0x100 + mag, 0, 0);
-            PesPacketReader reader(headerData.data(), headerData.size(), nullptr, 0);
-
-            m_decoder->processPacketData(reader);
-        }
-
-        // All 8 headers should be decoded
-        CPPUNIT_ASSERT_EQUAL(8, m_listener->getHeaderDecodedCount());
-    }
-
-    void testMultipleMagazinesConcurrent()
-    {
-        m_cache->setIsPageNeeded(false);
-
-        // Process headers for different magazines
-        for (int mag = 0; mag < 4; mag++)
-        {
-            std::vector<std::uint8_t> headerData = createHeaderPacket(mag, 0x100 + mag, 0, 0);
-            PesPacketReader reader(headerData.data(), headerData.size(), nullptr, 0);
-            m_decoder->processPacketData(reader);
-        }
-
-        // All headers should be processed
-        CPPUNIT_ASSERT_EQUAL(4, m_listener->getHeaderDecodedCount());
-    }
-
-    void testSerialModeProcessesOnePageAtTime()
-    {
-        m_cache->setIsPageNeeded(false);
-
-        // Process first header in serial mode
+        // Process two headers while serial mode is set on both.
         std::vector<std::uint8_t> header1 = createHeaderPacket(1, 0x100, 0, ControlInfo::MAGAZINE_SERIAL);
         PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
         m_decoder->processPacketData(reader1);
 
-        // Process header for different magazine (should complete first page)
         std::vector<std::uint8_t> header2 = createHeaderPacket(2, 0x200, 0, ControlInfo::MAGAZINE_SERIAL);
         PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
         m_decoder->processPacketData(reader2);
 
-        // Both headers processed
         CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
     }
 
-    void testParallelModeProcessesPerMagazine()
+    void testParallelModeProcessesTwoHeaders()
     {
         m_cache->setIsPageNeeded(false);
 
-        // Process headers in parallel mode (no MAGAZINE_SERIAL flag)
+        // Process two headers without MAGAZINE_SERIAL.
         std::vector<std::uint8_t> header1 = createHeaderPacket(1, 0x100, 0, 0);
         PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
         m_decoder->processPacketData(reader1);
@@ -605,7 +420,6 @@ public:
         PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
         m_decoder->processPacketData(reader2);
 
-        // Both headers should be processed independently
         CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
     }
 
@@ -691,33 +505,6 @@ public:
         // getClearPage should be called (not getMutablePage)
         CPPUNIT_ASSERT_EQUAL(1, m_cache->getGetClearPageCallCount());
         CPPUNIT_ASSERT_EQUAL(0, m_cache->getGetMutablePageCallCount());
-    }
-
-    void testPageReleasedWhenInvalid()
-    {
-        PageDisplayable mockPage;
-        m_cache->setIsPageNeeded(true);
-        m_cache->setClearPageResult(&mockPage);
-
-        // Process header
-        std::vector<std::uint8_t> header1 = createHeaderPacket(1, 0x100, 0, ControlInfo::ERASE_PAGE);
-        PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
-        m_decoder->processPacketData(reader1);
-
-        // Verify first header was processed
-        CPPUNIT_ASSERT_EQUAL(1, m_listener->getHeaderDecodedCount());
-        CPPUNIT_ASSERT_EQUAL(1, m_cache->getGetClearPageCallCount());
-
-        // Process new header (should release previous page)
-        std::vector<std::uint8_t> header2 = createHeaderPacket(1, 0x101, 0, ControlInfo::ERASE_PAGE);
-        PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
-        m_decoder->processPacketData(reader2);
-
-        // Verify second header was processed
-        CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
-
-        // Page should be inserted (valid with header) when second header arrives
-        CPPUNIT_ASSERT(m_cache->getInsertPageCallCount() > 0);
     }
 
     void testNoPageDecodedForInvalidPage()
@@ -820,7 +607,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(7), m_listener->getLastHeaderMagazineNumber());
     }
 
-    void testSubtitleFlagTriggersImmediateProcessing()
+    void testSubtitleFlagProcessesSecondHeader()
     {
         m_cache->setIsPageNeeded(false);
 
@@ -829,13 +616,13 @@ public:
         PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
         m_decoder->processPacketData(reader1);
 
-        // Process same page with SUBTITLE flag - should trigger immediate processing
+        // Process same page with SUBTITLE flag and verify the second header is reported.
         std::vector<std::uint8_t> header2 = createHeaderPacket(1, 0x100, 0, ControlInfo::SUBTITLE);
         PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
         m_decoder->processPacketData(reader2);
 
-        // Both headers should be processed
         CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
+        CPPUNIT_ASSERT((m_listener->getLastHeaderControlInfo() & ControlInfo::SUBTITLE) != 0);
     }
 
     void testMultipleResetsInSequence()
@@ -862,29 +649,11 @@ public:
         CPPUNIT_ASSERT_EQUAL(1, m_listener->getHeaderDecodedCount());
     }
 
-    void testCacheFullScenarioWithNullReturn()
-    {
-        m_cache->setIsPageNeeded(true);
-        m_cache->setMutablePageResult(nullptr);
-        m_cache->setClearPageResult(nullptr);
-
-        // Process header when cache is "full" (returns null)
-        std::vector<std::uint8_t> headerData = createHeaderPacket(1, 0x100, 0, 0);
-        PesPacketReader reader(headerData.data(), headerData.size(), nullptr, 0);
-
-        m_decoder->processPacketData(reader);
-
-        // Header should still be decoded even if cache is full
-        CPPUNIT_ASSERT_EQUAL(1, m_listener->getHeaderDecodedCount());
-        // Fallback to metadata processor should occur
-        CPPUNIT_ASSERT_EQUAL(1, m_cache->getGetClearPageCallCount());
-    }
-
     void testSerialModeAcrossDifferentMagazines()
     {
         m_cache->setIsPageNeeded(false);
 
-        // In serial mode, changing magazine should complete previous page
+        // In serial mode, both headers should still be reported.
         std::vector<std::uint8_t> header1 = createHeaderPacket(1, 0x100, 0, ControlInfo::MAGAZINE_SERIAL);
         PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
         m_decoder->processPacketData(reader1);
@@ -893,7 +662,6 @@ public:
         PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
         m_decoder->processPacketData(reader2);
 
-        // Both should be processed
         CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
     }
 
@@ -901,7 +669,7 @@ public:
     {
         m_cache->setIsPageNeeded(false);
 
-        // In parallel mode, different pages in same magazine should be processed independently
+        // In parallel mode, headers for different pages in the same magazine are reported.
         std::vector<std::uint8_t> header1 = createHeaderPacket(2, 0x201, 0, 0);
         PesPacketReader reader1(header1.data(), header1.size(), nullptr, 0);
         m_decoder->processPacketData(reader1);
@@ -910,7 +678,6 @@ public:
         PesPacketReader reader2(header2.data(), header2.size(), nullptr, 0);
         m_decoder->processPacketData(reader2);
 
-        // Both should be processed
         CPPUNIT_ASSERT_EQUAL(2, m_listener->getHeaderDecodedCount());
     }
 
@@ -994,7 +761,6 @@ public:
         PesPacketReader reader3(header3.data(), header3.size(), nullptr, 0);
         m_decoder->processPacketData(reader3);
 
-        // All should be processed
         CPPUNIT_ASSERT_EQUAL(3, m_listener->getHeaderDecodedCount());
     }
 

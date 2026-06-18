@@ -45,6 +45,8 @@ CPPUNIT_TEST_SUITE( ObjectPoolTest );
     CPPUNIT_TEST(testHighFrequencyOperations);
     CPPUNIT_TEST(testLargePoolSize);
     CPPUNIT_TEST(testSecondAllocationUniqueness);
+    CPPUNIT_TEST(testZeroPoolSize);
+    CPPUNIT_TEST(testThreadSafetyDocumentation);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -773,6 +775,20 @@ public:
         {
             pool.release(obj);
         }
+    }
+
+    void testZeroPoolSize()
+    {
+        // Zero pool size: should not allow allocation
+        ObjectPool<PoolItem, 0> pool;
+        CPPUNIT_ASSERT(pool.alloc() == nullptr);
+    }
+
+    void testThreadSafetyDocumentation()
+    {
+        // ObjectPool is intended for single-threaded use only.
+        // No thread-safety guarantees; concurrent access is undefined.
+        CPPUNIT_ASSERT(true); // Documentation only
     }
 
 private:

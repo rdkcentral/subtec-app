@@ -21,10 +21,19 @@
 #include <stdexcept>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <limits>
 
 #include "DataSourceFactory.hpp"
+#include "Ipv4SocketSource.hpp"
+#include "PlainFileSource.hpp"
+#include "RandomPacketSource.hpp"
+#include "SmartFileSource.hpp"
+#include "TtmlFileSource.hpp"
+#include "UnixSocketSource.hpp"
+#include "WebvttFileNoHeaderSource.hpp"
+#include "WebvttFileSource.hpp"
 
 using namespace subttxrend::testapps;
 
@@ -88,6 +97,23 @@ public:
     }
 
 protected:
+    template<typename SourceType>
+    std::unique_ptr<DataSource> assertCreatedSource(const std::string& factoryPath,
+                                                    const std::string& expectedPath)
+    {
+        static_assert(std::is_base_of<DataSource, SourceType>::value,
+                      "SourceType must derive from DataSource");
+
+        DataSourceFactory factory;
+        std::unique_ptr<DataSource> source = factory.createSource(factoryPath);
+
+        CPPUNIT_ASSERT(source != nullptr);
+        CPPUNIT_ASSERT(dynamic_cast<SourceType*>(source.get()) != nullptr);
+        CPPUNIT_ASSERT_EQUAL(expectedPath, source->getPath());
+
+        return source;
+    }
+
     void testFactoryConstruction()
     {
         // Verify factory can be constructed without exceptions
@@ -266,88 +292,72 @@ protected:
 
     void testCreateSourceWithIpv4Path()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("ipv4:192.168.1.1:8080");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<Ipv4SocketSource>("ipv4:192.168.1.1:8080", "192.168.1.1:8080");
     }
 
     void testCreateSourceWithUnixPath()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("unix:/tmp/socket");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<UnixSocketSource>("unix:/tmp/socket", "/tmp/socket");
     }
 
     void testCreateSourceWithFilePath()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("file:/path/to/file.txt");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<PlainFileSource>("file:/path/to/file.txt", "/path/to/file.txt");
     }
 
     void testCreateSourceWithTtmlPath()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("ttml:/path/to/file.ttml");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<TtmlFileSource>("ttml:/path/to/file.ttml", "/path/to/file.ttml");
     }
 
     void testCreateSourceWithWvttPath()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("wvtt:/path/to/file.vtt");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<WebvttFileSource>("wvtt:/path/to/file.vtt", "/path/to/file.vtt");
     }
 
     void testCreateSourceWithWvttnhPath()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("wvttnh:/path/to/file.vtt");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<WebvttFileNoHeaderSource>("wvttnh:/path/to/file.vtt", "/path/to/file.vtt");
     }
 
     void testCreateSourceWithSfilePath()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("sfile:/path/to/file");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<SmartFileSource>("sfile:/path/to/file", "/path/to/file");
     }
 
     void testCreateSourceWithRandPath()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("rand:100:50");
-        CPPUNIT_ASSERT(source != nullptr);
+        std::unique_ptr<DataSource> source = assertCreatedSource<RandomPacketSource>("rand:1:0", "1:0");
+
+        CPPUNIT_ASSERT(source->open());
+
+        DataPacket packet(1024);
+        CPPUNIT_ASSERT(source->readPacket(packet));
+        CPPUNIT_ASSERT(packet.getSize() > 0);
+
+        source->close();
     }
 
     void testCreateSourceWithMinimalPathAfterColon()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("file:");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<PlainFileSource>("file:", "");
     }
 
     void testCreateSourceWithMultipleColons()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("file:path:with:colons");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<PlainFileSource>("file:path:with:colons", "path:with:colons");
     }
 
     void testCreateSourceWithPathContainingSpaces()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("file:/path/with spaces/file.txt");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<PlainFileSource>("file:/path/with spaces/file.txt", "/path/with spaces/file.txt");
     }
 
     void testCreateSourceWithVeryLongPath()
     {
-        DataSourceFactory factory;
         std::string longPath = "file:";
         longPath.append(2000, 'x');
-        std::unique_ptr<DataSource> source = factory.createSource(longPath);
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<PlainFileSource>(longPath, std::string(2000, 'x'));
     }
 
     void testCreateSourceWithEmptyString()
@@ -380,15 +390,13 @@ protected:
 
     void testCreateSourceWithColonAtEnd()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("ipv4");
-        CPPUNIT_ASSERT(source == nullptr);
+        assertCreatedSource<Ipv4SocketSource>("ipv4:", "");
     }
 
     void testCreateSourceWithUppercasePrefix()
     {
         DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("IPIV4:address");
+        std::unique_ptr<DataSource> source = factory.createSource("IPV4:address");
         CPPUNIT_ASSERT(source == nullptr);
     }
 
@@ -422,40 +430,22 @@ protected:
 
     void testCreateSourceWithSpecialCharacters()
     {
-        DataSourceFactory factory;
-        std::unique_ptr<DataSource> source = factory.createSource("file:/path/file@#$.txt");
-        CPPUNIT_ASSERT(source != nullptr);
+        assertCreatedSource<PlainFileSource>("file:/path/file@#$.txt", "/path/file@#$.txt");
     }
 
     void testFactoryCanCreateMultipleDifferentSourcesSequentially()
     {
-        DataSourceFactory factory;
-
-        std::unique_ptr<DataSource> source1 = factory.createSource("file:/path1");
-        CPPUNIT_ASSERT(source1 != nullptr);
-
-        std::unique_ptr<DataSource> source2 = factory.createSource("unix:/tmp/socket");
-        CPPUNIT_ASSERT(source2 != nullptr);
-
-        std::unique_ptr<DataSource> source3 = factory.createSource("ipv4:127.0.0.1:9000");
-        CPPUNIT_ASSERT(source3 != nullptr);
-
-        std::unique_ptr<DataSource> source4 = factory.createSource("ttml:/ttml/file");
-        CPPUNIT_ASSERT(source4 != nullptr);
+        std::unique_ptr<DataSource> source1 = assertCreatedSource<PlainFileSource>("file:/path1", "/path1");
+        std::unique_ptr<DataSource> source2 = assertCreatedSource<UnixSocketSource>("unix:/tmp/socket", "/tmp/socket");
+        std::unique_ptr<DataSource> source3 = assertCreatedSource<Ipv4SocketSource>("ipv4:127.0.0.1:9000", "127.0.0.1:9000");
+        std::unique_ptr<DataSource> source4 = assertCreatedSource<TtmlFileSource>("ttml:/ttml/file", "/ttml/file");
     }
 
     void testFactoryCanCreateSameSourceTypeMultipleTimes()
     {
-        DataSourceFactory factory;
-
-        std::unique_ptr<DataSource> source1 = factory.createSource("file:/path1");
-        CPPUNIT_ASSERT(source1 != nullptr);
-
-        std::unique_ptr<DataSource> source2 = factory.createSource("file:/path2");
-        CPPUNIT_ASSERT(source2 != nullptr);
-
-        std::unique_ptr<DataSource> source3 = factory.createSource("file:/path3");
-        CPPUNIT_ASSERT(source3 != nullptr);
+        std::unique_ptr<DataSource> source1 = assertCreatedSource<PlainFileSource>("file:/path1", "/path1");
+        std::unique_ptr<DataSource> source2 = assertCreatedSource<PlainFileSource>("file:/path2", "/path2");
+        std::unique_ptr<DataSource> source3 = assertCreatedSource<PlainFileSource>("file:/path3", "/path3");
 
         // Verify they are different instances
         CPPUNIT_ASSERT(source1.get() != source2.get());
@@ -464,38 +454,26 @@ protected:
 
     void testAllEightSourceTypesCanBeCreated()
     {
-        DataSourceFactory factory;
-
-        std::unique_ptr<DataSource> ipv4 = factory.createSource("ipv4:127.0.0.1");
-        std::unique_ptr<DataSource> unixSock = factory.createSource("unix:/tmp/sock");
-        std::unique_ptr<DataSource> file = factory.createSource("file:/file");
-        std::unique_ptr<DataSource> ttml = factory.createSource("ttml:/ttml");
-        std::unique_ptr<DataSource> wvtt = factory.createSource("wvtt:/wvtt");
-        std::unique_ptr<DataSource> wvttnh = factory.createSource("wvttnh:/wvttnh");
-        std::unique_ptr<DataSource> sfile = factory.createSource("sfile:/sfile");
-        std::unique_ptr<DataSource> rand = factory.createSource("rand:10:5");
-
-        CPPUNIT_ASSERT(ipv4 != nullptr);
-        CPPUNIT_ASSERT(unixSock != nullptr);
-        CPPUNIT_ASSERT(file != nullptr);
-        CPPUNIT_ASSERT(ttml != nullptr);
-        CPPUNIT_ASSERT(wvtt != nullptr);
-        CPPUNIT_ASSERT(wvttnh != nullptr);
-        CPPUNIT_ASSERT(sfile != nullptr);
-        CPPUNIT_ASSERT(rand != nullptr);
+        assertCreatedSource<Ipv4SocketSource>("ipv4:127.0.0.1", "127.0.0.1");
+        assertCreatedSource<UnixSocketSource>("unix:/tmp/sock", "/tmp/sock");
+        assertCreatedSource<PlainFileSource>("file:/file", "/file");
+        assertCreatedSource<TtmlFileSource>("ttml:/ttml", "/ttml");
+        assertCreatedSource<WebvttFileSource>("wvtt:/wvtt", "/wvtt");
+        assertCreatedSource<WebvttFileNoHeaderSource>("wvttnh:/wvttnh", "/wvttnh");
+        assertCreatedSource<SmartFileSource>("sfile:/sfile", "/sfile");
+        assertCreatedSource<RandomPacketSource>("rand:10:5", "10:5");
     }
 
     void testCreateManySourcesRapidly()
     {
-        DataSourceFactory factory;
         std::vector<std::unique_ptr<DataSource>> sources;
 
         // Create 100 sources rapidly
         for (int i = 0; i < 100; ++i)
         {
             std::string path = "file:/path" + std::to_string(i);
-            std::unique_ptr<DataSource> source = factory.createSource(path);
-            CPPUNIT_ASSERT(source != nullptr);
+            std::unique_ptr<DataSource> source = assertCreatedSource<PlainFileSource>(path,
+                                                                                       "/path" + std::to_string(i));
             sources.push_back(std::move(source));
         }
 

@@ -20,6 +20,8 @@
 #include <cppunit/extensions/HelperMacros.h>
 
 #include "../src/PrerenderedFontImpl.hpp"
+#include <cstdio>
+#include <fstream>
 #include <stdexcept>
 #include <memory>
 
@@ -211,7 +213,12 @@ public:
     bool fontFileExists(const std::string& path)
     {
         std::ifstream f(path.c_str());
-        return f.good();
+        const bool exists = f.good();
+        if (!exists && path == validFontPath)
+        {
+            CPPUNIT_FAIL("Test font file not found. Please install DejaVu or Liberation fonts.");
+        }
+        return exists;
     }
 
     void testConstructorWithValidFontDefaultParams()
@@ -395,15 +402,19 @@ public:
     {
         if (!fontFileExists(validFontPath)) return;
 
-        // Zero height should either work or throw - test it handles gracefully
+        // Zero height should either work or throw - accept both but assert one occurred
+        bool threw = false;
         try {
             font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 0, false, false));
             // If it doesn't throw, verify font was created
             CPPUNIT_ASSERT(font != nullptr);
         } catch (const std::exception&) {
             // Exception is acceptable for invalid height
-            CPPUNIT_ASSERT(true);
+            threw = true;
         }
+
+        // Either construction threw, or we have a valid font
+        CPPUNIT_ASSERT(threw || font != nullptr);
     }
 
     void testConstructorWithNegativeHeight()
@@ -411,14 +422,17 @@ public:
         if (!fontFileExists(validFontPath)) return;
 
         // Negative height should either be handled or throw
+        bool threw = false;
         try {
             font.reset(new PrerenderedFontImpl(validFontPath.c_str(), -10, false, false));
             // If it doesn't throw, verify font was created
             CPPUNIT_ASSERT(font != nullptr);
         } catch (const std::exception&) {
             // Exception is acceptable for invalid height
-            CPPUNIT_ASSERT(true);
+            threw = true;
         }
+
+        CPPUNIT_ASSERT(threw || font != nullptr);
     }
 
     void testConstructorWithVeryLargeHeight()
@@ -1877,8 +1891,10 @@ public:
             // Font destructor called here
         }
 
-        // If we got here, no crashes occurred
-        CPPUNIT_ASSERT(true);
+        // Verify we can still create and use a new font after repeated destruction
+        std::unique_ptr<PrerenderedFontImpl> verifyFont;
+        CPPUNIT_ASSERT_NO_THROW(verifyFont.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false)));
+        CPPUNIT_ASSERT(verifyFont->getFontHeight() > 0);
     }
 
     void testDestructorMultipleInstances()
@@ -1942,8 +1958,10 @@ public:
             // Destructor should clean up all cached data
         }
 
-        // No memory leaks or crashes
-        CPPUNIT_ASSERT(true);
+        // Verify creating a fresh instance after destructor still works
+        std::unique_ptr<PrerenderedFontImpl> newFont;
+        CPPUNIT_ASSERT_NO_THROW(newFont.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false)));
+        CPPUNIT_ASSERT(newFont->getFontHeight() > 0);
     }
 
     void testDestructorMemoryManagement()
@@ -1963,7 +1981,10 @@ public:
             // Destructor should properly free all resources
         }
 
-        CPPUNIT_ASSERT(true);
+        // Ensure we can create another font instance after heavy usage/destruction
+        std::unique_ptr<PrerenderedFontImpl> verifyFont;
+        CPPUNIT_ASSERT_NO_THROW(verifyFont.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false)));
+        CPPUNIT_ASSERT(verifyFont->getFontHeight() > 0);
     }
 
     void testMetricsWithDifferentHeights()
@@ -2081,9 +2102,9 @@ public:
         const auto* charInfo1 = font->getCharInfo(999999, 0);
         const auto* charInfo2 = font->getCharInfo(100000, 0);
 
-        // May return nullptr for invalid indices
-        // Just verify it doesn't crash
-        CPPUNIT_ASSERT(true);
+        // May return nullptr for invalid indices; verify subsequent valid lookup still works
+        const auto* goodInfo = font->getCharInfo(36, 0);
+        CPPUNIT_ASSERT(goodInfo != nullptr);
     }
 
     void testGetCharInfoVeryLargeGlyphIndex()
@@ -2094,8 +2115,9 @@ public:
         // Try extremely large glyph index
         const auto* charInfo = font->getCharInfo(0xFFFFFF, 0);
 
-        // Should handle gracefully (return nullptr or valid info)
-        CPPUNIT_ASSERT(true);
+        // Should handle gracefully; ensure a valid glyph can still be obtained
+        const auto* goodInfo = font->getCharInfo(36, 0);
+        CPPUNIT_ASSERT(goodInfo != nullptr);
     }
 
     void testGetCharInfoExcessiveOutlineSize()
@@ -2126,8 +2148,10 @@ public:
         // Destroy the font
         tempFont.reset();
 
-        // Can't access charInfo anymore, but no crash should have occurred
-        CPPUNIT_ASSERT(true);
+        // Ensure we can create a new instance after destruction
+        std::unique_ptr<PrerenderedFontImpl> verifyFont;
+        CPPUNIT_ASSERT_NO_THROW(verifyFont.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false)));
+        CPPUNIT_ASSERT(verifyFont->getFontHeight() > 0);
     }
 
     void testGetCharInfoNullCheck()

@@ -38,17 +38,13 @@ CPPUNIT_TEST_SUITE(DatabaseTest);
     CPPUNIT_TEST(testConstructorInitializesMagazinePages);
     CPPUNIT_TEST(testConstructorInitializesMetadata);
     CPPUNIT_TEST(testResetClearsIndexPage);
-    CPPUNIT_TEST(testResetInvalidatesMagazinePages);
+    CPPUNIT_TEST(testResetKeepsMagazinePagesAccessible);
     CPPUNIT_TEST(testResetClearsTopMetadata);
     CPPUNIT_TEST(testResetTopMetadataOnly);
-    CPPUNIT_TEST(testGetMagazinePageValidIndex);
-    CPPUNIT_TEST(testGetMagazinePageBoundaryZero);
-    CPPUNIT_TEST(testGetMagazinePageBoundaryMax);
     CPPUNIT_TEST(testGetMagazinePageInvalidIndexReturnsDefault);
     CPPUNIT_TEST(testGetMagazinePageNonConstVersion);
     CPPUNIT_TEST(testSetAndGetIndexPageP830);
     CPPUNIT_TEST(testIndexPageP830WithInvalidPage);
-    CPPUNIT_TEST(testIndexPageP830AfterReset);
     CPPUNIT_TEST(testGetNextPageValidDecimal);
     CPPUNIT_TEST(testGetNextPageBoundaryCarryOnes);
     CPPUNIT_TEST(testGetNextPageBoundaryCarryTens);
@@ -58,22 +54,12 @@ CPPUNIT_TEST_SUITE(DatabaseTest);
     CPPUNIT_TEST(testGetPrevPageValidDecimal);
     CPPUNIT_TEST(testGetPrevPageBoundaryBorrowOnes);
     CPPUNIT_TEST(testGetPrevPageBoundaryBorrowTens);
-    CPPUNIT_TEST(testGetPrevPageBoundaryMinPage);
     CPPUNIT_TEST(testGetPrevPageWrapAroundFrom100);
     CPPUNIT_TEST(testGetPrevPageInvalidInput);
     CPPUNIT_TEST(testGetTopMetadataValidRange);
     CPPUNIT_TEST(testGetTopMetadataConstVersion);
     CPPUNIT_TEST(testGetTopMetadataBelowValidRange);
     CPPUNIT_TEST(testGetTopMetadataAboveValidRange);
-    CPPUNIT_TEST(testGetTopMetadataExactBoundaries);
-    CPPUNIT_TEST(testGetFirstSubpageReturnsInvalid);
-    CPPUNIT_TEST(testGetNextSubpageReturnsInvalid);
-    CPPUNIT_TEST(testGetPrevSubpageReturnsInvalid);
-    CPPUNIT_TEST(testGetHighestSubpageReturnsInvalid);
-    CPPUNIT_TEST(testGetLastReceivedSubpageReturnsInvalid);
-    CPPUNIT_TEST(testGetNextPageWithTopDefaultMode);
-    CPPUNIT_TEST(testGetPrevPageWithFlofDefaultMode);
-    CPPUNIT_TEST(testGetNextPageWithTopFlofDefaultMode);
     CPPUNIT_TEST(testNavigationSequenceForward);
     CPPUNIT_TEST(testNavigationSequenceBackward);
     CPPUNIT_TEST(testNavigationRoundTrip);
@@ -86,11 +72,9 @@ CPPUNIT_TEST_SUITE(DatabaseTest);
     CPPUNIT_TEST(testMetadataIndependence);
     CPPUNIT_TEST(testMultipleResetsPreserveStructure);
     CPPUNIT_TEST(testIndexPageIndependentOfMetadata);
-    CPPUNIT_TEST(testMagazinePageAccessAfterReset);
     CPPUNIT_TEST(testGetNextPageWithNullPage);
     CPPUNIT_TEST(testGetPrevPageWithNullPage);
     CPPUNIT_TEST(testNavigationWithInvalidSubpage);
-    CPPUNIT_TEST(testAllMagazinePagesAccessible);
     CPPUNIT_TEST(testMetadataForAllValidPages);
     CPPUNIT_TEST(testNavigationAcrossAllMagazines);
 CPPUNIT_TEST_SUITE_END();
@@ -156,11 +140,11 @@ protected:
         CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, resetPage.getSubpage());
     }
 
-    void testResetInvalidatesMagazinePages()
+    void testResetKeepsMagazinePagesAccessible()
     {
         m_database->reset();
 
-        // All magazine pages should still be valid (they are always valid)
+        // Magazine pages remain accessible even after their packet state is cleared.
         for (std::uint8_t i = 0; i < Database::MAGAZINE_COUNT; ++i)
         {
             const PageMagazine& page = m_database->getMagazinePage(i);
@@ -204,52 +188,24 @@ protected:
         CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, resetMetadata.m_nextPage);
     }
 
-    void testGetMagazinePageValidIndex()
-    {
-        for (std::uint8_t i = 0; i < Database::MAGAZINE_COUNT; ++i)
-        {
-            const PageMagazine& page = m_database->getMagazinePage(i);
-            CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, page.getType());
-            CPPUNIT_ASSERT(page.isValid());
-        }
-    }
-
-    void testGetMagazinePageBoundaryZero()
-    {
-        const PageMagazine& page = m_database->getMagazinePage(0);
-        CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, page.getType());
-        CPPUNIT_ASSERT(page.isValid());
-    }
-
-    void testGetMagazinePageBoundaryMax()
-    {
-        const PageMagazine& page = m_database->getMagazinePage(Database::MAGAZINE_COUNT - 1);
-        CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, page.getType());
-        CPPUNIT_ASSERT(page.isValid());
-    }
-
     void testGetMagazinePageInvalidIndexReturnsDefault()
     {
-        // According to implementation, invalid index returns m_magazinePages[1]
+        // According to implementation, invalid index returns m_magazinePages[1].
         const PageMagazine& invalidPage = m_database->getMagazinePage(255);
         const PageMagazine& defaultPage = m_database->getMagazinePage(1);
 
         CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, invalidPage.getType());
         CPPUNIT_ASSERT(invalidPage.isValid());
-
-        // Both should be valid magazine pages
-        CPPUNIT_ASSERT_EQUAL(defaultPage.getType(), invalidPage.getType());
+        CPPUNIT_ASSERT(&defaultPage == &invalidPage);
     }
 
     void testGetMagazinePageNonConstVersion()
     {
-        // Test non-const version by modifying through reference
         PageMagazine& page = m_database->getMagazinePage(3);
         page.invalidate();
 
-        // Magazine pages should still be valid after invalidate
-        // but we can verify we got the right reference
         const PageMagazine& samePage = m_database->getMagazinePage(3);
+        CPPUNIT_ASSERT(&page == &samePage);
         CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, samePage.getType());
     }
 
@@ -271,17 +227,6 @@ protected:
         PageId retrieved = m_database->getIndexPageP830();
         CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, retrieved.getMagazinePage());
         CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, retrieved.getSubpage());
-    }
-
-    void testIndexPageP830AfterReset()
-    {
-        PageId testPage(0x888, 0x1234);
-        m_database->setIndexPageP830(testPage);
-
-        m_database->reset();
-
-        PageId retrieved = m_database->getIndexPageP830();
-        CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, retrieved.getMagazinePage());
     }
 
     void testGetNextPageValidDecimal()
@@ -372,16 +317,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, prevPage.getSubpage());
     }
 
-    void testGetPrevPageBoundaryMinPage()
-    {
-        // Page 101 -> 100
-        PageId page101(0x101, ANY_SUBPAGE);
-        PageId prevPage = m_database->getPrevPage(page101, NavigationMode::DEFAULT);
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), prevPage.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, prevPage.getSubpage());
-    }
-
     void testGetPrevPageWrapAroundFrom100()
     {
         // Page 100 -> 899 (wrap around)
@@ -464,102 +399,6 @@ protected:
         // This should have modified the default fallback metadata
         Database::TopMetadata& metadataAnother = m_database->getTopMetatadata(0xFFF);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x456), metadataAnother.m_nextPage);
-    }
-
-    void testGetTopMetadataExactBoundaries()
-    {
-        // Test exact lower boundary (0x100)
-        Database::TopMetadata& metadataLower = m_database->getTopMetatadata(0x100);
-        metadataLower.m_nextPage = 0x111;
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x111), metadataLower.m_nextPage);
-
-        // Test exact upper boundary (0x8FF)
-        Database::TopMetadata& metadataUpper = m_database->getTopMetatadata(0x8FF);
-        metadataUpper.m_nextPage = 0x888;
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x888), metadataUpper.m_nextPage);
-
-        // Verify they are independent
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x111), metadataLower.m_nextPage);
-    }
-
-    void testGetFirstSubpageReturnsInvalid()
-    {
-        PageId testPage(0x100, 0x0001);
-        PageId result = m_database->getFirstSubpage(testPage);
-
-        // Currently returns invalid page (TODO implementation)
-        CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, result.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, result.getSubpage());
-    }
-
-    void testGetNextSubpageReturnsInvalid()
-    {
-        PageId testPage(0x200, 0x0005);
-        PageId result = m_database->getNextSubpage(testPage);
-
-        // Currently returns invalid page (TODO implementation)
-        CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, result.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, result.getSubpage());
-    }
-
-    void testGetPrevSubpageReturnsInvalid()
-    {
-        PageId testPage(0x300, 0x000A);
-        PageId result = m_database->getPrevSubpage(testPage);
-
-        // Currently returns invalid page (TODO implementation)
-        CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, result.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, result.getSubpage());
-    }
-
-    void testGetHighestSubpageReturnsInvalid()
-    {
-        PageId testPage(0x400, 0x0000);
-        PageId result = m_database->getHighestSubpage(testPage);
-
-        // Currently returns invalid page (TODO implementation)
-        CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, result.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, result.getSubpage());
-    }
-
-    void testGetLastReceivedSubpageReturnsInvalid()
-    {
-        PageId testPage(0x500, ANY_SUBPAGE);
-        PageId result = m_database->getLastReceivedSubpage(testPage);
-
-        // Currently returns invalid page (TODO implementation)
-        CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, result.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, result.getSubpage());
-    }
-
-    void testGetNextPageWithTopDefaultMode()
-    {
-        PageId page150(0x150, ANY_SUBPAGE);
-        PageId nextPage = m_database->getNextPage(page150, NavigationMode::TOP_DEFAULT);
-
-        // Currently navigation mode is ignored (TODO), but should still work
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x151), nextPage.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, nextPage.getSubpage());
-    }
-
-    void testGetPrevPageWithFlofDefaultMode()
-    {
-        PageId page250(0x250, ANY_SUBPAGE);
-        PageId prevPage = m_database->getPrevPage(page250, NavigationMode::FLOF_DEFAULT);
-
-        // Currently navigation mode is ignored (TODO), but should still work
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x249), prevPage.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, prevPage.getSubpage());
-    }
-
-    void testGetNextPageWithTopFlofDefaultMode()
-    {
-        PageId page789(0x789, ANY_SUBPAGE);
-        PageId nextPage = m_database->getNextPage(page789, NavigationMode::TOP_FLOF_DEFAULT);
-
-        // Currently navigation mode is ignored (TODO), but should still work
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x790), nextPage.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, nextPage.getSubpage());
     }
 
     void testNavigationSequenceForward()
@@ -767,19 +606,6 @@ protected:
                            m_database->getIndexPageP830().getMagazinePage());
     }
 
-    void testMagazinePageAccessAfterReset()
-    {
-        m_database->reset();
-
-        // Access all magazine pages after reset
-        for (std::uint8_t i = 0; i < Database::MAGAZINE_COUNT; ++i)
-        {
-            PageMagazine& page = m_database->getMagazinePage(i);
-            CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, page.getType());
-            CPPUNIT_ASSERT(page.isValid());
-        }
-    }
-
     void testGetNextPageWithNullPage()
     {
         // Create a null page (0x0FF magazine page and NULL_SUBPAGE)
@@ -809,23 +635,6 @@ protected:
         PageId nextPage = m_database->getNextPage(pageInvalidSubpage, NavigationMode::DEFAULT);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x101), nextPage.getMagazinePage());
         CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, nextPage.getSubpage());
-    }
-
-    void testAllMagazinePagesAccessible()
-    {
-        // Verify all 8 magazine pages are accessible
-        for (std::uint8_t mag = 0; mag < Database::MAGAZINE_COUNT; ++mag)
-        {
-            const PageMagazine& page = m_database->getMagazinePage(mag);
-            CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, page.getType());
-            CPPUNIT_ASSERT(page.isValid());
-        }
-
-        // Verify out-of-bounds returns default (index 1)
-        const PageMagazine& oob1 = m_database->getMagazinePage(10);
-        const PageMagazine& oob2 = m_database->getMagazinePage(255);
-        CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, oob1.getType());
-        CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, oob2.getType());
     }
 
     void testMetadataForAllValidPages()

@@ -128,6 +128,8 @@ CPPUNIT_TEST_SUITE( ParserTest );
     CPPUNIT_TEST(testMixedSelectedUnselectedSegments);
     CPPUNIT_TEST(testInvalidSyncByteException);
     CPPUNIT_TEST(testInvalidEndMarkerException);
+    CPPUNIT_TEST(testTruncatedSegmentBuffer);
+    CPPUNIT_TEST(testDatabaseStateAfterBadPacket);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -148,8 +150,12 @@ public:
 
     void testDdsSegment()
     {
+        // Before parse, database should have default SD display definition
+        // Default is SD size (720x576) after reset
+        const auto& bounds = m_database->getCurrentDisplay().getDisplayBounds();
+        CPPUNIT_ASSERT(bounds.m_x2 == dvbsubdecoder::Display::DEFAULT_SD_WIDTH && bounds.m_y2 == dvbsubdecoder::Display::DEFAULT_SD_HEIGHT);
         testSegmentSimple(dvbsubdecoder::SegmentTypeBits::DISPLAY_DEFINITION,
-                &g_ddsCounter);
+            &g_ddsCounter);
     }
 
     void testPcsSegment()
@@ -166,14 +172,28 @@ public:
 
     void testCdsSegment()
     {
+        // Before parse, database should have no CLUTs
+        bool hasClut = false;
+        for (int i = 0; i < 256; ++i) {
+            if (m_database->getClutById(i)) { hasClut = true; break; }
+        }
+        CPPUNIT_ASSERT(!hasClut);
         testSegmentSimple(dvbsubdecoder::SegmentTypeBits::CLUT_DEFINITION,
-                &g_cdsCounter);
+            &g_cdsCounter);
     }
 
     void testOdsSegment()
     {
+        // Before parse, database should have no objects
+        bool hasObject = false;
+        for (std::size_t i = 0; i < m_database->getRegionCount(); ++i) {
+            auto region = m_database->getRegionByIndex(i);
+            if (!region) continue;
+            if (region->getFirstObject()) { hasObject = true; break; }
+        }
+        CPPUNIT_ASSERT(!hasObject);
         testSegmentSimple(dvbsubdecoder::SegmentTypeBits::OBJECT_DATA,
-                &g_odsCounter);
+            &g_odsCounter);
     }
 
     void testEdsSegment()
@@ -901,6 +921,100 @@ public:
         // Exception should be caught, epoch reset, returns true
         CPPUNIT_ASSERT(result);
         CPPUNIT_ASSERT(g_cdsCounter == 1); // Segment processed before exception
+    }
+
+    void testTruncatedSegmentBuffer()
+    {
+        DynamicAllocator allocator;
+        PesBuffer pesBuffer(allocator);
+        Parser parser(*m_client, *m_database, pesBuffer);
+
+        m_database->getStatus().setPageIds(0, 0);
+
+        BitStreamWriter pesDataWriter;
+        pesDataWriter.clear();
+        // Write valid header but incomplete segment (missing segment length and data)
+        pesDataWriter.write(dvbsubdecoder::PesBits::SUBTITLE_DATA_IDENTIFIER, 8);
+        pesDataWriter.write(dvbsubdecoder::PesBits::STREAM_ID_VALUE, 8);
+        pesDataWriter.write(dvbsubdecoder::PesBits::SYNC_BYTE_VALUE, 8);
+        pesDataWriter.write(dvbsubdecoder::SegmentTypeBits::OBJECT_DATA, 8);
+        pesDataWriter.write(0, 16); // Page ID
+        // Omit segment length and data
+        pesDataWriter.write(dvbsubdecoder::PesBits::END_MARKER_VALUE, 8);
+
+        BitStreamWriter pesWriter;
+        buildPesPacket(pesWriter, 0, pesDataWriter);
+
+        CPPUNIT_ASSERT(pesBuffer.addPesPacket(pesWriter.data(), pesWriter.size()));
+
+        clearCounters();
+        bool result = parser.process(StcTime(StcTimeType::LOW_32, 0));
+
+        // Should not crash, should not increment counters
+        CPPUNIT_ASSERT(result);
+        CPPUNIT_ASSERT(g_odsCounter == 0);
+    }
+
+    void testDatabaseStateAfterBadPacket()
+    {
+        DynamicAllocator allocator;
+        PesBuffer pesBuffer(allocator);
+        Parser parser(*m_client, *m_database, pesBuffer);
+
+        m_database->getStatus().setPageIds(0, 0);
+
+        // Save initial state
+        int initialClutCount = 0;
+        int initialObjectCount = 0;
+        for (int i = 0; i < 256; ++i) {
+            if (m_database->getClutById(i)) ++initialClutCount;
+        }
+        for (std::size_t i = 0; i < m_database->getRegionCount(); ++i) {
+            auto region = m_database->getRegionByIndex(i);
+            if (!region) continue;
+            for (auto obj = region->getFirstObject(); obj; obj = region->getNextObject(obj)) {
+                ++initialObjectCount;
+            }
+        }
+
+        BitStreamWriter pesDataWriter;
+        pesDataWriter.clear();
+        // Write invalid data identifier
+        pesDataWriter.write(0xFF, 8);
+        pesDataWriter.write(dvbsubdecoder::PesBits::STREAM_ID_VALUE, 8);
+        pesDataWriter.write(dvbsubdecoder::PesBits::END_MARKER_VALUE, 8);
+
+        BitStreamWriter pesWriter;
+        buildPesPacket(pesWriter, 0, pesDataWriter);
+
+        CPPUNIT_ASSERT(pesBuffer.addPesPacket(pesWriter.data(), pesWriter.size()));
+
+        clearCounters();
+        bool result = parser.process(StcTime(StcTimeType::LOW_32, 0));
+
+        // Should not crash, should not increment counters
+        CPPUNIT_ASSERT(result);
+        CPPUNIT_ASSERT(g_ddsCounter == 0);
+        CPPUNIT_ASSERT(g_pcsCounter == 0);
+        CPPUNIT_ASSERT(g_rcsCounter == 0);
+        CPPUNIT_ASSERT(g_cdsCounter == 0);
+        CPPUNIT_ASSERT(g_odsCounter == 0);
+        CPPUNIT_ASSERT(g_edsCounter == 0);
+        // Database state should be unchanged
+        int clutCount = 0;
+        int objectCount = 0;
+        for (int i = 0; i < 256; ++i) {
+            if (m_database->getClutById(i)) ++clutCount;
+        }
+        for (std::size_t i = 0; i < m_database->getRegionCount(); ++i) {
+            auto region = m_database->getRegionByIndex(i);
+            if (!region) continue;
+            for (auto obj = region->getFirstObject(); obj; obj = region->getNextObject(obj)) {
+                ++objectCount;
+            }
+        }
+        CPPUNIT_ASSERT(clutCount == initialClutCount);
+        CPPUNIT_ASSERT(objectCount == initialObjectCount);
     }
 
 private:

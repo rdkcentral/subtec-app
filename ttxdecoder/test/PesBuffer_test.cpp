@@ -61,8 +61,8 @@ CPPUNIT_TEST_SUITE( PesBufferTest );
     CPPUNIT_TEST(testGetNextPacketWithPTSDTS);
     CPPUNIT_TEST(testGetNextPacketWithoutPTS);
     CPPUNIT_TEST(testGetNextPacketWithHeaderSkip);
-    CPPUNIT_TEST(testGetNextPacketWithCorruptedStartCode);
-    CPPUNIT_TEST(testGetNextPacketWithInsufficientData);
+    CPPUNIT_TEST(testRejectedCorruptedPacketLeavesBufferEmpty);
+    CPPUNIT_TEST(testGetNextPacketWithLargerValidPacket);
     CPPUNIT_TEST(testGetNextPacketWithInvalidHeaderLength);
     CPPUNIT_TEST(testMarkPacketConsumed);
     CPPUNIT_TEST(testMarkPacketConsumedWithWrapAround);
@@ -785,44 +785,44 @@ private:
         CPPUNIT_ASSERT(reader.getBytesLeft() > 0);
     }
 
-    void testGetNextPacketWithCorruptedStartCode()
+    void testRejectedCorruptedPacketLeavesBufferEmpty()
     {
         PesBuffer buffer(m_buffer, BUFFER_SIZE);
 
-        // Manually inject corrupted data into buffer
+        // Corrupted data is rejected before it can reach retrieval.
         std::uint8_t corruptedData[] = {0xFF, 0x00, 0x01, 0xBD, 0x00, 0x01, 0xAA};
-        buffer.addPesPacket(corruptedData, sizeof(corruptedData));
+        bool added = buffer.addPesPacket(corruptedData, sizeof(corruptedData));
+        CPPUNIT_ASSERT(!added);
 
         PesPacketHeader header;
         PesPacketReader reader;
         bool result = buffer.getNextPacket(header, reader);
 
-        // Should return false and clear buffer
+        // Retrieval should fail because the rejected packet never entered the buffer.
         CPPUNIT_ASSERT(!result);
 
-        // Verify buffer was cleared
+        // Buffer should still be empty.
         bool result2 = buffer.getNextPacket(header, reader);
         CPPUNIT_ASSERT(!result2);
     }
 
-    void testGetNextPacketWithInsufficientData()
+    void testGetNextPacketWithLargerValidPacket()
     {
         PesBuffer buffer(m_buffer, BUFFER_SIZE);
 
-        // Add valid packet first
+        // Add a larger valid packet and verify retrieval still succeeds.
+        // The helper payload starts with 0,1,2..., so getNextPacket interprets
+        // the first three payload bytes as the optional PES header fields and
+        // skips two more bytes from the payload.
         auto validPacket = createValidPesPacket(50);
         buffer.addPesPacket(validPacket.data(), validPacket.size());
-
-        // Manually corrupt buffer to claim larger size than available
-        // This is hard to test without accessing internals, but we can test
-        // that buffer handles exceptions properly
 
         PesPacketHeader header;
         PesPacketReader reader;
         bool result = buffer.getNextPacket(header, reader);
 
-        // Should succeed with valid packet
         CPPUNIT_ASSERT(result);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(45), reader.getBytesLeft());
     }
 
     void testGetNextPacketWithInvalidHeaderLength()

@@ -21,6 +21,11 @@
 #include <string>
 #include <cstring>
 #include <limits>
+#include <vector>
+
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include "Ipv4SocketTarget.hpp"
 #include "DataPacket.hpp"
@@ -58,6 +63,7 @@ CPPUNIT_TEST_SUITE(Ipv4SocketTargetTest);
     CPPUNIT_TEST(testWritePacketWithZeroSize);
     CPPUNIT_TEST(testWritePacketWithSmallPacket);
     CPPUNIT_TEST(testWritePacketWithLargePacket);
+    CPPUNIT_TEST(testWritePacketToListeningServer);
     CPPUNIT_TEST(testWritePacketWhenSocketClosed);
     CPPUNIT_TEST(testWritePacketMultipleConsecutive);
 
@@ -316,6 +322,62 @@ protected:
         // Writing large packet on unopened socket should fail
         bool result = target.writePacket(packet);
         CPPUNIT_ASSERT_EQUAL(false, result);
+    }
+
+    void testWritePacketToListeningServer()
+    {
+        int serverFd = ::socket(AF_INET, SOCK_STREAM, 0);
+        CPPUNIT_ASSERT(serverFd >= 0);
+
+        struct sockaddr_in serverAddress;
+        std::memset(&serverAddress, 0, sizeof(serverAddress));
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        serverAddress.sin_port = 0;
+
+        CPPUNIT_ASSERT_EQUAL(0,
+                ::bind(serverFd,
+                        reinterpret_cast<struct sockaddr*>(&serverAddress),
+                        sizeof(serverAddress)));
+        CPPUNIT_ASSERT_EQUAL(0, ::listen(serverFd, 1));
+
+        socklen_t addressLength = sizeof(serverAddress);
+        CPPUNIT_ASSERT_EQUAL(0,
+                ::getsockname(serverFd,
+                        reinterpret_cast<struct sockaddr*>(&serverAddress),
+                        &addressLength));
+
+        std::vector<char> received(4, 0);
+
+        const unsigned short port = ntohs(serverAddress.sin_port);
+        Ipv4SocketTarget target("127.0.0.1:" + std::to_string(port));
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+
+        int acceptedClientFd = ::accept(serverFd, nullptr, nullptr);
+        CPPUNIT_ASSERT(acceptedClientFd >= 0);
+
+        DataPacket packet(4);
+        char* buffer = packet.getBuffer();
+        buffer[0] = 0x11;
+        buffer[1] = 0x22;
+        buffer[2] = 0x33;
+        buffer[3] = 0x44;
+        packet.setSize(4);
+
+        CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet));
+
+    ssize_t bytesReceived = ::recv(acceptedClientFd, received.data(),
+        received.size(), MSG_WAITALL);
+
+        target.close();
+    (void) ::close(acceptedClientFd);
+        (void) ::close(serverFd);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(received.size()), bytesReceived);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x11), received[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x22), received[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x33), received[2]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x44), received[3]);
     }
 
     void testWritePacketWhenSocketClosed()

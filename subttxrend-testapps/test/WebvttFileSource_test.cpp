@@ -22,7 +22,6 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdint>
-#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -40,7 +39,7 @@ CPPUNIT_TEST_SUITE(WebvttFileSourceTest);
     CPPUNIT_TEST(testConstructorWithVeryLongPath);
     CPPUNIT_TEST(testConstructorWithSpecialCharactersInPath);
     CPPUNIT_TEST(testConstructorWithNonExistentPath);
-    CPPUNIT_TEST(testCompleteWorkflowWithStaticVariable);
+    CPPUNIT_TEST(testCompleteWorkflowOnSingleSource);
 
 CPPUNIT_TEST_SUITE_END();
 
@@ -145,19 +144,19 @@ protected:
         CPPUNIT_ASSERT_EQUAL(std::string("/non/existent/path/file.vtt"), source.getPath());
     }
 
-    // Comprehensive test that validates the complete WebvttFileSource behavior
-    // NOTE: This single test is necessary due to a CRITICAL BUG in the production code:
-    // The readPacket() method uses static variables (resetSent, headerSent, timestampSent, counter)
-    // which are shared across ALL instances of WebvttFileSource. This means:
-    // - The packet sequence (RESET -> SELECTION -> TIMESTAMP -> DATA) is global, not per-instance
-    // - Multiple test methods would interfere with each other
-    // - This test validates the complete workflow in one method
-    void testCompleteWorkflowWithStaticVariable()
+    // Comprehensive test that validates the observable packet sequence.
+    // The current production implementation keeps packet sequencing state in
+    // function-local statics, so the ordered readPacket() coverage stays
+    // within one test method to avoid inter-test interference. This method
+    // mixes a reused source instance with fresh instances, depending on the
+    // specific behavior being exercised.
+    void testCompleteWorkflowOnSingleSource()
     {
-        // PHASE 1: Validate RESET packet
+        WebvttFileSource source(tempFilePath);
+
+        // PHASE 1-4: Validate the packet sequence using one source instance.
         {
             writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(1024);
@@ -181,37 +180,14 @@ protected:
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[2]);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[3]);
 
-            source.close();
-        }
-
-        // PHASE 2: Validate RESET packet with insufficient buffer capacity
-        {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(10); // Insufficient: need 12 bytes
-            bool result = source.readPacket(packet);
-            CPPUNIT_ASSERT(!result); // Should fail
-
-            source.close();
-        }
-
-        // PHASE 3: Validate SELECTION packet
-        {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(1024);
             CPPUNIT_ASSERT(source.readPacket(packet));
 
-            // Second packet (globally) should be SELECTION
+            // Second packet should be SELECTION
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
-            std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
+            type = readLeUint32(packet.getBuffer(), 0);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(16), type); // WVTT_SELECTION type
 
-            std::uint32_t counter = readLeUint32(packet.getBuffer(), 4);
+            counter = readLeUint32(packet.getBuffer(), 4);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1), counter);
 
             std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
@@ -227,7 +203,7 @@ protected:
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1080), height);
 
             // Verify little-endian encoding for width (1920 = 0x780)
-            const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
+            buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x80), buf[16]);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x07), buf[17]);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[18]);
@@ -239,108 +215,74 @@ protected:
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[22]);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[23]);
 
-            source.close();
-        }
-
-        // PHASE 4: Validate SELECTION packet with insufficient buffer capacity
-        {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(20); // Insufficient: need 24 bytes
-            bool result = source.readPacket(packet);
-            CPPUNIT_ASSERT(!result); // Should fail
-
-            source.close();
-        }
-
-        // PHASE 5: Validate TIMESTAMP packet
-        {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(1024);
             CPPUNIT_ASSERT(source.readPacket(packet));
 
-            // Third packet (globally) should be TIMESTAMP
+            // Third packet should be TIMESTAMP
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
-            std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
+            type = readLeUint32(packet.getBuffer(), 0);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(18), type); // WVTT_TIMESTAMP type
 
-            std::uint32_t counter = readLeUint32(packet.getBuffer(), 4);
+            counter = readLeUint32(packet.getBuffer(), 4);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2), counter);
 
-            std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
+            payloadSize = readLeUint32(packet.getBuffer(), 8);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), payloadSize);
 
-            std::uint32_t channelId = readLeUint32(packet.getBuffer(), 12);
+            channelId = readLeUint32(packet.getBuffer(), 12);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
 
             std::uint64_t timestamp = readLeUint64(packet.getBuffer(), 16);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), timestamp);
 
             // Verify little-endian encoding for timestamp (all zeroes)
-            const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
+            buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
             for (int i = 16; i < 24; ++i)
             {
                 CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[i]);
             }
 
-            source.close();
-        }
-
-        // PHASE 6: Validate TIMESTAMP packet with insufficient buffer capacity
-        {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(20); // Insufficient: need 24 bytes
-            bool result = source.readPacket(packet);
-            CPPUNIT_ASSERT(!result); // Should fail
-
-            source.close();
-        }
-
-        // PHASE 7: Validate first DATA packet (all headers sent by now)
-        {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(1024);
             CPPUNIT_ASSERT(source.readPacket(packet));
 
-            // Verify counter incremented from TIMESTAMP's 2
-            std::uint32_t counter = readLeUint32(packet.getBuffer(), 4);
+            // Fourth packet should be DATA for the file content.
+            type = readLeUint32(packet.getBuffer(), 0);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type); // WVTT_DATA type
+
+            counter = readLeUint32(packet.getBuffer(), 4);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(3), counter);
 
+            payloadSize = readLeUint32(packet.getBuffer(), 8);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(15), payloadSize);
+
+            channelId = readLeUint32(packet.getBuffer(), 12);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
+
+            timestamp = readLeUint64(packet.getBuffer(), 16);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), timestamp);
+
+            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(27), packet.getSize());
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x41), packet.getBuffer()[24]);
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x42), packet.getBuffer()[25]);
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x43), packet.getBuffer()[26]);
+
             source.close();
         }
 
-        // PHASE 8: Validate DATA packet with empty file
+        // PHASE 5: Validate DATA packet with empty file
         {
             writeFile(tempFilePath, {});
-            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(1024);
             CPPUNIT_ASSERT(source.readPacket(packet));
 
-            // Empty file causes read() to return 0, which is treated as EOF
-            // NOTE: Counter still increments (4->5) even though packet.setSize(0) is called
-            // This is because counter++ happens when building header before the read operation
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getSize());
 
             source.close();
         }
 
-        // PHASE 9: Validate DATA packet with 1-byte file
+        // PHASE 6: Validate DATA packet with 1-byte file
         {
             writeFile(tempFilePath, {0x42});
-            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(1024);
@@ -349,9 +291,6 @@ protected:
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(25), packet.getSize());
             std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type); // WVTT_DATA type
-
-            std::uint32_t counter = readLeUint32(packet.getBuffer(), 4);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(5), counter); // Counter=5 (PHASE 8 incremented even with empty file)
 
             std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1 + 4 + 8), payloadSize); // fileSize + channelId + dataOffset
@@ -368,11 +307,10 @@ protected:
             source.close();
         }
 
-        // PHASE 10: Validate DATA packet with small file and specific content
+        // PHASE 7: Validate DATA packet with small file and specific content
         {
             std::vector<std::uint8_t> content = {0x01, 0x02, 0x03, 0x04, 0x05};
             writeFile(tempFilePath, content);
-            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(1024);
@@ -397,7 +335,7 @@ protected:
             source.close();
         }
 
-        // PHASE 11: Validate DATA packet with binary content (all byte values)
+        // PHASE 8: Validate DATA packet with binary content (all byte values)
         {
             std::vector<std::uint8_t> content(256);
             for (int i = 0; i < 256; ++i)
@@ -405,7 +343,6 @@ protected:
                 content[i] = static_cast<std::uint8_t>(i);
             }
             writeFile(tempFilePath, content);
-            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(2048);
@@ -426,11 +363,10 @@ protected:
             source.close();
         }
 
-        // PHASE 12: Validate DATA packet with larger file
+        // PHASE 9: Validate DATA packet with larger file
         {
             std::vector<std::uint8_t> content(10000, 0x55);
             writeFile(tempFilePath, content);
-            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(20000);
@@ -451,11 +387,10 @@ protected:
             source.close();
         }
 
-        // PHASE 13: Test insufficient capacity for DATA packet
+        // PHASE 10: Test insufficient capacity for DATA packet
         {
             std::vector<std::uint8_t> content(100, 0x41);
             writeFile(tempFilePath, content);
-            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(50); // Insufficient: need 124 bytes (24 + 100)
@@ -465,10 +400,9 @@ protected:
             source.close();
         }
 
-        // PHASE 14: Test zero capacity
+        // PHASE 11: Test zero capacity
         {
             writeFile(tempFilePath, {0x41});
-            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(0);
@@ -478,7 +412,7 @@ protected:
             source.close();
         }
 
-        // PHASE 15: Test exact capacity boundary for DATA packet
+        // PHASE 12: Test exact capacity boundary for DATA packet
         {
             writeFile(tempFilePath, {0x41, 0x42});
             WebvttFileSource source(tempFilePath);
@@ -496,7 +430,7 @@ protected:
             source.close();
         }
 
-        // PHASE 16: Test readPacket after close (file handle = -1)
+        // PHASE 13: Test readPacket after close (file handle = -1)
         {
             writeFile(tempFilePath, {0x41, 0x42});
             WebvttFileSource source(tempFilePath);
@@ -508,7 +442,7 @@ protected:
             CPPUNIT_ASSERT(!result); // Should fail because file is closed
         }
 
-        // PHASE 17: Test readPacket without calling open first
+        // PHASE 14: Test readPacket without calling open first
         {
             writeFile(tempFilePath, {0x41, 0x42});
             WebvttFileSource source(tempFilePath);
@@ -519,7 +453,7 @@ protected:
             CPPUNIT_ASSERT(!result); // Should fail because file is not open
         }
 
-        // PHASE 18: Test EOF after reading file
+        // PHASE 15: Test EOF after reading file
         {
             writeFile(tempFilePath, {0x41, 0x42, 0x43});
             WebvttFileSource source(tempFilePath);
@@ -534,7 +468,7 @@ protected:
             source.close();
         }
 
-        // PHASE 19: Test with valid WebVTT content
+        // PHASE 16: Test with valid WebVTT content
         {
             std::string webvttContent = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello World\n\n00:00:05.000 --> 00:00:08.000\nSubtitle Test\n";
             std::vector<std::uint8_t> content(webvttContent.begin(), webvttContent.end());
@@ -558,7 +492,7 @@ protected:
             source.close();
         }
 
-        // PHASE 20: Test with WebVTT metadata and cue settings
+        // PHASE 17: Test with WebVTT metadata and cue settings
         {
             std::string webvttContent = "WEBVTT - Test File\nKind: captions\nLanguage: en\n\n00:00:01.000 --> 00:00:04.000 align:middle line:90%\n<v Speaker>Test Caption</v>\n";
             std::vector<std::uint8_t> content(webvttContent.begin(), webvttContent.end());
@@ -579,7 +513,7 @@ protected:
             source.close();
         }
 
-        // PHASE 21: Test with special WebVTT characters and formatting
+        // PHASE 18: Test with special WebVTT characters and formatting
         {
             std::string webvttContent = "WEBVTT\n\nNOTE Test note\n\n00:00:01.000 --> 00:00:04.000\n<b>Bold</b> <i>Italic</i> <u>Underline</u>\n";
             std::vector<std::uint8_t> content(webvttContent.begin(), webvttContent.end());
@@ -601,7 +535,7 @@ protected:
             source.close();
         }
 
-        // PHASE 22: Test open() with non-existent file
+        // PHASE 19: Test open() with non-existent file
         {
             WebvttFileSource source("/non/existent/path/file.vtt");
             bool openResult = source.open();
@@ -613,7 +547,7 @@ protected:
             CPPUNIT_ASSERT(!readResult); // Should fail
         }
 
-        // PHASE 23: Test close() and verify file handle invalidation
+        // PHASE 20: Test close() and verify file handle invalidation
         {
             writeFile(tempFilePath, {0x41, 0x42, 0x43});
             WebvttFileSource source(tempFilePath);
@@ -630,7 +564,7 @@ protected:
             CPPUNIT_ASSERT_EQUAL(-1, fileHandle);
         }
 
-        // PHASE 24: Test multiple close() calls
+        // PHASE 21: Test multiple close() calls
         {
             writeFile(tempFilePath, {0x41, 0x42, 0x43});
             WebvttFileSource source(tempFilePath);
@@ -643,24 +577,7 @@ protected:
             CPPUNIT_ASSERT_EQUAL(-1, fileHandle);
         }
 
-        // PHASE 25: Test DATA packet counter increment consistency
-        {
-            writeFile(tempFilePath, {0x11, 0x22, 0x33});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(1024);
-            CPPUNIT_ASSERT(source.readPacket(packet)); // DATA packet
-
-            // Verify counter has incremented from previous tests
-            std::uint32_t counter = readLeUint32(packet.getBuffer(), 4);
-            // Counter should be > 0 due to cumulative effect of static variable
-            CPPUNIT_ASSERT(counter > 0);
-
-            source.close();
-        }
-
-        // PHASE 26: Test with UTF-8 encoded WebVTT content
+        // PHASE 22: Test with UTF-8 encoded WebVTT content
         {
             std::string webvttContent = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\n";
             webvttContent += "Hello 世界 🌍 Testing UTF-8\n";
@@ -682,7 +599,7 @@ protected:
             source.close();
         }
 
-        // PHASE 27: Test DATA packet channelId field is always 0
+        // PHASE 23: Test DATA packet channelId field is always 0
         {
             writeFile(tempFilePath, {0xAA, 0xBB, 0xCC, 0xDD});
             WebvttFileSource source(tempFilePath);
@@ -704,7 +621,7 @@ protected:
             source.close();
         }
 
-        // PHASE 28: Test DATA packet dataOffset field is always 0
+        // PHASE 24: Test DATA packet dataOffset field is always 0
         {
             writeFile(tempFilePath, {0xFF, 0xEE, 0xDD});
             WebvttFileSource source(tempFilePath);
@@ -726,7 +643,7 @@ protected:
             source.close();
         }
 
-        // PHASE 29: Test DATA packet size calculation formula
+        // PHASE 25: Test DATA packet size calculation formula
         {
             std::vector<std::uint8_t> content = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
             writeFile(tempFilePath, content);

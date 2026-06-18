@@ -31,6 +31,8 @@
 #include "BitStreamWriter.hpp"
 #include "Misc.hpp"
 
+#include <thread>
+
 using dvbsubdecoder::Database;
 using dvbsubdecoder::Page;
 using dvbsubdecoder::ParserCDS;
@@ -65,6 +67,8 @@ CPPUNIT_TEST_SUITE( ParserCDSTest );
     CPPUNIT_TEST(testLargeSegmentManyEntries);
     CPPUNIT_TEST(testVersionRollover);
     CPPUNIT_TEST(testAllPageStates);
+    CPPUNIT_TEST(testMultiThreadedClutParse);
+    CPPUNIT_TEST(testLargeSegmentMemoryPressure);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -950,6 +954,76 @@ public:
         }
     }
 
+    void testMultiThreadedClutParse()
+    {
+        const std::uint8_t CLUT_ID = 77;
+        BitStreamWriter writer;
+        writer.write(CLUT_ID, 8);
+        writer.write((0xA << 4), 8);
+        // Add a single entry
+        writer.write(0, 8); // entry_id
+        writer.write((1 << 5) | (1 << 0), 8); // 8-bit flag + full range
+        writer.write(123, 8); // Y
+        writer.write(45, 8); // Cr
+        writer.write(67, 8); // Cb
+        writer.write(89, 8); // T
+
+        m_database->epochReset();
+        m_database->getPage().startParsing(0, StcTime(), 0);
+        m_database->addRegionAndClut(0, 10, 10,
+                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, CLUT_ID);
+
+        // Lambda for thread parse
+        auto parseFunc = [this, &writer]() {
+            PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+            ParserCDS().parseClutDefinitionSegment(*m_database, reader);
+        };
+
+        std::thread t1(parseFunc);
+        std::thread t2(parseFunc);
+        t1.join();
+        t2.join();
+
+        auto clut = m_database->getClutById(CLUT_ID);
+        CPPUNIT_ASSERT(clut);
+        // Should have valid entry after concurrent parse
+        ColorYCrCbT expected = {123, 45, 67, 89};
+        auto expectedArgb = ColorCalculator().toARGB(expected).toUint32();
+        CPPUNIT_ASSERT(clut->getArray8bit()[0] == expectedArgb);
+    }
+
+    void testLargeSegmentMemoryPressure()
+    {
+        const std::uint8_t CLUT_ID = 99;
+        BitStreamWriter writer;
+        writer.write(CLUT_ID, 8);
+        writer.write((0xB << 4), 8);
+        for (int i = 0; i < 256; ++i) {
+            writer.write(i, 8); // entry_id
+            writer.write((1 << 5) | (1 << 0), 8); // 8-bit flag + full range
+            writer.write(i, 8); // Y
+            writer.write(i, 8); // Cr
+            writer.write(i, 8); // Cb
+            writer.write(i, 8); // T
+        }
+        m_database->epochReset();
+        m_database->getPage().startParsing(0, StcTime(), 0);
+        m_database->addRegionAndClut(0, 10, 10,
+                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, CLUT_ID);
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserCDS().parseClutDefinitionSegment(*m_database, reader);
+        auto clut = m_database->getClutById(CLUT_ID);
+        CPPUNIT_ASSERT(clut != nullptr);
+
+        // Spot check a few entries
+        for (int i = 0; i < 256; i += 64) {
+            ColorYCrCbT expected = {static_cast<std::uint8_t>(i), static_cast<std::uint8_t>(i), static_cast<std::uint8_t>(i), static_cast<std::uint8_t>(i)};
+            auto expectedArgb = ColorCalculator().toARGB(expected).toUint32();
+            CPPUNIT_ASSERT(clut->getArray8bit()[i] == expectedArgb);
+        }
+    }
 private:
     const Specification SPEC_VERSION = Specification::VERSION_1_3_1;
 

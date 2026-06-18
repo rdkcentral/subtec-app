@@ -44,6 +44,7 @@ public:
     PenAttributes currentPenAttrs;
     bool windowTimedout = false;
     bool hasTextFlag = false;
+    std::vector<bool> definedWindows;
 
     // Actually used methods (called by parser)
     void carriageReturn() override {
@@ -112,6 +113,9 @@ public:
         rec.windowDef = wd;
         calls.push_back(rec);
         currentWindowDef = wd;
+        if (wd.id < definedWindows.size()) {
+            definedWindows[wd.id] = true;
+        }
     }
 
     bool activePenAttributes(PenAttributes &penAttributes) override {
@@ -129,6 +133,10 @@ public:
     }
 
     bool getWindowDefinition(uint32_t id, WindowDefinition &wd) override {
+        if (id >= definedWindows.size() || !definedWindows[id]) {
+            return false;
+        }
+
         wd = currentWindowDef;
         wd.id = id;
         return true;
@@ -217,6 +225,7 @@ public:
     MockCommandProcessor() {
         currentWindowDef.id = 255;
         currentPenAttrs = PenAttributes();
+        definedWindows.resize(8, false);
     }
 };
 
@@ -301,10 +310,6 @@ public:
         mock = new MockCommandProcessor();
         parser = new CommandParser();
         parser->setProcessor(mock);
-
-        // Initialize window definition to allow operations
-        mock->currentWindowDef.id = 0;
-        mock->currentWindowDef.row_count = 2;
     }
 
     void tearDown()
@@ -454,7 +459,7 @@ public:
 
         bool found = false;
         for (const auto& call : mock->calls) {
-            if (call.method == "defineWindow") {
+            if (call.method == "defineWindow" && call.windowDef.id == 0) {
                 found = (call.windowDef.row_count == 2);
                 break;
             }
@@ -850,8 +855,18 @@ public:
         parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
                               addParity(0x14), addParity(0x26)); // RU3
 
-        CPPUNIT_ASSERT(mock->wasMethodCalled("updateWindowRowCount") ||
-                      mock->wasMethodCalled("defineWindow"));
+        CPPUNIT_ASSERT(mock->wasMethodCalled("updateWindowRowCount"));
+
+        bool found = false;
+        for (const auto& call : mock->calls) {
+            if (call.method == "updateWindowRowCount" && call.intParams.size() >= 2) {
+                found = (call.intParams[0] == 0 && call.intParams[1] == 3);
+                if (found) {
+                    break;
+                }
+            }
+        }
+        CPPUNIT_ASSERT(found);
     }
 
     void testStateTransition_RollUpToPopOn()

@@ -23,6 +23,8 @@
 #include "StreamValidator.hpp"
 #include "PacketResetAll.hpp"
 #include "PacketTimestamp.hpp"
+#include <memory>
+#include <array>
 
 using subttxrend::common::DataBuffer;
 using subttxrend::common::DataBufferPtr;
@@ -42,19 +44,16 @@ CPPUNIT_TEST_SUITE( PacketStreamValidatorTest );
     CPPUNIT_TEST(testValidateBasicValid);
     CPPUNIT_TEST(testValidateBasicInvalid);
     CPPUNIT_TEST(testValidateReturnValue);
-    CPPUNIT_TEST(testValidateCounterBasic);
-    CPPUNIT_TEST(testValidateCounterSequential);
-    CPPUNIT_TEST(testValidateCounterReturnValue);
+    CPPUNIT_TEST(testValidateCounterStubAcceptsAnyValue);
     CPPUNIT_TEST(testResetAllBasic);
     CPPUNIT_TEST(testResetAllMultiple);
     CPPUNIT_TEST(testResetAllAfterInvalid);
     CPPUNIT_TEST(testTimestampBasic);
     CPPUNIT_TEST(testTimestampSequential);
-    CPPUNIT_TEST(testTimestampNonSequential);
+    CPPUNIT_TEST(testTimestampNonSequentialAcceptedWithCounterStub);
     CPPUNIT_TEST(testTimestampBoundaryValues);
     CPPUNIT_TEST(testCounterBoundaryValues);
     CPPUNIT_TEST(testCounterWrapAround);
-    CPPUNIT_TEST(testCounterNonSequential);
     CPPUNIT_TEST(testInvalidPacketTypes);
     CPPUNIT_TEST(testInvalidPacketData);
     CPPUNIT_TEST(testStateTransitions);
@@ -64,10 +63,10 @@ CPPUNIT_TEST_SUITE( PacketStreamValidatorTest );
 CPPUNIT_TEST_SUITE_END();
 
 private:
-    Packet& generatePacketTimestamp(std::uint32_t counter)
+    std::unique_ptr<Packet> generatePacketTimestamp(std::uint32_t counter)
     {
-        static PacketTimestamp packetTimestamp;
-        static std::uint8_t packetBytes[12 + 12];
+        auto packet = std::make_unique<PacketTimestamp>();
+        std::array<std::uint8_t, 24> packetBytes{};
 
         std::size_t index = 0;
 
@@ -89,34 +88,24 @@ private:
         packetBytes[index++] = 0;
         packetBytes[index++] = 0;
 
-        // timestamp
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
+        // timestamp (8 bytes)
+        for (int i = 0; i < 8; ++i) packetBytes[index++] = 0;
 
-        // stc
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
-        packetBytes[index++] = 0;
+        // stc (4 bytes)
+        for (int i = 0; i < 4; ++i) packetBytes[index++] = 0;
 
-        DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetBytes), std::end(packetBytes));
+        DataBufferPtr buffer = std::make_unique<DataBuffer>(packetBytes.begin(), packetBytes.end());
 
-        CPPUNIT_ASSERT(packetTimestamp.parse(std::move(buffer)));
-        CPPUNIT_ASSERT(packetTimestamp.isValid());
+        CPPUNIT_ASSERT(packet->parse(std::move(buffer)));
+        CPPUNIT_ASSERT(packet->isValid());
 
-        return packetTimestamp;
+        return packet;
     }
 
-    Packet& generatePacketResetAll()
+    std::unique_ptr<Packet> generatePacketResetAll()
     {
-        static PacketResetAll packetResetAll;
-        static std::uint8_t packetBytes[12];
+        auto packet = std::make_unique<PacketResetAll>();
+        std::array<std::uint8_t, 12> packetBytes{};
 
         std::size_t index = 0;
 
@@ -138,18 +127,18 @@ private:
         packetBytes[index++] = 0;
         packetBytes[index++] = 0;
 
-        DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetBytes), std::end(packetBytes));
+        DataBufferPtr buffer = std::make_unique<DataBuffer>(packetBytes.begin(), packetBytes.end());
 
-        CPPUNIT_ASSERT(packetResetAll.parse(std::move(buffer)));
-        CPPUNIT_ASSERT(packetResetAll.isValid());
+        CPPUNIT_ASSERT(packet->parse(std::move(buffer)));
+        CPPUNIT_ASSERT(packet->isValid());
 
-        return packetResetAll;
+        return packet;
     }
 
-    Packet& generatePacketTimestampWithValues(std::uint32_t counter, std::uint64_t timestamp, std::uint32_t stc)
+    std::unique_ptr<Packet> generatePacketTimestampWithValues(std::uint32_t counter, std::uint64_t timestamp, std::uint32_t stc)
     {
-        static PacketTimestamp packetTimestamp;
-        static std::uint8_t packetBytes[24];
+        auto packet = std::make_unique<PacketTimestamp>();
+        std::array<std::uint8_t, 24> packetBytes{};
 
         std::size_t index = 0;
 
@@ -187,18 +176,18 @@ private:
         packetBytes[index++] = (stc >> 16) & 0xFF;
         packetBytes[index++] = (stc >> 24) & 0xFF;
 
-        DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetBytes), std::end(packetBytes));
+        DataBufferPtr buffer = std::make_unique<DataBuffer>(packetBytes.begin(), packetBytes.end());
 
-        CPPUNIT_ASSERT(packetTimestamp.parse(std::move(buffer)));
-        CPPUNIT_ASSERT(packetTimestamp.isValid());
+        CPPUNIT_ASSERT(packet->parse(std::move(buffer)));
+        CPPUNIT_ASSERT(packet->isValid());
 
-        return packetTimestamp;
+        return packet;
     }
 
-    Packet& generatePacketResetAllWithCounter(std::uint32_t counter)
+    std::unique_ptr<Packet> generatePacketResetAllWithCounter(std::uint32_t counter)
     {
-        static PacketResetAll packetResetAll;
-        static std::uint8_t packetBytes[12];
+        auto packet = std::make_unique<PacketResetAll>();
+        std::array<std::uint8_t, 12> packetBytes{};
 
         std::size_t index = 0;
 
@@ -220,18 +209,18 @@ private:
         packetBytes[index++] = 0;
         packetBytes[index++] = 0;
 
-        DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetBytes), std::end(packetBytes));
+        DataBufferPtr buffer = std::make_unique<DataBuffer>(packetBytes.begin(), packetBytes.end());
 
-        CPPUNIT_ASSERT(packetResetAll.parse(std::move(buffer)));
-        CPPUNIT_ASSERT(packetResetAll.isValid());
+        CPPUNIT_ASSERT(packet->parse(std::move(buffer)));
+        CPPUNIT_ASSERT(packet->isValid());
 
-        return packetResetAll;
+        return packet;
     }
 
-    Packet& generatePacketInvalid()
+    std::unique_ptr<Packet> generatePacketInvalid()
     {
-        static PacketResetAll packetInvalid;
-        static std::uint8_t packetBytes[12];
+        auto packet = std::make_unique<PacketResetAll>();
+        std::array<std::uint8_t, 12> packetBytes{};
 
         std::size_t index = 0;
 
@@ -253,13 +242,13 @@ private:
         packetBytes[index++] = 0;
         packetBytes[index++] = 0;
 
-        DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetBytes), std::end(packetBytes));
+        DataBufferPtr buffer = std::make_unique<DataBuffer>(packetBytes.begin(), packetBytes.end());
 
         // This should fail to parse due to invalid type, making it invalid
-        packetInvalid.parse(std::move(buffer));
+        packet->parse(std::move(buffer));
         // Don't assert validity since we want an invalid packet
 
-        return packetInvalid;
+        return packet;
     }
 
 public:
@@ -281,54 +270,54 @@ public:
         CPPUNIT_ASSERT(validator.isValid());
 
         // reset all
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
 
         // some valid packets
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(1)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(2)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(3)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(4)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(1)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(2)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(3)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(4)));
 
         // invalid counter - still will be considered valid
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(10)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(10)));
 
         // try to get back to valid - shall not switch stream validity
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(5)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(11)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(5)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(11)));
 
         // reset all
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
 
         // reset all (repeated)
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
 
         // invalid
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
 
         // some valid packets (shall not be accepted)
-        CPPUNIT_ASSERT(!validator.validate(generatePacketTimestamp(1)));
-        CPPUNIT_ASSERT(!validator.validate(generatePacketTimestamp(2)));
-        CPPUNIT_ASSERT(!validator.validate(generatePacketTimestamp(3)));
-        CPPUNIT_ASSERT(!validator.validate(generatePacketTimestamp(4)));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketTimestamp(1)));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketTimestamp(2)));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketTimestamp(3)));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketTimestamp(4)));
 
         // reset all
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
 
         // some valid packets
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(1)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(2)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(3)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(1)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(2)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(3)));
 
         // invalid
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
 
         // status shall be invalid
         CPPUNIT_ASSERT(!validator.isValid());
 
         // reset all (repeated)
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
 
         // status shall be valid
         CPPUNIT_ASSERT(validator.isValid());
@@ -351,11 +340,11 @@ public:
         CPPUNIT_ASSERT(validator.isValid());
         
         // Still valid after valid packet
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         CPPUNIT_ASSERT(validator.isValid());
         
         // Still valid after another valid packet
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(1)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(1)));
         CPPUNIT_ASSERT(validator.isValid());
     }
 
@@ -367,7 +356,7 @@ public:
         CPPUNIT_ASSERT(validator.isValid());
         
         // Invalidate with bad packet
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
         
         // Should remain invalid
@@ -379,11 +368,11 @@ public:
         StreamValidator validator;
         
         // Invalidate first
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
         
         // Reset with RESET_ALL
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         CPPUNIT_ASSERT(validator.isValid());
     }
 
@@ -392,12 +381,12 @@ public:
         StreamValidator validator;
         
         // Test with RESET_ALL packet
-        bool result = validator.validate(generatePacketResetAll());
+        bool result = validator.validate(*generatePacketResetAll());
         CPPUNIT_ASSERT(result);
         CPPUNIT_ASSERT(validator.isValid());
         
         // Test with TIMESTAMP packet
-        result = validator.validate(generatePacketTimestamp(1));
+        result = validator.validate(*generatePacketTimestamp(1));
         CPPUNIT_ASSERT(result);
         CPPUNIT_ASSERT(validator.isValid());
     }
@@ -407,7 +396,7 @@ public:
         StreamValidator validator;
         
         // Test with invalid packet
-        bool result = validator.validate(generatePacketInvalid());
+        bool result = validator.validate(*generatePacketInvalid());
         CPPUNIT_ASSERT(!result);
         CPPUNIT_ASSERT(!validator.isValid());
     }
@@ -417,51 +406,25 @@ public:
         StreamValidator validator;
         
         // Return value should match isValid() state
-        bool result = validator.validate(generatePacketResetAll());
+        bool result = validator.validate(*generatePacketResetAll());
         CPPUNIT_ASSERT(result == validator.isValid());
         
-        result = validator.validate(generatePacketTimestamp(1));
+        result = validator.validate(*generatePacketTimestamp(1));
         CPPUNIT_ASSERT(result == validator.isValid());
         
-        result = validator.validate(generatePacketInvalid());
+        result = validator.validate(*generatePacketInvalid());
         CPPUNIT_ASSERT(result == validator.isValid());
     }
 
-    void testValidateCounterBasic()
+    void testValidateCounterStubAcceptsAnyValue()
     {
         StreamValidator validator;
         
-        // Test validateCounter method directly (public API)
-        // Current implementation always returns true
+        // validateCounter() is currently stubbed to accept any value.
         CPPUNIT_ASSERT(validator.validateCounter(0));
         CPPUNIT_ASSERT(validator.validateCounter(1));
         CPPUNIT_ASSERT(validator.validateCounter(100));
         CPPUNIT_ASSERT(validator.validateCounter(0xFFFFFFFF));
-    }
-
-    void testValidateCounterSequential()
-    {
-        StreamValidator validator;
-        
-        // Test sequential counter values
-        // Current implementation should accept all
-        CPPUNIT_ASSERT(validator.validateCounter(1));
-        CPPUNIT_ASSERT(validator.validateCounter(2));
-        CPPUNIT_ASSERT(validator.validateCounter(3));
-        
-        // Test non-sequential (should still pass due to disabled validation)
-        CPPUNIT_ASSERT(validator.validateCounter(10));
-        CPPUNIT_ASSERT(validator.validateCounter(5));
-    }
-
-    void testValidateCounterReturnValue()
-    {
-        StreamValidator validator;
-        
-        // Return value should always be true with current implementation
-        CPPUNIT_ASSERT(validator.validateCounter(0) == true);
-        CPPUNIT_ASSERT(validator.validateCounter(1) == true);
-        CPPUNIT_ASSERT(validator.validateCounter(0xFFFFFFFF) == true);
     }
 
     void testResetAllBasic()
@@ -469,7 +432,7 @@ public:
         StreamValidator validator;
         
         // Test basic RESET_ALL handling
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         CPPUNIT_ASSERT(validator.isValid());
         
         // Validator should remain valid
@@ -481,9 +444,9 @@ public:
         StreamValidator validator;
         
         // Multiple RESET_ALL packets should all be accepted
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         
         CPPUNIT_ASSERT(validator.isValid());
     }
@@ -493,11 +456,11 @@ public:
         StreamValidator validator;
         
         // Invalidate stream
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
         
         // RESET_ALL should restore validity
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         CPPUNIT_ASSERT(validator.isValid());
     }
 
@@ -507,10 +470,10 @@ public:
         StreamValidator validator;
         
         // Initialize with RESET_ALL
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         
         // Test basic timestamp packet
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(1)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(1)));
         CPPUNIT_ASSERT(validator.isValid());
     }
 
@@ -519,27 +482,27 @@ public:
         StreamValidator validator;
         
         // Initialize
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         
         // Test sequential timestamps
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(1)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(2)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(3)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(1)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(2)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(3)));
         
         CPPUNIT_ASSERT(validator.isValid());
     }
 
-    void testTimestampNonSequential()
+    void testTimestampNonSequentialAcceptedWithCounterStub()
     {
         StreamValidator validator;
         
         // Initialize
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         
-        // Test non-sequential timestamps (should be accepted)
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(5)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(1)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(10)));
+        // Non-sequential timestamp counters are currently accepted.
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(5)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(1)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(10)));
         
         CPPUNIT_ASSERT(validator.isValid());
     }
@@ -549,11 +512,11 @@ public:
         StreamValidator validator;
         
         // Initialize
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         
         // Test boundary values
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(0)));
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(0xFFFFFFFF)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(0)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(0xFFFFFFFF)));
         
         CPPUNIT_ASSERT(validator.isValid());
     }
@@ -582,30 +545,19 @@ public:
         CPPUNIT_ASSERT(validator.validateCounter(1));
     }
 
-    void testCounterNonSequential()
-    {
-        StreamValidator validator;
-        
-        // Test non-sequential counter values
-        CPPUNIT_ASSERT(validator.validateCounter(100));
-        CPPUNIT_ASSERT(validator.validateCounter(50));
-        CPPUNIT_ASSERT(validator.validateCounter(200));
-        CPPUNIT_ASSERT(validator.validateCounter(1));
-    }
-
     void testInvalidPacketTypes()
     {
         StreamValidator validator;
         
         // Test various invalid packet scenarios
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
         
         // Reset for next test
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         
         // Test another invalid packet
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
     }
 
@@ -614,14 +566,14 @@ public:
         StreamValidator validator;
         
         // Test corrupted packet structure using our invalid packet generator
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
         
         // Reset
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         
         // Test another invalid packet scenario
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
     }
 
@@ -632,13 +584,13 @@ public:
         // Valid -> Invalid -> Valid transition
         CPPUNIT_ASSERT(validator.isValid()); // Start valid
         
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid()); // Now invalid
         
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         CPPUNIT_ASSERT(validator.isValid()); // Back to valid
         
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(1)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(1)));
         CPPUNIT_ASSERT(validator.isValid()); // Still valid
     }
 
@@ -647,18 +599,18 @@ public:
         StreamValidator validator;
         
         // Sequence: Valid -> Error -> Reset -> Valid
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(1)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(1)));
         
         // Introduce error
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
         
         // Recover with RESET_ALL
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         CPPUNIT_ASSERT(validator.isValid());
         
         // Continue normal operation
-        CPPUNIT_ASSERT(validator.validate(generatePacketTimestamp(100)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(100)));
         CPPUNIT_ASSERT(validator.isValid());
     }
 
@@ -667,17 +619,17 @@ public:
         StreamValidator validator;
         
         // Multiple consecutive errors
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
         
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
         
-        CPPUNIT_ASSERT(!validator.validate(generatePacketInvalid()));
+        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
         CPPUNIT_ASSERT(!validator.isValid());
         
         // Recovery should still work
-        CPPUNIT_ASSERT(validator.validate(generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         CPPUNIT_ASSERT(validator.isValid());
     }
 
@@ -686,19 +638,19 @@ public:
         StreamValidator validator;
         
         // Reuse same packet multiple times
-        Packet& packet = generatePacketTimestamp(42);
-        
-        CPPUNIT_ASSERT(validator.validate(packet));
-        CPPUNIT_ASSERT(validator.validate(packet));
-        CPPUNIT_ASSERT(validator.validate(packet));
+        auto packet = generatePacketTimestamp(42);
+
+        CPPUNIT_ASSERT(validator.validate(*packet));
+        CPPUNIT_ASSERT(validator.validate(*packet));
+        CPPUNIT_ASSERT(validator.validate(*packet));
         
         CPPUNIT_ASSERT(validator.isValid());
         
         // Reuse RESET_ALL packet
-        Packet& resetPacket = generatePacketResetAll();
-        CPPUNIT_ASSERT(validator.validate(resetPacket));
-        CPPUNIT_ASSERT(validator.validate(resetPacket));
-        CPPUNIT_ASSERT(validator.validate(resetPacket));
+        auto resetPacket = generatePacketResetAll();
+        CPPUNIT_ASSERT(validator.validate(*resetPacket));
+        CPPUNIT_ASSERT(validator.validate(*resetPacket));
+        CPPUNIT_ASSERT(validator.validate(*resetPacket));
         
         CPPUNIT_ASSERT(validator.isValid());
     }

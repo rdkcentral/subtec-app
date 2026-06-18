@@ -463,8 +463,12 @@ public:
         }
 
         // Update should trim excess text drawers beyond MAX_ROW_COUNT (12)
-        window->update(windowDef);
-        CPPUNIT_ASSERT(true); // No crash means success
+        CPPUNIT_ASSERT_NO_THROW(window->update(windowDef));
+
+        // Ensure drawing still works after trim
+        mockGfx->reset();
+        window->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
     }
 
     void testChangedInitialState()
@@ -600,50 +604,58 @@ public:
 
     void testBackspaceOnEmptyWindow()
     {
-        window->backspace(); // Should not crash
-        CPPUNIT_ASSERT(true);
+        // Precondition: no text at current pen location
+        CPPUNIT_ASSERT_EQUAL(false, window->hasText(0));
+
+        // Exercise: should not throw
+        CPPUNIT_ASSERT_NO_THROW(window->backspace());
+
+        // Postcondition: still no text present
+        CPPUNIT_ASSERT_EQUAL(false, window->hasText(0));
     }
 
     void testBackspaceWithText()
     {
         window->report("Test");
-        window->backspace();
-        CPPUNIT_ASSERT(true); // No crash means success
+
+        // Backspace should not throw and should keep window usable
+        CPPUNIT_ASSERT_NO_THROW(window->backspace());
+        CPPUNIT_ASSERT_EQUAL(true, window->changed());
+
+        mockGfx->reset();
+        window->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
     }
 
     void testSetPenLocationOutOfBoundsRow()
     {
-        window->setPenLocation(100, 5);
-        // Should ignore out of bounds
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->setPenLocation(100, 5));
     }
 
     void testSetPenLocationOutOfBoundsColumn()
     {
-        window->setPenLocation(5, 100);
-        // Should ignore out of bounds
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->setPenLocation(5, 100));
     }
 
     void testSetPenLocationNegativeRow()
     {
-        window->setPenLocation(-1, 5);
-        // Should handle gracefully
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->setPenLocation(-1, 5));
     }
 
     void testSetPenLocationNegativeColumn()
     {
-        window->setPenLocation(5, -1);
-        // Should handle gracefully
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->setPenLocation(5, -1));
     }
 
     void testSetPenLocationBackwards()
     {
         window->report("Text");
-        window->setPenLocation(0, 0); // Move back
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->setPenLocation(0, 0)); // Move back
+
+        // Ensure window still drawable after reposition
+        mockGfx->reset();
+        window->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
     }
 
     void testSetWindowAttributesChangePrintDirection()
@@ -654,8 +666,8 @@ public:
         newAttrs.print_direction = WindowPd::RIGHT_LEFT;
 
         window->setWindowAttributes(newAttrs);
-        // Should clear window content
-        CPPUNIT_ASSERT(true);
+        // Should mark changed when direction changes
+        CPPUNIT_ASSERT_EQUAL(true, window->changed());
     }
 
     void testSetWindowAttributesChangeScrollDirection()
@@ -666,8 +678,7 @@ public:
         newAttrs.scroll_direction = WindowSd::TOP_BOTTOM;
 
         window->setWindowAttributes(newAttrs);
-        // Should clear window content
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(true, window->changed());
     }
 
     void testSetWindowAttributesNoDirectionChange()
@@ -768,8 +779,10 @@ public:
         attrs.underline = true;
         attrs.italics = true;
 
-        window->overridePenAttributes(attrs, true);
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->overridePenAttributes(attrs, true));
+        mockGfx->reset();
+        window->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
     }
 
     void testOverridePenAttributesNotMidRow()
@@ -777,8 +790,7 @@ public:
         PenAttributes attrs;
         attrs.underline = true;
 
-        window->overridePenAttributes(attrs, false);
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->overridePenAttributes(attrs, false));
     }
 
     void testOverridePenAttributesOnEmptyWindow()
@@ -786,8 +798,7 @@ public:
         PenAttributes attrs;
         attrs.flashing = true;
 
-        window->overridePenAttributes(attrs, false);
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->overridePenAttributes(attrs, false));
     }
 
     void testOverridePenAttributesWithText()
@@ -798,8 +809,8 @@ public:
         attrs.underline = true;
         attrs.italics = true;
 
-        window->overridePenAttributes(attrs, true);
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->overridePenAttributes(attrs, true));
+        CPPUNIT_ASSERT_EQUAL(true, window->changed());
     }
 
     void testSetPenColorOnEmptyWindow()
@@ -814,8 +825,11 @@ public:
         window->report("Text");
 
         PenColor color;
-        window->setPenColor(color);
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(window->setPenColor(color));
+
+        mockGfx->reset();
+        window->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
     }
 
     void testSetPenColorVisibleWindow()
@@ -1012,8 +1026,12 @@ public:
         window->setPenAttributes(attrs);
         window->report("Flash");
 
+        CPPUNIT_ASSERT_EQUAL(true, window->hasFlashingText());
+
         window->setFlashState(FlashControl::Show);
-        CPPUNIT_ASSERT(true);
+        mockGfx->reset();
+        window->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
     }
 
     void testSetFlashStateHide()
@@ -1023,8 +1041,12 @@ public:
         window->setPenAttributes(attrs);
         window->report("Flash");
 
+        CPPUNIT_ASSERT_EQUAL(true, window->hasFlashingText());
+
         window->setFlashState(FlashControl::Hide);
-        CPPUNIT_ASSERT(true);
+        mockGfx->reset();
+        window->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
     }
 
     void testUpdateRowCountIncreaseWithAdjust()
@@ -1035,8 +1057,11 @@ public:
         testWin->report("Text");
         testWin->updateRowCount(20, true);
 
+        mockGfx->reset();
+        testWin->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
+
         delete testWin;
-        CPPUNIT_ASSERT(true);
     }
 
     void testUpdateRowCountDecreaseWithAdjust()
@@ -1052,15 +1077,20 @@ public:
 
         testWin->updateRowCount(5, true);
 
+        mockGfx->reset();
+        testWin->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
+
         delete testWin;
-        CPPUNIT_ASSERT(true);
     }
 
     void testUpdateRowCountWithoutAdjust()
     {
         window->report("Text");
         window->updateRowCount(20, false);
-        CPPUNIT_ASSERT(true);
+        mockGfx->reset();
+        window->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
     }
 
     void testUpdateRowCountNonBottomTopDirection()
@@ -1070,9 +1100,11 @@ public:
 
         testWin->report("Text");
         testWin->updateRowCount(20, true); // adjust should be ignored
+        mockGfx->reset();
+        testWin->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
 
         delete testWin;
-        CPPUNIT_ASSERT(true);
     }
 
     void testUpdateRowCountRemovesOffscreenText()
@@ -1088,8 +1120,11 @@ public:
 
         testWin->updateRowCount(3, true);
 
+        mockGfx->reset();
+        testWin->draw();
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
+
         delete testWin;
-        CPPUNIT_ASSERT(true);
     }
 
     void testDrawWhenVisible()
@@ -1243,8 +1278,9 @@ public:
 
         // Test resize - just use the fixture window's resize functionality
         window->updateRowCount(20, true);
+        mockGfx->reset();
         window->draw();
-        CPPUNIT_ASSERT(true); // No crash
+        CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
     }
 
     void testToggleVisibilityMultipleTimes()

@@ -42,14 +42,14 @@ CPPUNIT_TEST_SUITE( PresenterTest );
     CPPUNIT_TEST(testMultipleDrawCallsWithoutChanges);
     CPPUNIT_TEST(testMultipleInvalidateCalls);
     CPPUNIT_TEST(testDrawAfterInvalidateSequence);
-    CPPUNIT_TEST(testZeroDimensionRectangles);
+    CPPUNIT_TEST(testZeroDimensionRegionRejected);
     CPPUNIT_TEST(testIntegerLimitCoordinates);
     CPPUNIT_TEST(testEmptyRenderingState);
     CPPUNIT_TEST(testMaximumRegionCount);
     CPPUNIT_TEST(testDisplayBoundsSmallerThanWindow);
     CPPUNIT_TEST(testWindowBeyondDisplayBounds);
     CPPUNIT_TEST(testNullRegionReferences);
-    CPPUNIT_TEST(testCorruptedRectangleData);
+    CPPUNIT_TEST(testInvalidRegionDimensionsRejected);
     CPPUNIT_TEST(testStateSwapWithIdenticalStates);
     CPPUNIT_TEST(testBoundsChangeNotifications);
     CPPUNIT_TEST(testModifiedRectangleCalculation);
@@ -60,6 +60,7 @@ CPPUNIT_TEST_SUITE( PresenterTest );
     CPPUNIT_TEST(testRegionOverlapHandling);
     CPPUNIT_TEST(testCoordinateTransformation);
     CPPUNIT_TEST(testIsRectangleInsideBoundaryConditions);
+    CPPUNIT_TEST(testComposedRegionCorrectness);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -78,6 +79,7 @@ public:
 
     void tearDown()
     {
+        if (m_presenter) m_presenter->invalidate();
         m_presenter.reset();
         m_database.reset();
         m_pixmapAllocator.reset();
@@ -164,12 +166,14 @@ public:
     }
 
     // Edge and Boundary Cases
-    void testZeroDimensionRectangles()
+    void testZeroDimensionRegionRejected()
     {
-        // Setup page with zero-dimension region
-        setupPageWithZeroDimensionRegion();
+        // Setup page with a zero-dimension region request.
+        auto* rejectedRegion = setupPageWithZeroDimensionRegion();
 
-        // Should handle gracefully without crashing
+        // Database rejects the invalid region request, leaving only the page reference behind.
+        CPPUNIT_ASSERT(rejectedRegion == nullptr);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), m_database->getRegionCount());
         m_presenter->draw();
     }
 
@@ -228,12 +232,14 @@ public:
         m_presenter->draw();
     }
 
-    void testCorruptedRectangleData()
+    void testInvalidRegionDimensionsRejected()
     {
-        // Setup page with malformed rectangles
-        setupPageWithCorruptedRectangles();
+        // Setup page with invalid (negative) region dimensions.
+        auto* rejectedRegion = setupPageWithNegativeDimensionRegion();
 
-        // Should validate and handle safely
+        // Database rejects the invalid region request, and presenter remains stable.
+        CPPUNIT_ASSERT(rejectedRegion == nullptr);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), m_database->getRegionCount());
         m_presenter->draw();
     }
 
@@ -370,6 +376,20 @@ public:
         m_presenter->draw();
     }
 
+    void testComposedRegionCorrectness()
+    {
+        // Setup a page with a known region
+        setupTestPage();
+        m_presenter->draw();
+        // After draw, verify region exists and has expected dimensions
+        auto& page = m_database->getPage();
+        // Ensure region index is valid
+        CPPUNIT_ASSERT(page.getRegionCount() > 0);
+        const auto& region = page.getRegion(0);
+        // Check expected region dimensions using struct members
+        CPPUNIT_ASSERT_EQUAL(100, region.m_positionX);
+        CPPUNIT_ASSERT_EQUAL(100, region.m_positionY);
+    }
 private:
     std::unique_ptr<DecoderClientMock> m_decoderClient;
     std::unique_ptr<PixmapAllocator> m_pixmapAllocator;
@@ -393,25 +413,24 @@ private:
         createTestRegion(1, 200, 150);
     }
 
-    void createTestRegion(uint16_t id, int width, int height)
+    dvbsubdecoder::Region* createTestRegion(uint16_t id, int width, int height)
     {
-        if (width <= 0 || height <= 0) {
-            return; // Skip invalid sizes in this simplified helper.
-        }
         // Region depth / compatibility / clut id use 0 for tests.
+        // Invalid sizes are intentionally forwarded to the API so rejection paths are exercised.
         auto region = m_database->addRegionAndClut(static_cast<std::uint8_t>(id), width, height, 0, 0, 0);
         if (region) {
             region->setVersion(1);
         }
+        return region;
     }
 
-    void setupPageWithZeroDimensionRegion()
+    dvbsubdecoder::Region* setupPageWithZeroDimensionRegion()
     {
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
         page.addRegion(1, 100, 100);
         page.finishParsing();
-        createTestRegion(1, 0, 0); // skipped in helper
+        return createTestRegion(1, 0, 0); // rejected by Database::addRegionAndClut
     }
 
     void setupPageWithExtremeCoordinates()
@@ -470,13 +489,13 @@ private:
         page.finishParsing();
     }
 
-    void setupPageWithCorruptedRectangles()
+    dvbsubdecoder::Region* setupPageWithNegativeDimensionRegion()
     {
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
         page.addRegion(1, 200, 200);
         page.finishParsing();
-        createTestRegion(1, -50, -50); // skipped
+        return createTestRegion(1, -50, -50); // rejected by Database::addRegionAndClut
     }
 
     void changeBounds() {
@@ -499,7 +518,7 @@ private:
         page.startParsing(0, StcTime(), 5);
         page.addRegion(1, 10, 10);
         page.finishParsing();
-        createTestRegion(1, 0, 0); // skipped
+        createTestRegion(1, 1, 1);
     }
 };
 

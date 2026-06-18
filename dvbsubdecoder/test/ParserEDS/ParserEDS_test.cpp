@@ -47,6 +47,8 @@ CPPUNIT_TEST_SUITE( ParserEDSTest );
     CPPUNIT_TEST(testNullEmptyDisplayStateTransfer);
     CPPUNIT_TEST(testMultipleIncompleteCompleteCycles);
     CPPUNIT_TEST(testVersionRolloverHandling);
+    CPPUNIT_TEST(testNegativeCorruptInput);
+    CPPUNIT_TEST(testPageStateAfterParse);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -268,6 +270,30 @@ public:
         }
     }
 
+    void testNegativeCorruptInput()
+    {
+        ParserEDS parser;
+        // Truncated/corrupt input should not crash or change DB state
+        std::vector<uint8_t> corruptData = {0xFF};
+        PesPacketReader reader(corruptData.data(), corruptData.size(), nullptr, 0);
+        // Set up DB state
+        m_database->getPage().startParsing(0, StcTime(), 0);
+        auto prevState = m_database->getPage().getState();
+        parser.parseEndOfDisplaySetSegment(*m_database, reader);
+        // Should remain in COMPLETE or INCOMPLETE, not crash
+        CPPUNIT_ASSERT(m_database->getPage().getState() == prevState || m_database->getPage().getState() == Page::State::COMPLETE);
+    }
+
+    void testPageStateAfterParse()
+    {
+        // Valid parse should update page state
+        PesPacketReader reader;
+        ParserEDS parser;
+        m_database->getPage().startParsing(0, StcTime(), 0);
+        CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::INCOMPLETE);
+        parser.parseEndOfDisplaySetSegment(*m_database, reader);
+        CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::COMPLETE);
+    }
 private:
     const Specification SPEC_VERSION = Specification::VERSION_1_3_1;
 

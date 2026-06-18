@@ -55,6 +55,9 @@ CPPUNIT_TEST_SUITE( PixelWriterTest );
     CPPUNIT_TEST(testComplexOperationSequence);
     CPPUNIT_TEST(testExceptionSafety);
     CPPUNIT_TEST(testPixmapBoundaryClipping);
+    CPPUNIT_TEST(testExtremePixelValues);
+    CPPUNIT_TEST(testOutOfBoundsWrites);
+    CPPUNIT_TEST(testBufferStateAfterWrite);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -821,6 +824,51 @@ public:
         }
     }
 
+    void testExtremePixelValues()
+    {
+        m_pixmap.clear(0);
+        PixelWriter writer(false, 8, m_pixmap, 0, 0);
+        // Write max value
+        CPPUNIT_ASSERT_NO_THROW(writer.setPixels(255, 1));
+        CPPUNIT_ASSERT_EQUAL(255, static_cast<int>(m_pixmap.getLine(0)[0]));
+        // Write min value
+        CPPUNIT_ASSERT_NO_THROW(writer.setPixels(0, 1));
+        CPPUNIT_ASSERT_EQUAL(0, static_cast<int>(m_pixmap.getLine(0)[1]));
+    }
+
+    void testOutOfBoundsWrites()
+    {
+        m_pixmap.clear(0xAA);
+        // Writer starts out of bounds
+        PixelWriter writer1(false, 8, m_pixmap, WIDTH + 1, HEIGHT + 1);
+        writer1.setPixels(0x55, 10);
+        // Buffer should remain unchanged
+        for (auto y = 0; y < HEIGHT; ++y)
+            for (auto x = 0; x < WIDTH; ++x)
+                CPPUNIT_ASSERT_EQUAL(0xAA, static_cast<int>(m_pixmap.getLine(y)[x]));
+
+        // Writer writes past right boundary
+        PixelWriter writer2(false, 8, m_pixmap, WIDTH - 2, 0);
+        m_pixmap.clear(0);
+        writer2.setPixels(0x99, 10);
+        CPPUNIT_ASSERT_EQUAL(0x99, static_cast<int>(m_pixmap.getLine(0)[WIDTH - 2]));
+        CPPUNIT_ASSERT_EQUAL(0x99, static_cast<int>(m_pixmap.getLine(0)[WIDTH - 1]));
+        // No overflow
+        CPPUNIT_ASSERT_EQUAL(0, static_cast<int>(m_pixmap.getLine(1)[0]));
+    }
+
+    void testBufferStateAfterWrite()
+    {
+        m_pixmap.clear(0);
+        PixelWriter writer(false, 4, m_pixmap, 5, 5);
+        writer.setPixels(7, 3);
+        for (int i = 0; i < 3; ++i)
+            CPPUNIT_ASSERT_EQUAL(7, static_cast<int>(m_pixmap.getLine(5)[5 + i]));
+        // Other pixels unchanged
+        for (int x = 0; x < WIDTH; ++x)
+            if (x < 5 || x > 7)
+                CPPUNIT_ASSERT_EQUAL(0, static_cast<int>(m_pixmap.getLine(5)[x]));
+    }
 private:
     static const std::int32_t WIDTH = 100;
     static const std::int32_t HEIGHT = 50;

@@ -307,7 +307,7 @@ class GfxTtxGridTest : public CppUnit::TestFixture
     CPPUNIT_TEST_SUITE(GfxTtxGridTest);
     CPPUNIT_TEST(testDraw_NoModeSettings_DoesNotDraw);
     CPPUNIT_TEST(testAddModeSettings_ZeroRows_DoesNotDraw);
-    CPPUNIT_TEST(testDraw_WithOneRowMode_DrawsExactlyWidthCellsOnce);
+    CPPUNIT_TEST(testDraw_WithOneRowMode_DrawsEnabledCellsOnly);
     CPPUNIT_TEST(testDraw_SecondCallWithoutChanges_DoesNotRedraw);
     CPPUNIT_TEST(testClearModeSettings_PreventsDrawingWhenCellsDirty);
     CPPUNIT_TEST(testDraw_BgAlphaZero_AffectsFillColorForEnabledCell);
@@ -348,12 +348,11 @@ protected:
         CPPUNIT_ASSERT_EQUAL(0, ctx.fillRectangleCalled);
     }
 
-    void testDraw_WithOneRowMode_DrawsExactlyWidthCellsOnce()
+    void testDraw_WithOneRowMode_DrawsEnabledCellsOnly()
     {
-        // By default cells are hidden; use a public model API to make a known
-        // subset of cells visible without needing a real decoder page.
-        const int width = 40;
-        GfxTtxGridModel model(Size(width, 25));
+        // Use a public model API to enable a known subset of row 0 cells
+        // without depending on decoder page content.
+        GfxTtxGridModel model(Size(40, 25));
         model.clearAll(false);
         model.refreshSelection(true, 0); // enables 4 cells in row 0
         GfxTtxClut clut;

@@ -327,7 +327,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(20), color.m_r);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(30), color.m_g);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(40), color.m_b);
-        CPPUNIT_ASSERT_MESSAGE("ARGB order should be maintained", true);
     }
 
     void testConstructorConsistency()
@@ -356,8 +355,8 @@ public:
     void testTransparentAccessible()
     {
         // Should be accessible as ColorArgb::TRANSPARENT
-        CPPUNIT_ASSERT_MESSAGE("TRANSPARENT constant should be accessible", true);
         const ColorArgb& color = ColorArgb::TRANSPARENT;
+        CPPUNIT_ASSERT(color == ColorArgb::TRANSPARENT);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0x00), color.m_a);
     }
 
@@ -375,8 +374,8 @@ public:
     void testWhiteAccessible()
     {
         // Should be accessible as ColorArgb::WHITE
-        CPPUNIT_ASSERT_MESSAGE("WHITE constant should be accessible", true);
         const ColorArgb& color = ColorArgb::WHITE;
+        CPPUNIT_ASSERT(color == ColorArgb::WHITE);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), color.m_a);
     }
 
@@ -643,8 +642,7 @@ public:
         const ColorArgb& red = ColorArgb::RED;
         const ColorArgb& green = ColorArgb::GREEN;
         const ColorArgb& blue = ColorArgb::BLUE;
-
-        CPPUNIT_ASSERT_MESSAGE("Constants should be accessible as const", true);
+        // Ensure constants have expected component values
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), red.m_r);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0x80), green.m_g);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), blue.m_b);
@@ -653,7 +651,6 @@ public:
     void testConstantsInitializedAtStart()
     {
         // Constants should be accessible immediately
-        CPPUNIT_ASSERT_MESSAGE("Constants should be initialized at program start", true);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::RED.m_r);
     }
 

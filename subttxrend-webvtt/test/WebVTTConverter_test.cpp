@@ -110,6 +110,16 @@ public:
         return (int)(((((float)pixels)*10000.0f*9.0f) / (1080.0f*8.0f)) + 0.5f);
     }
 
+    int applyDisplayPadding(int dimension, int paddingHundredths)
+    {
+        return (int)((((float)dimension) * (100.0f - (((float)paddingHundredths) / 100.0f) * 2.0f)) / 100.0f);
+    }
+
+    int hundredthsOfViewportToPixels(int hundredths, int dimension)
+    {
+        return (int)((((float)dimension) / 100.0f) * (((float)hundredths) / 100.0f));
+    }
+
     void testConverter()
     {
 
@@ -217,9 +227,8 @@ public:
         CPPUNIT_ASSERT_EQUAL(constants::kLineHeight[static_cast<uint32_t>(WebVTTAttributes::FontSize::MEDIUM)], converter.lineHeightVh());
         CPPUNIT_ASSERT_EQUAL((int)((float)converter.height() / 100.0f * (constants::kFontHeight[static_cast<uint32_t>(WebVTTAttributes::FontSize::MEDIUM)] / 100.0f)),
             converter.fontSizePixels());
-
-        CPPUNIT_ASSERT(converter.width() > 0);
-        CPPUNIT_ASSERT(converter.height() > 0);
+        CPPUNIT_ASSERT_EQUAL(applyDisplayPadding(1280, config.screenPadding), converter.width());
+        CPPUNIT_ASSERT_EQUAL(applyDisplayPadding(720, config.screenPadding), converter.height());
     }
 
     void testSetDimensions() {
@@ -237,18 +246,16 @@ public:
 
     void testScreenPaddingPixels() {
         Converter converter(1920, 1080);
-        int padW = converter.screenPaddingWidthPixels();
-        int padH = converter.screenPaddingHeightPixels();
-        CPPUNIT_ASSERT(padW > 0);
-        CPPUNIT_ASSERT(padH > 0);
+        CPPUNIT_ASSERT_EQUAL(hundredthsOfViewportToPixels(constants::kScreenPaddingVmH, converter.width()), converter.screenPaddingWidthPixels());
+        CPPUNIT_ASSERT_EQUAL(hundredthsOfViewportToPixels(constants::kScreenPaddingVmH, converter.height()), converter.screenPaddingHeightPixels());
     }
 
     void testVwVhToPixelsEdgeCases() {
         Converter converter(1920, 1080);
         CPPUNIT_ASSERT_EQUAL(0, converter.vwToWidthPixels(0));
         CPPUNIT_ASSERT_EQUAL(0, converter.vhToHeightPixels(0));
-        CPPUNIT_ASSERT(converter.vwToWidthPixels(10000) <= converter.width());
-        CPPUNIT_ASSERT(converter.vhToHeightPixels(10000) <= converter.height());
+        CPPUNIT_ASSERT_EQUAL(converter.width(), converter.vwToWidthPixels(10000));
+        CPPUNIT_ASSERT_EQUAL(converter.height(), converter.vhToHeightPixels(10000));
     }
 
     void testHorizontalVerticalPadding() {
@@ -257,8 +264,8 @@ public:
         config.verticalPaddingEm = 5.0f;
         WebVTTAttributes attributes;
         Converter converter(1920, 1080, config, attributes);
-        CPPUNIT_ASSERT(converter.horizontalPadding() >= 0);
-        CPPUNIT_ASSERT(converter.verticalPadding() >= 0);
+        CPPUNIT_ASSERT_EQUAL(hundredthsOfViewportToPixels(constants::kDefaultFontHeight, converter.height()), converter.horizontalPadding());
+        CPPUNIT_ASSERT_EQUAL(hundredthsOfViewportToPixels(constants::kDefaultFontHeight / 2, converter.height()), converter.verticalPadding());
     }
 
     void testGetXForTextBoxAllAlignments() {
@@ -278,13 +285,15 @@ public:
         attributes.setInteger(WebVTTAttributes::AttributeType::FONT_SIZE, static_cast<uint32_t>(WebVTTAttributes::FontSize::SMALL));
         Converter converter(1920, 1080);
         converter.setAttributes(attributes);
-        int origFontSize = converter.fontSizePixels();
+        CPPUNIT_ASSERT_EQUAL(hundredthsOfViewportToPixels(constants::kFontHeight[static_cast<uint32_t>(WebVTTAttributes::FontSize::SMALL)], converter.height()),
+            converter.fontSizePixels());
         converter.SetDimensions(1280, 720);
-        int newFontSize = converter.fontSizePixels();
-        CPPUNIT_ASSERT(origFontSize != newFontSize);
+        CPPUNIT_ASSERT_EQUAL(hundredthsOfViewportToPixels(constants::kFontHeight[static_cast<uint32_t>(WebVTTAttributes::FontSize::SMALL)], 720),
+            converter.fontSizePixels());
         attributes.setInteger(WebVTTAttributes::AttributeType::FONT_SIZE, static_cast<uint32_t>(WebVTTAttributes::FontSize::LARGE));
         converter.setAttributes(attributes);
-        CPPUNIT_ASSERT(converter.fontSizePixels() != newFontSize);
+        CPPUNIT_ASSERT_EQUAL(hundredthsOfViewportToPixels(constants::kFontHeight[static_cast<uint32_t>(WebVTTAttributes::FontSize::LARGE)], 720),
+            converter.fontSizePixels());
     }
 
     void testZeroNegativeDimensions() {
@@ -292,8 +301,8 @@ public:
         CPPUNIT_ASSERT_EQUAL(0, converter.width());
         CPPUNIT_ASSERT_EQUAL(0, converter.height());
         converter.SetDimensions(-100, -100);
-        CPPUNIT_ASSERT(converter.width() <= 0);
-        CPPUNIT_ASSERT(converter.height() <= 0);
+        CPPUNIT_ASSERT_EQUAL(-100, converter.width());
+        CPPUNIT_ASSERT_EQUAL(-100, converter.height());
     }
 };
 

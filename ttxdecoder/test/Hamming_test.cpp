@@ -18,62 +18,138 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <array>
+#include <cstddef>
 #include <cstdint>
-#include <limits>
 
 #include "Hamming.hpp"
+
+namespace
+{
+
+std::uint8_t reverseBits(std::uint8_t value)
+{
+    std::uint8_t reversed = 0;
+
+    for (int bitIndex = 0; bitIndex < 8; ++bitIndex)
+    {
+        reversed = static_cast<std::uint8_t>(reversed << 1);
+        reversed = static_cast<std::uint8_t>(reversed | (value & 0x01));
+        value = static_cast<std::uint8_t>(value >> 1);
+    }
+
+    return reversed;
+}
+
+bool hasOddParity(std::uint8_t value)
+{
+    std::uint8_t bitCount = 0;
+
+    while (value != 0)
+    {
+        bitCount = static_cast<std::uint8_t>(bitCount + (value & 0x01));
+        value = static_cast<std::uint8_t>(value >> 1);
+    }
+
+    return (bitCount % 2) == 1;
+}
+
+std::uint8_t encode84(std::uint8_t nibble)
+{
+    static const std::uint8_t hammingEncode[16] = {
+        0x28, 0x00, 0x12, 0x3A, 0x06, 0x4E, 0x0C, 0x74,
+        0x03, 0x63, 0x11, 0x59, 0x05, 0x2D, 0x3F, 0x17
+    };
+
+    return hammingEncode[nibble & 0x0F];
+}
+
+std::uint8_t encodeParityProtectedByte(std::uint8_t payload)
+{
+    std::uint8_t dataByte = static_cast<std::uint8_t>(payload & 0x7F);
+
+    if (!hasOddParity(dataByte))
+    {
+        dataByte = static_cast<std::uint8_t>(dataByte | 0x80);
+    }
+
+    return reverseBits(dataByte);
+}
+
+std::uint8_t encodeParityProtectedByteWithInvalidParity(std::uint8_t payload)
+{
+    std::uint8_t dataByte = static_cast<std::uint8_t>(payload & 0x7F);
+
+    if (!hasOddParity(dataByte))
+    {
+        dataByte = static_cast<std::uint8_t>(dataByte | 0x80);
+    }
+    else
+    {
+        dataByte = static_cast<std::uint8_t>(dataByte & 0x7F);
+    }
+
+    dataByte = static_cast<std::uint8_t>(dataByte ^ 0x80);
+
+    return reverseBits(dataByte);
+}
+
+std::array<std::uint8_t, 3> encode2418(std::uint32_t value)
+{
+    auto dataBit = [value](int bitNumber) -> std::uint8_t
+    {
+        return static_cast<std::uint8_t>((value >> (bitNumber - 1)) & 0x01);
+    };
+
+    const std::uint8_t p1 = static_cast<std::uint8_t>(1 ^ dataBit(1) ^ dataBit(2) ^ dataBit(4)
+        ^ dataBit(5) ^ dataBit(7) ^ dataBit(9) ^ dataBit(11) ^ dataBit(12)
+        ^ dataBit(14) ^ dataBit(16) ^ dataBit(18));
+    const std::uint8_t p2 = static_cast<std::uint8_t>(1 ^ dataBit(1) ^ dataBit(3) ^ dataBit(4)
+        ^ dataBit(6) ^ dataBit(7) ^ dataBit(10) ^ dataBit(11) ^ dataBit(13)
+        ^ dataBit(14) ^ dataBit(17) ^ dataBit(18));
+    const std::uint8_t p3 = static_cast<std::uint8_t>(1 ^ dataBit(2) ^ dataBit(3) ^ dataBit(4)
+        ^ dataBit(8) ^ dataBit(9) ^ dataBit(10) ^ dataBit(11) ^ dataBit(15)
+        ^ dataBit(16) ^ dataBit(17) ^ dataBit(18));
+    const std::uint8_t p4 = static_cast<std::uint8_t>(1 ^ dataBit(5) ^ dataBit(6) ^ dataBit(7)
+        ^ dataBit(8) ^ dataBit(9) ^ dataBit(10) ^ dataBit(11));
+    const std::uint8_t p5 = static_cast<std::uint8_t>(1 ^ dataBit(12) ^ dataBit(13) ^ dataBit(14)
+        ^ dataBit(15) ^ dataBit(16) ^ dataBit(17) ^ dataBit(18));
+    const std::uint8_t p6 = static_cast<std::uint8_t>(1 ^ p1 ^ p2 ^ dataBit(1) ^ p3 ^ dataBit(2)
+        ^ dataBit(3) ^ dataBit(4) ^ p4 ^ dataBit(5) ^ dataBit(6) ^ dataBit(7)
+        ^ dataBit(8) ^ dataBit(9) ^ dataBit(10) ^ dataBit(11) ^ p5 ^ dataBit(12)
+        ^ dataBit(13) ^ dataBit(14) ^ dataBit(15) ^ dataBit(16) ^ dataBit(17)
+        ^ dataBit(18));
+
+    const std::uint8_t logicalByte1 = static_cast<std::uint8_t>((p1 << 0) | (p2 << 1)
+        | (dataBit(1) << 2) | (p3 << 3) | (dataBit(2) << 4) | (dataBit(3) << 5)
+        | (dataBit(4) << 6) | (p4 << 7));
+    const std::uint8_t logicalByte2 = static_cast<std::uint8_t>((dataBit(5) << 0)
+        | (dataBit(6) << 1) | (dataBit(7) << 2) | (dataBit(8) << 3)
+        | (dataBit(9) << 4) | (dataBit(10) << 5) | (dataBit(11) << 6)
+        | (p5 << 7));
+    const std::uint8_t logicalByte3 = static_cast<std::uint8_t>((dataBit(12) << 0)
+        | (dataBit(13) << 1) | (dataBit(14) << 2) | (dataBit(15) << 3)
+        | (dataBit(16) << 4) | (dataBit(17) << 5) | (dataBit(18) << 6)
+        | (p6 << 7));
+
+    return {reverseBits(logicalByte1), reverseBits(logicalByte2), reverseBits(logicalByte3)};
+}
+
+} // namespace
 
 class HammingTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( HammingTest );
-    CPPUNIT_TEST( test_decode2418_all_bytes_zero );
-    CPPUNIT_TEST( test_decode2418_all_bytes_max );
-    CPPUNIT_TEST( test_decode2418_alternating_pattern );
-    CPPUNIT_TEST( test_decode2418_returns_int32 );
-    CPPUNIT_TEST( test_decode2418_known_value_1 );
-    CPPUNIT_TEST( test_decode2418_known_value_2 );
-    CPPUNIT_TEST( test_decode2418_known_value_3 );
-    CPPUNIT_TEST( test_decode2418_known_value_4 );
-    CPPUNIT_TEST( test_decode2418_byte_flip_consistency );
-    CPPUNIT_TEST( test_decode2418_varied_byte_combinations );
-    CPPUNIT_TEST( test_decode84_byte_zero );
-    CPPUNIT_TEST( test_decode84_byte_max );
-    CPPUNIT_TEST( test_decode84_low_nibble );
-    CPPUNIT_TEST( test_decode84_high_nibble );
-    CPPUNIT_TEST( test_decode84_valid_encoded_data_1 );
-    CPPUNIT_TEST( test_decode84_valid_encoded_data_2 );
-    CPPUNIT_TEST( test_decode84_valid_encoded_data_3 );
-    CPPUNIT_TEST( test_decode84_returns_valid_range );
-    CPPUNIT_TEST( test_decode84_exhaustive_sample );
-    CPPUNIT_TEST( test_decode84_error_markers );
-    CPPUNIT_TEST( test_decodeParity_byte_zero );
-    CPPUNIT_TEST( test_decodeParity_byte_max );
-    CPPUNIT_TEST( test_decodeParity_alternating_bits );
-    CPPUNIT_TEST( test_decodeParity_valid_parity_1 );
-    CPPUNIT_TEST( test_decodeParity_valid_parity_2 );
-    CPPUNIT_TEST( test_decodeParity_invalid_parity );
-    CPPUNIT_TEST( test_decodeParity_parity_bit_mask );
-    CPPUNIT_TEST( test_decodeParity_return_value_range );
-    CPPUNIT_TEST( test_decodeParity_known_patterns );
-    CPPUNIT_TEST( test_decodeParity_data_preservation );
-    CPPUNIT_TEST( test_decode2418_mid_range_values );
-    CPPUNIT_TEST( test_decode2418_sequential_bytes );
-    CPPUNIT_TEST( test_decode2418_bit_pattern_walk );
-    CPPUNIT_TEST( test_decode2418_complementary_values );
-    CPPUNIT_TEST( test_decode84_mid_range_values );
-    CPPUNIT_TEST( test_decode84_all_single_bits );
-    CPPUNIT_TEST( test_decode84_deterministic_behavior );
-    CPPUNIT_TEST( test_decode84_comprehensive_sample );
-    CPPUNIT_TEST( test_decodeParity_bit_walk );
-    CPPUNIT_TEST( test_decodeParity_even_parity_patterns );
-    CPPUNIT_TEST( test_decodeParity_odd_parity_patterns );
-    CPPUNIT_TEST( test_decodeParity_consistency_across_calls );
-    CPPUNIT_TEST( test_decode2418_state_isolation );
-    CPPUNIT_TEST( test_decode84_state_isolation );
-    CPPUNIT_TEST( test_decodeParity_state_isolation );
-    CPPUNIT_TEST( test_decode2418_no_side_effects );
-    CPPUNIT_TEST( test_decode84_no_side_effects );
-    CPPUNIT_TEST( test_decodeParity_no_side_effects );
+    CPPUNIT_TEST( test_decode2418_round_trips_known_values );
+    CPPUNIT_TEST( test_decode2418_corrects_single_bit_errors );
+    CPPUNIT_TEST( test_decode2418_rejects_double_bit_errors );
+    CPPUNIT_TEST( test_decode84_decodes_canonical_codewords );
+    CPPUNIT_TEST( test_decode84_corrects_single_bit_errors );
+    CPPUNIT_TEST( test_decode84_rejects_known_invalid_codewords );
+    CPPUNIT_TEST( test_decodeParity_round_trips_full_payload_range );
+    CPPUNIT_TEST( test_decodeParity_rejects_invalid_parity );
+    CPPUNIT_TEST( test_decodeParity_masks_parity_bit );
+    CPPUNIT_TEST( test_decoders_are_stateless );
 
 CPPUNIT_TEST_SUITE_END();
 
@@ -81,547 +157,115 @@ private:
     ttxdecoder::Hamming m_hamming;
 
 public:
-    void setUp() override
+    void test_decode2418_round_trips_known_values()
     {
-        /* Initialize Hamming decoder instance */
-    }
+        const std::uint32_t values[] = {0x00000, 0x00001, 0x12345, 0x2AAAA, 0x3FFFF};
 
-    void tearDown() override
-    {
-        /* Clean up resources */
-    }
-
-    void test_decode2418_all_bytes_zero()
-    {
-        /* Test boundary condition: all zero bytes */
-        std::int32_t result = m_hamming.decode2418(0x00, 0x00, 0x00);
-        /* Verify result is either valid data (>=0) or error (-1) */
-        CPPUNIT_ASSERT(result >= -1);
-    }
-
-    void test_decode2418_all_bytes_max()
-    {
-        /* Test boundary condition: all maximum value bytes */
-        std::int32_t result = m_hamming.decode2418(0xFF, 0xFF, 0xFF);
-        /* Verify result is either valid data (>=0) or error (-1) */
-        CPPUNIT_ASSERT(result >= -1);
-    }
-
-    void test_decode2418_alternating_pattern()
-    {
-        /* Test pattern stress: alternating bit pattern */
-        std::int32_t result1 = m_hamming.decode2418(0xAA, 0x55, 0xAA);
-        CPPUNIT_ASSERT(result1 >= -1);
-
-        /* Reverse alternating pattern */
-        std::int32_t result2 = m_hamming.decode2418(0x55, 0xAA, 0x55);
-        CPPUNIT_ASSERT(result2 >= -1);
-    }
-
-    void test_decode2418_returns_int32()
-    {
-        /* Verify return type produces valid values */
-        std::int32_t result = m_hamming.decode2418(0x12, 0x34, 0x56);
-        /* Check that result is either valid data (>=0) or error (-1) */
-        CPPUNIT_ASSERT(result >= -1);
-    }
-
-    void test_decode2418_known_value_1()
-    {
-        /* Test with specific byte pattern - verifies decoder works */
-        std::int32_t result = m_hamming.decode2418(0x11, 0x11, 0x11);
-        /* Should return valid result */
-        CPPUNIT_ASSERT(result >= -1);
-    }
-
-    void test_decode2418_known_value_2()
-    {
-        /* Test with different known encoded values */
-        std::int32_t result = m_hamming.decode2418(0x01, 0x00, 0x00);
-        /* Should produce consistent result */
-        CPPUNIT_ASSERT(result >= -1);
-    }
-
-    void test_decode2418_known_value_3()
-    {
-        /* Test mixed byte values */
-        std::int32_t result = m_hamming.decode2418(0xFF, 0x00, 0xFF);
-        CPPUNIT_ASSERT(result >= -1);
-    }
-
-    void test_decode2418_known_value_4()
-    {
-        /* Test with different byte pattern */
-        std::int32_t result = m_hamming.decode2418(0xAB, 0xCD, 0xEF);
-        CPPUNIT_ASSERT(result >= -1);
-    }
-
-    void test_decode2418_byte_flip_consistency()
-    {
-        /* Verify that same input always produces same output */
-        std::int32_t result1 = m_hamming.decode2418(0x0F, 0xF0, 0xCC);
-        std::int32_t result2 = m_hamming.decode2418(0x0F, 0xF0, 0xCC);
-        CPPUNIT_ASSERT_EQUAL(result1, result2);
-    }
-
-    void test_decode2418_varied_byte_combinations()
-    {
-        /* Test multiple combinations don't crash and return valid values */
-        std::int32_t results[5];
-        results[0] = m_hamming.decode2418(0x11, 0x22, 0x33);
-        results[1] = m_hamming.decode2418(0x44, 0x55, 0x66);
-        results[2] = m_hamming.decode2418(0x77, 0x88, 0x99);
-        results[3] = m_hamming.decode2418(0xBB, 0xCC, 0xDD);
-        results[4] = m_hamming.decode2418(0xEE, 0xFF, 0x00);
-
-        /* All should be valid values */
-        for (int i = 0; i < 5; ++i)
+        for (std::uint32_t value : values)
         {
-            CPPUNIT_ASSERT(results[i] >= -1);
+            const std::array<std::uint8_t, 3> encoded = encode2418(value);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(value),
+                m_hamming.decode2418(encoded[0], encoded[1], encoded[2]));
         }
     }
 
-    void test_decode84_byte_zero()
+    void test_decode2418_corrects_single_bit_errors()
     {
-        /* Test boundary: minimum byte value */
-        std::int8_t result = m_hamming.decode84(0x00);
-        /* Result should be 0-15 (valid decoded data) or -1 (error) */
-        CPPUNIT_ASSERT(result >= -1 && result <= 15);
-    }
+        const std::uint32_t value = 0x12345;
+        const std::array<std::uint8_t, 3> encoded = encode2418(value);
 
-    void test_decode84_byte_max()
-    {
-        /* Test boundary: maximum byte value */
-        std::int8_t result = m_hamming.decode84(0xFF);
-        /* Result should be 0-15 (valid decoded data) or -1 (error) */
-        CPPUNIT_ASSERT(result >= -1 && result <= 15);
-    }
-
-    void test_decode84_low_nibble()
-    {
-        /* Test lower nibble variations */
-        for (std::uint8_t i = 0; i < 16; ++i)
+        for (std::size_t byteIndex = 0; byteIndex < encoded.size(); ++byteIndex)
         {
-            std::int8_t result = m_hamming.decode84(i);
-            CPPUNIT_ASSERT(result >= -1 && result <= 15);
-        }
-    }
-
-    void test_decode84_high_nibble()
-    {
-        /* Test upper nibble variations */
-        for (int i = 0xF0; i <= 0xFF; ++i)
-        {
-            std::int8_t result = m_hamming.decode84(static_cast<std::uint8_t>(i));
-            CPPUNIT_ASSERT(result >= -1 && result <= 15);
-        }
-    }
-
-    void test_decode84_valid_encoded_data_1()
-    {
-        /* Test known valid Hamming 8/4 encoded values */
-        std::int8_t result = m_hamming.decode84(0x38);
-        /* Should return valid decoded 4-bit value (0-15) or -1 (error) */
-        CPPUNIT_ASSERT(result >= -1 && result <= 15);
-    }
-
-    void test_decode84_valid_encoded_data_2()
-    {
-        /* Test another valid encoded value */
-        std::int8_t result = m_hamming.decode84(0x5A);
-        CPPUNIT_ASSERT(result >= -1 && result <= 15);
-    }
-
-    void test_decode84_valid_encoded_data_3()
-    {
-        /* Test third valid encoded value */
-        std::int8_t result = m_hamming.decode84(0x2D);
-        CPPUNIT_ASSERT(result >= -1 && result <= 15);
-    }
-
-    void test_decode84_returns_valid_range()
-    {
-        /* Verify all 256 possible inputs return values in expected range */
-        bool allValid = true;
-        for (int i = 0; i <= 255; ++i)
-        {
-            std::int8_t result = m_hamming.decode84(static_cast<std::uint8_t>(i));
-            /* Result should be 0-15 (valid decoded data) or -1 (error) */
-            if (!(result >= -1 && result <= 15))
+            for (std::uint8_t bitMask = 0x01; bitMask != 0; bitMask = static_cast<std::uint8_t>(bitMask << 1))
             {
-                allValid = false;
-                break;
+                std::array<std::uint8_t, 3> corrupted = encoded;
+                corrupted[byteIndex] = static_cast<std::uint8_t>(corrupted[byteIndex] ^ bitMask);
+
+                CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(value),
+                    m_hamming.decode2418(corrupted[0], corrupted[1], corrupted[2]));
             }
         }
-        CPPUNIT_ASSERT(allValid);
     }
 
-    void test_decode84_exhaustive_sample()
+    void test_decode2418_rejects_double_bit_errors()
     {
-        /* Test sample of all 256 byte values for consistency */
-        std::int8_t samples[10];
-        std::uint8_t testBytes[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0xFF};
+        const std::uint32_t value = 0x2AAAA;
+        std::array<std::uint8_t, 3> corrupted = encode2418(value);
 
-        for (int i = 0; i < 10; ++i)
+        corrupted[0] = static_cast<std::uint8_t>(corrupted[0] ^ 0x01);
+        corrupted[1] = static_cast<std::uint8_t>(corrupted[1] ^ 0x01);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1),
+            m_hamming.decode2418(corrupted[0], corrupted[1], corrupted[2]));
+
+        corrupted = encode2418(value);
+        corrupted[2] = static_cast<std::uint8_t>(corrupted[2] ^ 0x03);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1),
+            m_hamming.decode2418(corrupted[0], corrupted[1], corrupted[2]));
+    }
+
+    void test_decode84_decodes_canonical_codewords()
+    {
+        for (std::uint8_t nibble = 0; nibble < 16; ++nibble)
         {
-            samples[i] = m_hamming.decode84(testBytes[i]);
-            CPPUNIT_ASSERT(samples[i] >= -1 && samples[i] <= 15);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(nibble), m_hamming.decode84(encode84(nibble)));
         }
     }
 
-    void test_decode84_error_markers()
+    void test_decode84_corrects_single_bit_errors()
     {
-        /* Verify that error condition (0xFF -> -1 in int8_t) is handled */
-        std::int8_t result = m_hamming.decode84(0x01);
-        /* This should be an error marker from lookup table */
-        CPPUNIT_ASSERT(result >= -1);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x08), m_hamming.decode84(0x03));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x0C), m_hamming.decode84(0x05));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x04), m_hamming.decode84(0x06));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x0E), m_hamming.decode84(0xFF));
     }
 
-    void test_decodeParity_byte_zero()
+    void test_decode84_rejects_known_invalid_codewords()
     {
-        /* Test boundary: minimum byte value with parity */
-        std::int8_t result = m_hamming.decodeParity(0x00);
-        /* Should return either valid data (0-127) or -1 (parity error) */
-        CPPUNIT_ASSERT(result >= -1 && result <= 127);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(-1), m_hamming.decode84(0x01));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(-1), m_hamming.decode84(0x02));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(-1), m_hamming.decode84(0x04));
     }
 
-    void test_decodeParity_byte_max()
+    void test_decodeParity_round_trips_full_payload_range()
     {
-        /* Test boundary: maximum byte value with parity */
-        std::int8_t result = m_hamming.decodeParity(0xFF);
-        CPPUNIT_ASSERT(result >= -1 && result <= 127);
-    }
-
-    void test_decodeParity_alternating_bits()
-    {
-        /* Test alternating bit patterns */
-        std::int8_t result1 = m_hamming.decodeParity(0xAA);
-        std::int8_t result2 = m_hamming.decodeParity(0x55);
-
-        /* Both should return valid results */
-        CPPUNIT_ASSERT(result1 >= -1 && result1 <= 127);
-        CPPUNIT_ASSERT(result2 >= -1 && result2 <= 127);
-    }
-
-    void test_decodeParity_valid_parity_1()
-    {
-        /* Test byte with valid odd parity */
-        std::int8_t result = m_hamming.decodeParity(0x80);
-        /* Single bit set (0x80) has odd parity */
-        CPPUNIT_ASSERT(result >= -1 && result <= 127);
-    }
-
-    void test_decodeParity_valid_parity_2()
-    {
-        /* Test another valid parity case */
-        std::int8_t result = m_hamming.decodeParity(0x01);
-        CPPUNIT_ASSERT(result >= -1 && result <= 127);
-    }
-
-    void test_decodeParity_invalid_parity()
-    {
-        /* Test byte with even parity (should fail parity check) */
-        std::int8_t result = m_hamming.decodeParity(0x03);
-        /* 0x03 has even parity (2 bits set), should likely return -1 */
-        CPPUNIT_ASSERT(result >= -1 && result <= 127);
-    }
-
-    void test_decodeParity_parity_bit_mask()
-    {
-        /* Verify parity bit (bit 7) is masked in returned value */
-        std::int8_t result = m_hamming.decodeParity(0x7F);
-        /* If parity passes, result should be <= 127 (bit 7 masked off) */
-        if (result >= 0)
+        for (std::uint16_t payload = 0; payload <= 0x7F; ++payload)
         {
-            CPPUNIT_ASSERT(result <= 127);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(payload),
+                m_hamming.decodeParity(encodeParityProtectedByte(static_cast<std::uint8_t>(payload))));
         }
     }
 
-    void test_decodeParity_return_value_range()
+    void test_decodeParity_rejects_invalid_parity()
     {
-        /* Test all 256 possible inputs return values in valid range */
-        bool allValid = true;
-        for (int i = 0; i <= 255; ++i)
-        {
-            std::int8_t result = m_hamming.decodeParity(static_cast<std::uint8_t>(i));
-            /* Result should be 0-127 (7-bit data) or -1 (error) */
-            if (!(result >= -1 && result <= 127))
-            {
-                allValid = false;
-                break;
-            }
-        }
-        CPPUNIT_ASSERT(allValid);
-    }
+        const std::uint8_t payloads[] = {0x00, 0x01, 0x2A, 0x55, 0x7F};
 
-    void test_decodeParity_known_patterns()
-    {
-        /* Test known specific patterns */
-        std::uint8_t patterns[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
-
-        for (int i = 0; i < 8; ++i)
+        for (std::uint8_t payload : payloads)
         {
-            std::int8_t result = m_hamming.decodeParity(patterns[i]);
-            CPPUNIT_ASSERT(result >= -1 && result <= 127);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(-1),
+                m_hamming.decodeParity(encodeParityProtectedByteWithInvalidParity(payload)));
         }
     }
 
-    void test_decodeParity_data_preservation()
+    void test_decodeParity_masks_parity_bit()
     {
-        /* Verify same input produces same output (deterministic) */
-        std::int8_t result1 = m_hamming.decodeParity(0x3C);
-        std::int8_t result2 = m_hamming.decodeParity(0x3C);
-        CPPUNIT_ASSERT_EQUAL(result1, result2);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x00), m_hamming.decodeParity(encodeParityProtectedByte(0x00)));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x55), m_hamming.decodeParity(encodeParityProtectedByte(0x55)));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x7F), m_hamming.decodeParity(encodeParityProtectedByte(0x7F)));
     }
 
-    void test_decode2418_mid_range_values()
+    void test_decoders_are_stateless()
     {
-        /* Test with middle-range byte values */
-        std::int32_t result1 = m_hamming.decode2418(0x7F, 0x80, 0x40);
-        std::int32_t result2 = m_hamming.decode2418(0x40, 0x7F, 0x80);
-        std::int32_t result3 = m_hamming.decode2418(0x80, 0x40, 0x7F);
+        const std::array<std::uint8_t, 3> encoded2418 = encode2418(0x12345);
+        const std::int32_t first2418 = m_hamming.decode2418(encoded2418[0], encoded2418[1], encoded2418[2]);
 
-        /* All should return valid values */
-        CPPUNIT_ASSERT(result1 >= -1);
-        CPPUNIT_ASSERT(result2 >= -1);
-        CPPUNIT_ASSERT(result3 >= -1);
-    }
+        m_hamming.decode84(encode84(0x09));
+        m_hamming.decodeParity(encodeParityProtectedByte(0x35));
 
-    void test_decode2418_sequential_bytes()
-    {
-        /* Test sequential increment patterns */
-        std::int32_t result1 = m_hamming.decode2418(0x00, 0x01, 0x02);
-        std::int32_t result2 = m_hamming.decode2418(0x10, 0x11, 0x12);
-        std::int32_t result3 = m_hamming.decode2418(0xF0, 0xF1, 0xF2);
-
-        /* All should return valid values */
-        CPPUNIT_ASSERT(result1 >= -1);
-        CPPUNIT_ASSERT(result2 >= -1);
-        CPPUNIT_ASSERT(result3 >= -1);
-    }
-
-    void test_decode2418_bit_pattern_walk()
-    {
-        /* Test single-bit walking pattern (0x01, 0x02, 0x04, 0x08, etc.) */
-        std::int32_t results[8];
-        for (int i = 0; i < 8; ++i)
-        {
-            std::uint8_t bit_pattern = 1 << i;
-            results[i] = m_hamming.decode2418(bit_pattern, bit_pattern, bit_pattern);
-            CPPUNIT_ASSERT(results[i] >= -1);
-        }
-
-        /* Results should vary across bit positions */
-        bool hasVariation = false;
-        for (int i = 0; i < 7; ++i)
-        {
-            if (results[i] != results[i+1])
-            {
-                hasVariation = true;
-                break;
-            }
-        }
-        CPPUNIT_ASSERT(hasVariation);
-    }
-
-    void test_decode2418_complementary_values()
-    {
-        /* Test complementary bit patterns */
-        std::int32_t result_zeros = m_hamming.decode2418(0x00, 0x00, 0x00);
-        std::int32_t result_ones = m_hamming.decode2418(0xFF, 0xFF, 0xFF);
-        std::int32_t result_complement1 = m_hamming.decode2418(0xFF, 0x00, 0xFF);
-        std::int32_t result_complement2 = m_hamming.decode2418(0x00, 0xFF, 0x00);
-
-        /* All should be valid */
-        CPPUNIT_ASSERT(result_zeros >= -1);
-        CPPUNIT_ASSERT(result_ones >= -1);
-        CPPUNIT_ASSERT(result_complement1 >= -1);
-        CPPUNIT_ASSERT(result_complement2 >= -1);
-    }
-
-    void test_decode84_mid_range_values()
-    {
-        /* Test mid-range byte values (not extreme) */
-        std::int8_t result1 = m_hamming.decode84(0x40);
-        std::int8_t result2 = m_hamming.decode84(0x7F);
-        std::int8_t result3 = m_hamming.decode84(0x80);
-
-        /* All should be in valid range */
-        CPPUNIT_ASSERT(result1 >= -1 && result1 <= 15);
-        CPPUNIT_ASSERT(result2 >= -1 && result2 <= 15);
-        CPPUNIT_ASSERT(result3 >= -1 && result3 <= 15);
-    }
-
-    void test_decode84_all_single_bits()
-    {
-        /* Test single-bit patterns for all 8 bit positions */
-        std::int8_t results[8];
-        for (int i = 0; i < 8; ++i)
-        {
-            std::uint8_t single_bit = 1 << i;
-            results[i] = m_hamming.decode84(single_bit);
-            CPPUNIT_ASSERT(results[i] >= -1 && results[i] <= 15);
-        }
-    }
-
-    void test_decode84_deterministic_behavior()
-    {
-        /* Test that decode84 produces consistent results across multiple calls */
-        std::uint8_t test_values[] = {0x00, 0x55, 0xAA, 0xFF, 0x7E, 0x2A, 0x3B};
-
-        for (int i = 0; i < 7; ++i)
-        {
-            std::int8_t result1 = m_hamming.decode84(test_values[i]);
-            std::int8_t result2 = m_hamming.decode84(test_values[i]);
-            std::int8_t result3 = m_hamming.decode84(test_values[i]);
-
-            CPPUNIT_ASSERT_EQUAL(result1, result2);
-            CPPUNIT_ASSERT_EQUAL(result2, result3);
-        }
-    }
-
-    void test_decode84_comprehensive_sample()
-    {
-        /* Test power-of-2 boundary values */
-        std::uint8_t boundaries[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x7F, 0xFE};
-
-        for (int i = 0; i < 10; ++i)
-        {
-            std::int8_t result = m_hamming.decode84(boundaries[i]);
-            CPPUNIT_ASSERT(result >= -1 && result <= 15);
-        }
-    }
-
-    void test_decodeParity_bit_walk()
-    {
-        /* Test multi-bit patterns (2-3 bits set) */
-        std::uint8_t multi_bit_patterns[] = {0x03, 0x05, 0x06, 0x09, 0x0A, 0x0C, 0x07, 0x0B};
-
-        for (int i = 0; i < 8; ++i)
-        {
-            std::int8_t result = m_hamming.decodeParity(multi_bit_patterns[i]);
-            CPPUNIT_ASSERT(result >= -1 && result <= 127);
-        }
-    }
-
-    void test_decodeParity_even_parity_patterns()
-    {
-        /* Test patterns with even number of bits set (should have even parity) */
-        std::uint8_t even_patterns[] = {0x00, 0x03, 0x05, 0x06, 0x09, 0x0A, 0x0C, 0x0F};
-
-        for (int i = 0; i < 8; ++i)
-        {
-            std::int8_t result = m_hamming.decodeParity(even_patterns[i]);
-            CPPUNIT_ASSERT(result >= -1 && result <= 127);
-        }
-    }
-
-    void test_decodeParity_odd_parity_patterns()
-    {
-        /* Test patterns with odd number of bits set (should have odd parity) */
-        std::uint8_t odd_patterns[] = {0x01, 0x02, 0x04, 0x07, 0x08, 0x0B, 0x0D, 0x0E};
-
-        for (int i = 0; i < 8; ++i)
-        {
-            std::int8_t result = m_hamming.decodeParity(odd_patterns[i]);
-            CPPUNIT_ASSERT(result >= -1 && result <= 127);
-        }
-    }
-
-    void test_decodeParity_consistency_across_calls()
-    {
-        /* Test that multiple calls with same input produce identical results */
-        std::uint8_t test_bytes[] = {0x00, 0x7F, 0x80, 0xFF, 0x2A, 0x5D, 0xA3};
-
-        for (int i = 0; i < 7; ++i)
-        {
-            std::int8_t call1 = m_hamming.decodeParity(test_bytes[i]);
-            std::int8_t call2 = m_hamming.decodeParity(test_bytes[i]);
-            std::int8_t call3 = m_hamming.decodeParity(test_bytes[i]);
-            std::int8_t call4 = m_hamming.decodeParity(test_bytes[i]);
-
-            CPPUNIT_ASSERT_EQUAL(call1, call2);
-            CPPUNIT_ASSERT_EQUAL(call2, call3);
-            CPPUNIT_ASSERT_EQUAL(call3, call4);
-        }
-    }
-
-    void test_decode2418_state_isolation()
-    {
-        /* Verify that multiple decode2418 calls don't interfere with each other */
-        std::int32_t result1_first = m_hamming.decode2418(0x11, 0x22, 0x33);
-        std::int32_t result2 = m_hamming.decode2418(0xAA, 0xBB, 0xCC);
-        std::int32_t result1_second = m_hamming.decode2418(0x11, 0x22, 0x33);
-
-        /* Same input should produce same output regardless of intervening calls */
-        CPPUNIT_ASSERT_EQUAL(result1_first, result1_second);
-    }
-
-    void test_decode84_state_isolation()
-    {
-        /* Verify that multiple decode84 calls don't interfere with each other */
-        std::int8_t result1_first = m_hamming.decode84(0x42);
-        std::int8_t result2 = m_hamming.decode84(0xB7);
-        std::int8_t result3 = m_hamming.decode84(0x5C);
-        std::int8_t result1_second = m_hamming.decode84(0x42);
-
-        /* Same input should produce same output regardless of intervening calls */
-        CPPUNIT_ASSERT_EQUAL(result1_first, result1_second);
-    }
-
-    void test_decodeParity_state_isolation()
-    {
-        /* Verify that multiple decodeParity calls don't interfere with each other */
-        std::int8_t result1_first = m_hamming.decodeParity(0x5A);
-        std::int8_t result2 = m_hamming.decodeParity(0x3D);
-        std::int8_t result3 = m_hamming.decodeParity(0x7E);
-        std::int8_t result1_second = m_hamming.decodeParity(0x5A);
-
-        /* Same input should produce same output regardless of intervening calls */
-        CPPUNIT_ASSERT_EQUAL(result1_first, result1_second);
-    }
-
-    void test_decode2418_no_side_effects()
-    {
-        /* Verify decode2418 doesn't modify state across multiple method calls */
-        std::int32_t result1 = m_hamming.decode2418(0x00, 0x00, 0x00);
-        std::int32_t result2 = m_hamming.decode2418(0xFF, 0xFF, 0xFF);
-        std::int32_t result3 = m_hamming.decode2418(0x00, 0x00, 0x00);
-
-        /* Third call with same input as first should match first result */
-        CPPUNIT_ASSERT_EQUAL(result1, result3);
-
-        /* All calls should produce valid results */
-        CPPUNIT_ASSERT(result1 >= -1);
-        CPPUNIT_ASSERT(result2 >= -1);
-    }
-
-    void test_decode84_no_side_effects()
-    {
-        /* Verify decode84 doesn't modify state across multiple method calls */
-        std::int8_t result1 = m_hamming.decode84(0x7F);
-        std::int8_t result2 = m_hamming.decode84(0x00);
-        std::int8_t result3 = m_hamming.decode84(0xFF);
-        std::int8_t result4 = m_hamming.decode84(0x7F);
-
-        /* First and fourth call with same input should match */
-        CPPUNIT_ASSERT_EQUAL(result1, result4);
-    }
-
-    void test_decodeParity_no_side_effects()
-    {
-        /* Verify decodeParity doesn't modify state across multiple method calls */
-        std::int8_t result1 = m_hamming.decodeParity(0x45);
-        std::int8_t result2 = m_hamming.decodeParity(0x9A);
-        std::int8_t result3 = m_hamming.decodeParity(0x6D);
-        std::int8_t result4 = m_hamming.decodeParity(0x45);
-
-        /* First and fourth call with same input should match */
-        CPPUNIT_ASSERT_EQUAL(result1, result4);
-
-        /* All intermediate calls should also be deterministic */
-        std::int8_t result2_repeat = m_hamming.decodeParity(0x9A);
-        CPPUNIT_ASSERT_EQUAL(result2, result2_repeat);
+        CPPUNIT_ASSERT_EQUAL(first2418,
+            m_hamming.decode2418(encoded2418[0], encoded2418[1], encoded2418[2]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x09), m_hamming.decode84(encode84(0x09)));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x35),
+            m_hamming.decodeParity(encodeParityProtectedByte(0x35)));
     }
 };
 

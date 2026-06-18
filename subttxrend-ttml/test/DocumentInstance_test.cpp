@@ -53,14 +53,11 @@ CPPUNIT_TEST_SUITE( DocumentInstanceTest );
     CPPUNIT_TEST(testApplyWhitespaceHandlingBorderSpaces);
     CPPUNIT_TEST(testStartElementUnknownName);
     CPPUNIT_TEST(testStartElementBrWithEmptyStack);
-    CPPUNIT_TEST(testEndElementWithEmptyStack);
     CPPUNIT_TEST(testEndElementCopyTopWithEmptyStack);
     CPPUNIT_TEST(testResetClearsAllButOverride);
-    CPPUNIT_TEST(testGetCurrentElementAndImageElementEmpty);
     CPPUNIT_TEST(testNewEntityWithEmptyEntities);
     CPPUNIT_TEST(testApplyWhitespaceHandlingEmptyAndMixed);
     CPPUNIT_TEST(testNewLineWithNoTextLines);
-    CPPUNIT_TEST(testDumpWithEmptyContainers);
     CPPUNIT_TEST(testCircularReferences);
 CPPUNIT_TEST_SUITE_END();
 
@@ -233,7 +230,7 @@ public:
 
         auto secondChunk = firstLine[1];
         CPPUNIT_ASSERT(secondChunk.m_text == "p_text");
-        CPPUNIT_ASSERT(firstChunk.m_style.getTextAlign() == StyleSet::TextAlign::CENTER);
+        CPPUNIT_ASSERT(secondChunk.m_style.getTextAlign() == StyleSet::TextAlign::CENTER);
     }
 
     void styleInheritanceRegionOverStyle()
@@ -997,8 +994,10 @@ public:
         doc.endElement(); //tt
 
         auto timeline = doc.generateTimeline();
-        // Should not crash, may produce no timeline or default timing
-        CPPUNIT_ASSERT(timeline.size() >= 0);
+
+        // Invalid timing attributes currently leave default zero-length timing,
+        // which must not produce a renderable timeline entry.
+        CPPUNIT_ASSERT(timeline.empty());
     }
 
     void styleAttributeParsing()
@@ -1084,10 +1083,9 @@ public:
     {
         DocumentInstance doc;
         auto body = std::dynamic_pointer_cast<BodyElement>(doc.startElement("body"));
-        body->appendText("abc");
+        body->appendText("   ");
         doc.endElement(false);
-        // After endElement, body should be finalized (whitespace handled, etc.)
-        CPPUNIT_ASSERT(!body->getTextLines().empty());
+        CPPUNIT_ASSERT(body->getTextLines().empty());
     }
 
     void testApplyWhitespaceHandlingRemovesLeadingTrailingSpaces()
@@ -1135,18 +1133,14 @@ public:
         CPPUNIT_ASSERT(doc.getCurrentElement() == nullptr);
     }
 
-    void testEndElementWithEmptyStack()
-    {
-        DocumentInstance doc;
-        doc.endElement();
-        CPPUNIT_ASSERT(true); // Should not crash
-    }
-
     void testEndElementCopyTopWithEmptyStack()
     {
         DocumentInstance doc;
         doc.endElement(true);
-        CPPUNIT_ASSERT(true); // Should not crash
+
+        CPPUNIT_ASSERT(doc.getCurrentElement() == nullptr);
+        CPPUNIT_ASSERT(doc.getCurrentImageElement() == nullptr);
+        CPPUNIT_ASSERT(doc.generateTimeline().empty());
     }
 
     void testResetClearsAllButOverride()
@@ -1154,7 +1148,7 @@ public:
         DocumentInstance doc;
         Attributes overrideAttrs{{"color", "red"}, {"fontSize", "24px"}};
         doc.setStyleOverrideAttributes(overrideAttrs);
-        
+
         // Create some document structure
         doc.startElement("tt");
         auto div = doc.startElement("div");
@@ -1163,18 +1157,21 @@ public:
         div->appendText("test");
         doc.endElement();
         doc.endElement();
-        
+
         // Verify override attributes are applied before reset
         auto timelineBefore = doc.generateTimeline();
         CPPUNIT_ASSERT(!timelineBefore.empty());
-        
+        auto beforeResetChunk = timelineBefore.front().m_entites[0].m_textLines[0][0];
+        CPPUNIT_ASSERT(beforeResetChunk.m_style.getColor() == subttxrend::gfx::ColorArgb::RED);
+        CPPUNIT_ASSERT((beforeResetChunk.m_style.getFontSize() == DomainValue{DomainValue::Type::PIXEL, 24}));
+
         // Reset the document
         doc.reset();
-        
+
         // Verify document structure is cleared
         CPPUNIT_ASSERT(doc.getCurrentElement() == nullptr);
         CPPUNIT_ASSERT(doc.generateTimeline().empty());
-        
+
         // Verify override attributes are preserved by creating new content
         doc.startElement("tt");
         auto p = doc.startElement("p");
@@ -1183,22 +1180,15 @@ public:
         p->appendText("after reset");
         doc.endElement();
         doc.endElement();
-        
+
         auto timelineAfter = doc.generateTimeline();
         CPPUNIT_ASSERT(!timelineAfter.empty());
-        
+
         // The override attributes should still be applied to new content
         auto textChunk = timelineAfter.front().m_entites[0].m_textLines[0][0];
         CPPUNIT_ASSERT(textChunk.m_text == "after reset");
-        // Override attributes should still be active (red color and 24px font)
-        // This verifies that m_overrideStyleAttributes was preserved through reset
-    }
-
-    void testGetCurrentElementAndImageElementEmpty()
-    {
-        DocumentInstance doc;
-        CPPUNIT_ASSERT(doc.getCurrentElement() == nullptr);
-        CPPUNIT_ASSERT(doc.getCurrentImageElement() == nullptr);
+        CPPUNIT_ASSERT(textChunk.m_style.getColor() == subttxrend::gfx::ColorArgb::RED);
+        CPPUNIT_ASSERT((textChunk.m_style.getFontSize() == DomainValue{DomainValue::Type::PIXEL, 24}));
     }
 
     void testNewEntityWithEmptyEntities()
@@ -1235,13 +1225,6 @@ public:
         IntermediateDocument::Entity entity;
         doc.newLine(entity);
         CPPUNIT_ASSERT(entity.m_textLines.size() == 1);
-    }
-
-    void testDumpWithEmptyContainers()
-    {
-        DocumentInstance doc;
-        doc.dump();
-        CPPUNIT_ASSERT(true);
     }
 
     void testCircularReferences() {

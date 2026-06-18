@@ -455,11 +455,7 @@ public:
     {
         IniFile iniFile;
         iniFile.parse("testdata/hex_value.ini"); // Don't assert return value
-        // getInt behavior with hex values is implementation-dependent
-        // Could return: 0 (stops at 'x'), 255 (parses hex), or default (42)
-        int result = iniFile.getInt("hexkey", 42);
-        // Accept any reasonable value - just ensure it doesn't crash
-        CPPUNIT_ASSERT_NO_THROW(iniFile.getInt("hexkey", 42));
+        CPPUNIT_ASSERT_EQUAL(255, iniFile.getInt("hexkey", 42));
     }
 
     // Test getArray with empty delimiter
@@ -534,11 +530,11 @@ public:
     {
         IniFile iniFile;
         CPPUNIT_ASSERT(iniFile.parse("testdata/test1.ini"));
-        std::string originalValue = iniFile.get("key1");
+        CPPUNIT_ASSERT(iniFile.get("key1") == "value1");
         
-        // parseAppend should potentially overwrite existing keys
-        iniFile.parseAppend("testdata/overwrite.ini"); // Don't assert return value
-        // The behavior depends on implementation - could be original or new value
+        CPPUNIT_ASSERT(iniFile.parseAppend("testdata/overwrite.ini"));
+        CPPUNIT_ASSERT(iniFile.get("key1") == "value1");
+        CPPUNIT_ASSERT(iniFile.get("new_key") == "new_value");
     }
 
     // Test with very long key and value

@@ -17,9 +17,6 @@
  * limitations under the License.
 */
 #include <sstream>
-#include <iostream>
-#include <map>
-#include <memory>
 #include <algorithm>
 
 #include <cppunit/extensions/HelperMacros.h>
@@ -70,15 +67,21 @@ public:
     */
     std::list<Line> buildOutputLines(LineBuilder &builder, std::istringstream &stream)
     {
+        return buildOutputLines(builder, stream, false);
+    }
+
+    std::list<Line> buildOutputLines(LineBuilder &builder, std::istringstream &stream, bool includeRegions)
+    {
         CueList cueList;
         CueSharedList sh_list;
         WebVTTDocument documentParser;
+        RegionMap regionMap;
 
-        std::tie(cueList, std::ignore) = documentParser.parseCueList(stream, 0);
+        std::tie(cueList, regionMap) = documentParser.parseCueList(stream, 0);
         std::for_each(cueList.begin(), cueList.end(), [&sh_list](CuePtr &unique_ptr) {
             sh_list.emplace_back(static_cast<CueSharedPtr>(std::move(unique_ptr)));
         });
-        return builder.buildOutputLines(sh_list, {{}});
+        return builder.buildOutputLines(sh_list, includeRegions ? regionMap : RegionMap{});
     }
 
     /**
@@ -116,6 +119,22 @@ public:
         }
 
         return rendered;
+    }
+
+    const Token* findToken(const std::list<Line> &output, const std::string &text)
+    {
+        for (const auto &line : output)
+        {
+            for (const auto &token : line.tokenVector)
+            {
+                if (token.token->mStr == text)
+                {
+                    return &token;
+                }
+            }
+        }
+
+        return nullptr;
     }
 
     void TestLineBuilder()
@@ -366,11 +385,19 @@ std::istringstream auto_empty(
 )");
         LineBuilder builder{1920, 1080};
         auto output = buildOutputLines(builder, style_cue);
-        std::string rendered = renderOutputLines(output);
-        CPPUNIT_ASSERT(rendered.find("bold") != std::string::npos);
-        CPPUNIT_ASSERT(rendered.find("italic") != std::string::npos);
-        CPPUNIT_ASSERT(rendered.find("underline") != std::string::npos);
-        CPPUNIT_ASSERT(rendered.find("red") != std::string::npos);
+        auto boldToken = findToken(output, "bold");
+        auto italicToken = findToken(output, "italic");
+        auto underlineToken = findToken(output, "underline");
+        auto redToken = findToken(output, "red");
+
+        CPPUNIT_ASSERT(boldToken != nullptr);
+        CPPUNIT_ASSERT(italicToken != nullptr);
+        CPPUNIT_ASSERT(underlineToken != nullptr);
+        CPPUNIT_ASSERT(redToken != nullptr);
+        CPPUNIT_ASSERT_EQUAL(Style::FontStyleType::kBold, boldToken->style.fontStyle());
+        CPPUNIT_ASSERT_EQUAL(Style::FontStyleType::kItalic, italicToken->style.fontStyle());
+        CPPUNIT_ASSERT_EQUAL(Style::FontStyleType::kUnderline, underlineToken->style.fontStyle());
+        CPPUNIT_ASSERT(Style::kRed == redToken->style.textColour());
     }
 
     void TestColorTags() {
@@ -382,8 +409,11 @@ std::istringstream auto_empty(
 )");
         LineBuilder builder{1920, 1080};
         auto output = buildOutputLines(builder, color_cue);
-        std::string rendered = renderOutputLines(output);
-        CPPUNIT_ASSERT(rendered.find("lime on red") != std::string::npos);
+        auto limeToken = findToken(output, "lime");
+
+        CPPUNIT_ASSERT(limeToken != nullptr);
+        CPPUNIT_ASSERT(Style::kLime == limeToken->style.textColour());
+        CPPUNIT_ASSERT(Style::kRed == limeToken->style.bgColour());
     }
 
     void TestEscapedCharacters() {
@@ -418,13 +448,14 @@ scroll:up
 Regioned text
 )");
         LineBuilder builder{1920, 1080};
-        auto output = buildOutputLines(builder, region_cue);
-        std::string rendered = renderOutputLines(output);
-        if (output.empty()) {
-            std::cerr << "[Warning] Region support not present in LineBuilder: skipping region assertion.\n";
-            return;
-        }
-        CPPUNIT_ASSERT(rendered.find("Regioned text") != std::string::npos);
+        Converter converter{1920, 1080};
+        auto output = buildOutputLines(builder, region_cue, true);
+        CPPUNIT_ASSERT_MESSAGE("Region cue should produce output", !output.empty());
+        CPPUNIT_ASSERT_EQUAL(std::size_t{1}, output.size());
+
+        const auto &line = output.front();
+        const auto expectedY = converter.vhToHeightPixels(9000 - converter.lineHeightVh());
+        CPPUNIT_ASSERT_EQUAL(expectedY, line.lineRectangle.m_y);
     }
 
     void TestOpacityAndEdgeColor() {
@@ -440,8 +471,11 @@ Regioned text
 Opacity and edge color
 )");
         auto output = buildOutputLines(builder, cue);
-        std::string rendered = renderOutputLines(output);
-        CPPUNIT_ASSERT(rendered.find("Opacity and edge color") != std::string::npos);
+        auto opacityToken = findToken(output, "Opacity");
+
+        CPPUNIT_ASSERT(opacityToken != nullptr);
+        CPPUNIT_ASSERT(subttxrend::gfx::ColorArgb(100, 255, 255, 255) == opacityToken->style.textColour());
+        CPPUNIT_ASSERT(subttxrend::gfx::ColorArgb(255, 0, 255, 0) == opacityToken->style.edgeColour());
     }
 
     void TestUnknownStyleFallback() {

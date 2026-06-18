@@ -44,14 +44,12 @@ CPPUNIT_TEST_SUITE( DecodedPageTest );
     CPPUNIT_TEST(testClearPageWithData);
     CPPUNIT_TEST(testClearAfterSettingAllFields);
     CPPUNIT_TEST(testMultipleConsecutiveClears);
-    CPPUNIT_TEST(testGetDefaultPageId);
     CPPUNIT_TEST(testSetAndGetValidPageId);
     CPPUNIT_TEST(testSetPageIdWithBoundaryValuesMin);
     CPPUNIT_TEST(testSetPageIdWithBoundaryValuesMax);
     CPPUNIT_TEST(testSetPageIdWithNullPage);
     CPPUNIT_TEST(testOverwriteExistingPageId);
     CPPUNIT_TEST(testSetPageIdAfterClear);
-    CPPUNIT_TEST(testGetDefaultControlInfo);
     CPPUNIT_TEST(testSetAndGetValidControlInfo);
     CPPUNIT_TEST(testSetControlInfoWithBoundaryValueMin);
     CPPUNIT_TEST(testSetControlInfoWithBoundaryValueMax);
@@ -72,13 +70,7 @@ CPPUNIT_TEST_SUITE( DecodedPageTest );
     CPPUNIT_TEST(testGetRowWithVeryLargeIndex);
     CPPUNIT_TEST(testGetRowExceptionMessage);
     CPPUNIT_TEST(testGetRowConstVersionWithInvalidIndex);
-    CPPUNIT_TEST(testSetAndGetRedLink);
-    CPPUNIT_TEST(testSetAndGetGreenLink);
-    CPPUNIT_TEST(testSetAndGetYellowLink);
-    CPPUNIT_TEST(testSetAndGetCyanLink);
-    CPPUNIT_TEST(testSetAndGetFlofIndexLink);
     CPPUNIT_TEST(testSetAllFiveColorLinksWithDifferentValues);
-    CPPUNIT_TEST(testGetColorLinkWithDefaultValue);
     CPPUNIT_TEST(testOverwriteExistingColorLink);
     CPPUNIT_TEST(testSetColorLinksAfterClear);
     CPPUNIT_TEST(testSetColorLinkWithNullPageId);
@@ -229,13 +221,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), m_page->getPageControlInfo());
     }
 
-    void testGetDefaultPageId()
-    {
-        PageId pageId = m_page->getPageId();
-        CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, pageId.getSubpage());
-    }
-
     void testSetAndGetValidPageId()
     {
         PageId testId(0x150, 0x0001);
@@ -302,12 +287,6 @@ protected:
         PageId retrievedId = m_page->getPageId();
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x200), retrievedId.getMagazinePage());
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x0002), retrievedId.getSubpage());
-    }
-
-    void testGetDefaultControlInfo()
-    {
-        uint8_t controlInfo = m_page->getPageControlInfo();
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), controlInfo);
     }
 
     void testSetAndGetValidControlInfo()
@@ -562,56 +541,6 @@ protected:
         CPPUNIT_ASSERT(exceptionThrown);
     }
 
-    void testSetAndGetRedLink()
-    {
-        PageId linkId(0x123, 0x0456);
-        m_page->setColourKeyLink(DecodedPage::Link::RED, linkId);
-
-        const PageId& retrievedLink = m_page->getColourKeyLink(DecodedPage::Link::RED);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x123), retrievedLink.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x0456), retrievedLink.getSubpage());
-    }
-
-    void testSetAndGetGreenLink()
-    {
-        PageId linkId(0x234, 0x0567);
-        m_page->setColourKeyLink(DecodedPage::Link::GREEN, linkId);
-
-        const PageId& retrievedLink = m_page->getColourKeyLink(DecodedPage::Link::GREEN);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x234), retrievedLink.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x0567), retrievedLink.getSubpage());
-    }
-
-    void testSetAndGetYellowLink()
-    {
-        PageId linkId(0x345, 0x0678);
-        m_page->setColourKeyLink(DecodedPage::Link::YELLOW, linkId);
-
-        const PageId& retrievedLink = m_page->getColourKeyLink(DecodedPage::Link::YELLOW);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x345), retrievedLink.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x0678), retrievedLink.getSubpage());
-    }
-
-    void testSetAndGetCyanLink()
-    {
-        PageId linkId(0x456, 0x0789);
-        m_page->setColourKeyLink(DecodedPage::Link::CYAN, linkId);
-
-        const PageId& retrievedLink = m_page->getColourKeyLink(DecodedPage::Link::CYAN);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x456), retrievedLink.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x0789), retrievedLink.getSubpage());
-    }
-
-    void testSetAndGetFlofIndexLink()
-    {
-        PageId linkId(0x567, 0x089A);
-        m_page->setColourKeyLink(DecodedPage::Link::FLOF_INDEX, linkId);
-
-        const PageId& retrievedLink = m_page->getColourKeyLink(DecodedPage::Link::FLOF_INDEX);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x567), retrievedLink.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x089A), retrievedLink.getSubpage());
-    }
-
     void testSetAllFiveColorLinksWithDifferentValues()
     {
         PageId redId(0x100, 0x0001);
@@ -637,13 +566,6 @@ protected:
                            m_page->getColourKeyLink(DecodedPage::Link::CYAN).getMagazinePage());
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x500),
                            m_page->getColourKeyLink(DecodedPage::Link::FLOF_INDEX).getMagazinePage());
-    }
-
-    void testGetColorLinkWithDefaultValue()
-    {
-        const PageId& defaultLink = m_page->getColourKeyLink(DecodedPage::Link::RED);
-        CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, defaultLink.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, defaultLink.getSubpage());
     }
 
     void testOverwriteExistingColorLink()
@@ -860,10 +782,16 @@ protected:
         row.m_levelOnePageSegment.m_charArray[2] = 'S';
         row.m_levelOnePageSegment.m_charArray[3] = 'T';
 
-        // Should not crash
+        PageId beforeId = m_page->getPageId();
+        std::uint8_t beforeControlInfo = m_page->getPageControlInfo();
+        std::uint16_t beforeFirstChar = row.m_levelOnePageSegment.m_charArray[0];
+
         m_page->dump(true);
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(beforeId.getMagazinePage(), m_page->getPageId().getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(beforeId.getSubpage(), m_page->getPageId().getSubpage());
+        CPPUNIT_ASSERT_EQUAL(beforeControlInfo, m_page->getPageControlInfo());
+        CPPUNIT_ASSERT_EQUAL(beforeFirstChar, m_page->getRow(0).m_levelOnePageSegment.m_charArray[0]);
     }
 
     void testDumpPageWithDataCharsOnlyFalse()
@@ -881,10 +809,27 @@ protected:
         PageId linkId(0x100, 0x0001);
         m_page->setColourKeyLink(DecodedPage::Link::RED, linkId);
 
-        // Should not crash
+        PageId beforeId = m_page->getPageId();
+        std::uint8_t beforeControlInfo = m_page->getPageControlInfo();
+        std::uint16_t beforeChar = row.m_levelOnePageSegment.m_charArray[0];
+        std::uint8_t beforeBg = row.m_levelOnePageSegment.m_bgColorIndexArray[0];
+        std::uint8_t beforeFg = row.m_levelOnePageSegment.m_fgColorIndexArray[0];
+        std::uint16_t beforeProperties = row.m_levelOnePageSegment.m_propertiesArray[0];
+        PageId beforeLink = m_page->getColourKeyLink(DecodedPage::Link::RED);
+
         m_page->dump(false);
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(beforeId.getMagazinePage(), m_page->getPageId().getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(beforeId.getSubpage(), m_page->getPageId().getSubpage());
+        CPPUNIT_ASSERT_EQUAL(beforeControlInfo, m_page->getPageControlInfo());
+        CPPUNIT_ASSERT_EQUAL(beforeChar, m_page->getRow(0).m_levelOnePageSegment.m_charArray[0]);
+        CPPUNIT_ASSERT_EQUAL(beforeBg, m_page->getRow(0).m_levelOnePageSegment.m_bgColorIndexArray[0]);
+        CPPUNIT_ASSERT_EQUAL(beforeFg, m_page->getRow(0).m_levelOnePageSegment.m_fgColorIndexArray[0]);
+        CPPUNIT_ASSERT_EQUAL(beforeProperties, m_page->getRow(0).m_levelOnePageSegment.m_propertiesArray[0]);
+        CPPUNIT_ASSERT_EQUAL(beforeLink.getMagazinePage(),
+                           m_page->getColourKeyLink(DecodedPage::Link::RED).getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(beforeLink.getSubpage(),
+                           m_page->getColourKeyLink(DecodedPage::Link::RED).getSubpage());
     }
 
     void testDumpPageWithSpecialCharacters()
@@ -898,11 +843,20 @@ protected:
         row.m_levelOnePageSegment.m_charArray[3] = 0xFFFF; // Max value
         row.m_levelOnePageSegment.m_charArray[4] = 0x0041; // 'A' - printable
 
-        // Should not crash and handle special characters
+        std::uint16_t beforeChar0 = row.m_levelOnePageSegment.m_charArray[0];
+        std::uint16_t beforeChar1 = row.m_levelOnePageSegment.m_charArray[1];
+        std::uint16_t beforeChar2 = row.m_levelOnePageSegment.m_charArray[2];
+        std::uint16_t beforeChar3 = row.m_levelOnePageSegment.m_charArray[3];
+        std::uint16_t beforeChar4 = row.m_levelOnePageSegment.m_charArray[4];
+
         m_page->dump(true);
         m_page->dump(false);
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(beforeChar0, m_page->getRow(1).m_levelOnePageSegment.m_charArray[0]);
+        CPPUNIT_ASSERT_EQUAL(beforeChar1, m_page->getRow(1).m_levelOnePageSegment.m_charArray[1]);
+        CPPUNIT_ASSERT_EQUAL(beforeChar2, m_page->getRow(1).m_levelOnePageSegment.m_charArray[2]);
+        CPPUNIT_ASSERT_EQUAL(beforeChar3, m_page->getRow(1).m_levelOnePageSegment.m_charArray[3]);
+        CPPUNIT_ASSERT_EQUAL(beforeChar4, m_page->getRow(1).m_levelOnePageSegment.m_charArray[4]);
     }
 
     void testDumpAfterClear()
@@ -910,14 +864,21 @@ protected:
         // Set some data
         PageId pageId(0x180, 0x0025);
         m_page->setPageId(pageId);
+        m_page->setPageControlInfo(0x42);
         m_page->getRow(0).m_levelOnePageSegment.m_charArray[0] = 'X';
 
         // Clear and dump
         m_page->clear();
+        PageId beforeId = m_page->getPageId();
+        std::uint8_t beforeControlInfo = m_page->getPageControlInfo();
+        std::uint16_t beforeChar = m_page->getRow(0).m_levelOnePageSegment.m_charArray[0];
         m_page->dump(true);
         m_page->dump(false);
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(beforeId.getMagazinePage(), m_page->getPageId().getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(beforeId.getSubpage(), m_page->getPageId().getSubpage());
+        CPPUNIT_ASSERT_EQUAL(beforeControlInfo, m_page->getPageControlInfo());
+        CPPUNIT_ASSERT_EQUAL(beforeChar, m_page->getRow(0).m_levelOnePageSegment.m_charArray[0]);
     }
 
     void testCreateAndDestroyMultipleInstances()
@@ -936,12 +897,13 @@ protected:
             // Verify data
             CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100 + i),
                                page->getPageId().getMagazinePage());
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x0001),
+                               page->getPageId().getSubpage());
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(i),
+                               page->getPageControlInfo());
 
             delete page;
         }
-
-        // Test passes if no memory issues occur
-        CPPUNIT_ASSERT(true);
     }
 
     void testLargeNumberOfStateChanges()
@@ -963,15 +925,34 @@ protected:
             PageId linkId(i % 0x800, i % 0x4000);
             m_page->setColourKeyLink(link, linkId);
 
+            CPPUNIT_ASSERT_EQUAL(pageId.getMagazinePage(), m_page->getPageId().getMagazinePage());
+            CPPUNIT_ASSERT_EQUAL(pageId.getSubpage(), m_page->getPageId().getSubpage());
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(i % 256), m_page->getPageControlInfo());
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(i),
+                               m_page->getRow(i % MAX_ROWS).m_levelOnePageSegment.m_charArray[0]);
+            CPPUNIT_ASSERT_EQUAL(linkId.getMagazinePage(),
+                               m_page->getColourKeyLink(link).getMagazinePage());
+            CPPUNIT_ASSERT_EQUAL(linkId.getSubpage(),
+                               m_page->getColourKeyLink(link).getSubpage());
+
             // Occasionally clear
             if (i % 100 == 0)
             {
                 m_page->clear();
+
+                CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE,
+                                   m_page->getPageId().getMagazinePage());
+                CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE,
+                                   m_page->getPageId().getSubpage());
+                CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), m_page->getPageControlInfo());
+                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(' '),
+                                   m_page->getRow(i % MAX_ROWS).m_levelOnePageSegment.m_charArray[0]);
+                CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE,
+                                   m_page->getColourKeyLink(link).getMagazinePage());
+                CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE,
+                                   m_page->getColourKeyLink(link).getSubpage());
             }
         }
-
-        // Test passes if no degradation or crashes occur
-        CPPUNIT_ASSERT(true);
     }
 
 private:

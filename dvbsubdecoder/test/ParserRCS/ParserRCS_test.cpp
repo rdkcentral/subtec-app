@@ -969,6 +969,63 @@ public:
         CPPUNIT_ASSERT(m_database->getRegionById(0x1F)->getVersion() == 5);
     }
 
+    void testTruncatedRCSPacket()
+    {
+        BitStreamWriter writer;
+        writer.write(0xDC, 8); // region_id only, truly truncated
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserRCS parser;
+        CPPUNIT_ASSERT_THROW(parser.parseRegionCompositionSegment(*m_database, reader), PesPacketReader::Exception);
+    }
+
+    void testMalformedRCSPacket()
+    {
+        // Provide a packet with invalid header values (e.g., impossible region depth)
+        BitStreamWriter writer;
+        writer.write(0xAB, 8); // region_id
+        writer.write(0xFF, 8); // version/fill_flag (invalid)
+        // Omit width, height, and all other required fields
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserRCS parser;
+        CPPUNIT_ASSERT_THROW(parser.parseRegionCompositionSegment(*m_database, reader), ParserException);
+    }
+
+    void testRegionCorrectnessAfterParse()
+    {
+        m_database->epochReset();
+        m_database->getPage().startParsing(0, StcTime(), 0);
+        BitStreamWriter writer;
+        writer.write(0xAB, 8); // region_id
+        writer.write(0x1 << 4, 8); // version=1, fill_flag=0
+        writer.write(320, 16); // width
+        writer.write(240, 16); // height
+        writer.write((dvbsubdecoder::RegionDepthBits::DEPTH_4BIT << 5) | (dvbsubdecoder::RegionDepthBits::DEPTH_2BIT << 2), 8); // depth=4bit, compatibility=2bit
+        writer.write(7, 8); // clut_id
+        writer.write(2, 8); // background 8bit
+        writer.write(0, 8); // other backgrounds, reserved
+        writer.write(2001, 16); // object_id
+        writer.write((dvbsubdecoder::RegionObjectTypeBits::BASIC_BITMAP << 6) | (dvbsubdecoder::RegionObjectProviderBits::SUBTITLING_STREAM << 4), 8);
+        writer.write(5, 8);
+        writer.write(50, 16);
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserRCS parser;
+        parser.parseRegionCompositionSegment(*m_database, reader);
+        CPPUNIT_ASSERT(m_database->getRegionCount() == 1);
+        auto region = m_database->getRegionById(0xAB);
+        CPPUNIT_ASSERT(region);
+        CPPUNIT_ASSERT(region->getVersion() == 1);
+        CPPUNIT_ASSERT(region->getWidth() == 320);
+        CPPUNIT_ASSERT(region->getHeight() == 240);
+        CPPUNIT_ASSERT(region->getDepth() == dvbsubdecoder::RegionDepthBits::DEPTH_4BIT);
+        CPPUNIT_ASSERT(region->getCompatibilityLevel() == dvbsubdecoder::RegionDepthBits::DEPTH_2BIT);
+        CPPUNIT_ASSERT(region->getClutId() == 7);
+        CPPUNIT_ASSERT(region->getBackgroundIndex() == 2);
+        auto object = region->getFirstObject();
+        CPPUNIT_ASSERT(object->m_objectId == 2001);
+        CPPUNIT_ASSERT(object->m_positionX == 5);
+        CPPUNIT_ASSERT(object->m_positionY == 50);
+    }
 private:
         void prepareParsing()
         {

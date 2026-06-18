@@ -411,9 +411,8 @@ protected:
     {
         auto options = OptionsBuilder::createEmpty();
         CPPUNIT_ASSERT(options->isValid());
-        // Just verify it doesn't crash
-        options->printUsage();
-        CPPUNIT_ASSERT(true);
+        // Ensure printUsage doesn't throw
+        CPPUNIT_ASSERT_NO_THROW(options->printUsage());
     }
 
     void testVeryLongOptionValue()

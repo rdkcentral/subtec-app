@@ -56,6 +56,8 @@ CPPUNIT_TEST_SUITE( RegionTest );
     CPPUNIT_TEST(testStateConsistencyAfterFailures);
     CPPUNIT_TEST(testComplexLifecycle);
     CPPUNIT_TEST(testPixmapIntegration);
+    CPPUNIT_TEST(testNegativeDimensionCreation);
+    CPPUNIT_TEST(testPixelContentAfterComposition);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -775,6 +777,45 @@ public:
         CPPUNIT_ASSERT(region.getPixmap().getHeight() == 8);
         CPPUNIT_ASSERT(region.getWidth() == 5);
         CPPUNIT_ASSERT(region.getHeight() == 8);
+    }
+
+        void testNegativeDimensionCreation()
+    {
+        Region region;
+        std::array<std::uint8_t, 100> pixmapMemory;
+        Clut clut;
+        clut.setId(1);
+        clut.setVersion(1);
+        // Negative width
+        CPPUNIT_ASSERT_THROW(region.init(-10, 10, pixmapMemory.data(),
+            dvbsubdecoder::RegionDepthBits::DEPTH_2BIT,
+            dvbsubdecoder::RegionDepthBits::DEPTH_2BIT, &clut), std::invalid_argument);
+        // Negative height
+        CPPUNIT_ASSERT_THROW(region.init(10, -10, pixmapMemory.data(),
+            dvbsubdecoder::RegionDepthBits::DEPTH_2BIT,
+            dvbsubdecoder::RegionDepthBits::DEPTH_2BIT, &clut), std::invalid_argument);
+        // Both negative
+        CPPUNIT_ASSERT_THROW(region.init(-10, -10, pixmapMemory.data(),
+            dvbsubdecoder::RegionDepthBits::DEPTH_2BIT,
+            dvbsubdecoder::RegionDepthBits::DEPTH_2BIT, &clut), std::invalid_argument);
+    }
+
+    void testPixelContentAfterComposition()
+    {
+        Region region;
+        std::array<std::uint8_t, 100> pixmapMemory;
+        Clut clut;
+        clut.setId(1);
+        clut.setVersion(1);
+        region.init(10, 10, pixmapMemory.data(),
+            dvbsubdecoder::RegionDepthBits::DEPTH_2BIT,
+            dvbsubdecoder::RegionDepthBits::DEPTH_2BIT, &clut);
+        // Write pixel data
+        for (int i = 0; i < 100; ++i) pixmapMemory[i] = static_cast<std::uint8_t>(i % 256);
+        // Verify pixel data
+        for (int y = 0; y < 10; ++y)
+            for (int x = 0; x < 10; ++x)
+                CPPUNIT_ASSERT(region.getPixmap().getBuffer()[y * 10 + x] == static_cast<std::uint8_t>((y * 10 + x) % 256));
     }
 };
 

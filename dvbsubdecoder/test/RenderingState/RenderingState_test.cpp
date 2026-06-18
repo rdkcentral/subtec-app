@@ -62,6 +62,8 @@ CPPUNIT_TEST_SUITE( RenderingStateTest );
     CPPUNIT_TEST(testRectangleStorageAccuracy);
     CPPUNIT_TEST(testRegionInfoMemberAccess);
     CPPUNIT_TEST(testConstCorrectnessValidation);
+    CPPUNIT_TEST(testMalformedInitialization);
+    CPPUNIT_TEST(testCorruptStateTransitions);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -914,6 +916,26 @@ public:
         CPPUNIT_ASSERT(constState.getRegionCount() == 1);
         CPPUNIT_ASSERT(constState.getRegionByIndex(0).m_id == 10);
         CPPUNIT_ASSERT(constState.getRegionByIndex(0).m_version == 20);
+    }
+
+    void testMalformedInitialization()
+    {
+        RenderingState state;
+        // Try to set bounds with invalid rectangles
+        Rectangle invalidRect = { -99999, -99999, -99999, -99999 };
+        state.setBounds(invalidRect, invalidRect); // Should not crash
+        // Note: RenderingState accepts any rectangle, including invalid ones.
+        // Try to add region with invalid data
+        CPPUNIT_ASSERT(state.addRegion(255, 255, invalidRect)); // Should succeed, as implementation accepts any values
+    }
+
+    void testCorruptStateTransitions()
+    {
+        RenderingState state;
+        // Try to access region before any are added
+        CPPUNIT_ASSERT_THROW(state.getRegionByIndex(0), std::range_error);
+        // Try to unmark dirty on non-existent region
+        CPPUNIT_ASSERT_THROW(state.unmarkRegionAsDirtyByIndex(0), std::range_error);
     }
 };
 

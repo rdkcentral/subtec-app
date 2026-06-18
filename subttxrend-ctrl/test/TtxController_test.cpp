@@ -29,6 +29,7 @@
 #include <subttxrend/common/ConfigProvider.hpp>
 #include <memory>
 #include <vector>
+#include <exception>
 
 using namespace subttxrend::ctrl;
 using namespace subttxrend::protocol;
@@ -65,7 +66,7 @@ private:
 class MockWindow : public Window
 {
 public:
-    MockWindow() {}
+    MockWindow() : m_visible(false), m_visibleTrueCount(0), m_visibleFalseCount(0) {}
     virtual ~MockWindow() {}
 
     void addKeyEventListener(KeyEventListener* listener) override {}
@@ -87,12 +88,30 @@ public:
     }
 
     Size getPreferredSize() const override { return Size(1920, 1080); }
-    void setSize(const Size& newSize) override {}
-    Size getSize() const override { return Size(1920, 1080); }
-    void setVisible(bool visible) override {}
+    void setSize(const Size& newSize) override { m_size = newSize; }
+    Size getSize() const override { return m_size; }
+    void setVisible(bool visible) override {
+        m_visible = visible;
+        if (visible) {
+            ++m_visibleTrueCount;
+        }
+        else {
+            ++m_visibleFalseCount;
+        }
+    }
     void clear() override {}
     void update() override {}
     void setDrawDirection(DrawDirection dir) override {}
+
+    bool isVisible() const { return m_visible; }
+    int getVisibleTrueCount() const { return m_visibleTrueCount; }
+    int getVisibleFalseCount() const { return m_visibleFalseCount; }
+
+private:
+    bool m_visible;
+    int m_visibleTrueCount;
+    int m_visibleFalseCount;
+    Size m_size{1920, 1080};
 };
 
 // Mock Engine for testing
@@ -321,13 +340,21 @@ protected:
         auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
         CPPUNIT_ASSERT(packet != nullptr);
 
-        {
+        try {
             TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
             // Use controller
             controller.process();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Destructor threw unknown exception");
         }
-        // Destructor should not crash
-        CPPUNIT_ASSERT(true);
+
+        // Ensure global state was not corrupted by constructing a fresh controller
+        auto packet2 = PacketTeletextSelectionBuilder::build(101, 1, 101);
+        CPPUNIT_ASSERT(packet2 != nullptr);
+        TtxController controller2(*packet2, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
+        CPPUNIT_ASSERT(controller2.wantsData(*packet2));
     }
 
     void testSelectTeletext()
@@ -430,10 +457,11 @@ protected:
         auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleTrueCountBeforeActivate = m_mockWindow->getVisibleTrueCount();
         controller.activate();
 
-        // Verify controller is active (no crash)
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_MESSAGE("Activate should show the teletext window", m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleTrueCount() > visibleTrueCountBeforeActivate);
     }
 
     void testActivateWithSubtitleSelected()
@@ -441,10 +469,11 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(200, 1, 2);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleTrueCountBeforeActivate = m_mockWindow->getVisibleTrueCount();
         controller.activate();
 
-        // Verify controller is active (no crash)
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_MESSAGE("Activate should show the subtitle window", m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleTrueCount() > visibleTrueCountBeforeActivate);
     }
 
     void testDeactivateWithTeletextSelected()
@@ -455,8 +484,10 @@ protected:
         controller.activate();
         controller.deactivate();
 
-        // Verify deactivation completes (no crash)
-        CPPUNIT_ASSERT(true);
+        // Verify selection still present and channel unchanged after deactivate
+        Channel ttxChannel = controller.getTeletextChannel();
+        CPPUNIT_ASSERT(ttxChannel.isActive());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(100), ttxChannel.getChannelId());
     }
 
     void testDeactivateWithSubtitleSelected()
@@ -467,8 +498,9 @@ protected:
         controller.activate();
         controller.deactivate();
 
-        // Verify deactivation completes (no crash)
-        CPPUNIT_ASSERT(true);
+        Channel subChannel = controller.getSubtitleChannel();
+        CPPUNIT_ASSERT(subChannel.isActive());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(200), subChannel.getChannelId());
     }
 
     void testMultipleActivateDeactivateCycles()
@@ -481,8 +513,9 @@ protected:
             controller.deactivate();
         }
 
-        // Verify multiple cycles complete (no crash)
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_MESSAGE("After ending on deactivate the teletext window should be hidden", !m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleTrueCount() > 0);
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleFalseCount() > 0);
     }
 
     void testMuteTeletextWhenSelected()
@@ -492,8 +525,8 @@ protected:
 
         controller.mute(true);
 
-        // Verify mute completes (no crash)
-        CPPUNIT_ASSERT(true);
+        Channel ttxChannel = controller.getTeletextChannel();
+        CPPUNIT_ASSERT(ttxChannel.isActive());
     }
 
     void testUnmuteTeletextWhenSelected()
@@ -504,8 +537,8 @@ protected:
         controller.mute(true);
         controller.mute(false);
 
-        // Verify unmute completes (no crash)
-        CPPUNIT_ASSERT(true);
+        Channel ttxChannel = controller.getTeletextChannel();
+        CPPUNIT_ASSERT(ttxChannel.isActive());
     }
 
     void testMuteSubtitleWhenSelected()
@@ -515,8 +548,8 @@ protected:
 
         controller.mute(true);
 
-        // Verify mute completes (no crash)
-        CPPUNIT_ASSERT(true);
+        Channel subChannel = controller.getSubtitleChannel();
+        CPPUNIT_ASSERT(subChannel.isActive());
     }
 
     void testUnmuteSubtitleWhenSelected()
@@ -527,8 +560,8 @@ protected:
         controller.mute(true);
         controller.mute(false);
 
-        // Verify unmute completes (no crash)
-        CPPUNIT_ASSERT(true);
+        Channel subChannel = controller.getSubtitleChannel();
+        CPPUNIT_ASSERT(subChannel.isActive());
     }
 
     void testMuteWhenNothingSelected()
@@ -543,7 +576,8 @@ protected:
         // Test mute still works
         controller.mute(true);
 
-        CPPUNIT_ASSERT(true);
+        Channel ttxChannel = controller.getTeletextChannel();
+        CPPUNIT_ASSERT(ttxChannel.isActive());
     }
 
     void testSetMutedTeletextDirectly()
@@ -554,8 +588,8 @@ protected:
         controller.setMutedTeletext(true);
         controller.setMutedTeletext(false);
 
-        // Verify calls complete (no crash)
-        CPPUNIT_ASSERT(true);
+        Channel ttxChannel = controller.getTeletextChannel();
+        CPPUNIT_ASSERT(ttxChannel.isActive());
     }
 
     void testSetMutedSubtitlesDirectly()
@@ -566,8 +600,8 @@ protected:
         controller.setMutedSubtitles(true);
         controller.setMutedSubtitles(false);
 
-        // Verify calls complete (no crash)
-        CPPUNIT_ASSERT(true);
+        Channel subChannel = controller.getSubtitleChannel();
+        CPPUNIT_ASSERT(subChannel.isActive());
     }
 
     void testAddDataWithCorrectChannelId()
@@ -581,8 +615,7 @@ protected:
 
         controller.addData(*dataPacket);
 
-        // Verify data added (no crash)
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_MESSAGE("Adding matching data should not hide the teletext window", m_mockWindow->isVisible());
     }
 
     void testAddDataWithIncorrectChannelId()
@@ -596,8 +629,8 @@ protected:
 
         controller.addData(*dataPacket);
 
-        // Should discard data but not crash
-        CPPUNIT_ASSERT(true);
+        // Original selection should remain unaffected
+        CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
     void testAddDataWithNoPesPackets()
@@ -616,8 +649,8 @@ protected:
 
         controller.addData(*dataPacket);
 
-        // Should handle data with no valid PES packets gracefully
-        CPPUNIT_ASSERT(true);
+        // Should handle data with no valid PES packets gracefully and keep selection
+        CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
     void testAddDataWithMultiplePesPackets()
@@ -638,8 +671,8 @@ protected:
 
         controller.addData(*dataPacket);
 
-        // Should process multiple PES packets
-        CPPUNIT_ASSERT(true);
+        // Should process multiple PES packets and retain selection
+        CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
     void testAddDataWhenNotStarted()
@@ -656,8 +689,8 @@ protected:
 
         controller.addData(*dataPacket);
 
-        // Should handle gracefully when not started
-        CPPUNIT_ASSERT(true);
+        // Still should not crash and selection remains
+        CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
     void testProcessWithTeletextSelected()
@@ -667,8 +700,7 @@ protected:
 
         controller.process();
 
-        // Should process teletext data (no crash)
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_MESSAGE("Processing should leave the teletext window visible", m_mockWindow->isVisible());
     }
 
     void testProcessWithSubtitleSelected()
@@ -678,8 +710,7 @@ protected:
 
         controller.process();
 
-        // Should process subtitle data (no crash)
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
     void testProcessWithNothingSelected()
@@ -691,7 +722,7 @@ protected:
         // Test process still works
         controller.process();
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
     void testGetTeletextChannel()
@@ -738,7 +769,10 @@ protected:
         controller.selectTeletext(150, 2, 200);
         controller.process();
 
-        CPPUNIT_ASSERT(true);
+        // Ensure selection updated
+        Channel ttxChannel = controller.getTeletextChannel();
+        CPPUNIT_ASSERT(ttxChannel.isActive());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(150), ttxChannel.getChannelId());
     }
 
     void testResetAfterSubtitleSelection()
@@ -750,7 +784,9 @@ protected:
         controller.selectSubtitle(250, 3, 4);
         controller.process();
 
-        CPPUNIT_ASSERT(true);
+        Channel subChannel = controller.getSubtitleChannel();
+        CPPUNIT_ASSERT(subChannel.isActive());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(250), subChannel.getChannelId());
     }
 
 private:

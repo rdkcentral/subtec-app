@@ -52,7 +52,7 @@ public:
 class MockWindow : public Window
 {
 public:
-    MockWindow() {}
+    MockWindow() : m_visible(false), m_visibleTrueCount(0), m_visibleFalseCount(0), m_updateCount(0) {}
     virtual ~MockWindow() {}
 
     void addKeyEventListener(KeyEventListener* listener) override {}
@@ -79,15 +79,34 @@ public:
         return Size(1920, 1080);
     }
 
-    void setSize(const Size& newSize) override {}
+    void setSize(const Size& newSize) override { m_size = newSize; }
     Size getSize() const override {
-        return Size(1920, 1080);
+        return m_size;
     }
 
-    void setVisible(bool visible) override {}
+    void setVisible(bool visible) override {
+        m_visible = visible;
+        if (visible) {
+            ++m_visibleTrueCount;
+        }
+        else {
+            ++m_visibleFalseCount;
+        }
+    }
     void clear() override {}
-    void update() override {}
+    void update() override { ++m_updateCount; }
     void setDrawDirection(DrawDirection dir) override {}
+
+    bool isVisible() const { return m_visible; }
+    int getVisibleTrueCount() const { return m_visibleTrueCount; }
+    int getVisibleFalseCount() const { return m_visibleFalseCount; }
+
+private:
+    bool m_visible;
+    int m_visibleTrueCount;
+    int m_visibleFalseCount;
+    int m_updateCount;
+    Size m_size{1920, 1080};
 };
 
 // Helper to create PacketSubtitleSelection for testing
@@ -317,12 +336,10 @@ protected:
         DvbSubController controller(*packet, m_window, m_engine, *m_stcProvider);
 
         controller.activate();
+        CPPUNIT_ASSERT_MESSAGE("Controller should show the window when active", m_window->isVisible());
         controller.process();
 
-        // Verify controller still wants data after process
-        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
-        CPPUNIT_ASSERT_MESSAGE("Controller should still want data after process",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Process should not hide the active window", m_window->isVisible());
     }
 
     void testProcessMultipleTimes()
@@ -444,11 +461,12 @@ protected:
         DvbSubController controller(*packet, m_window, m_engine, *m_stcProvider);
 
         controller.deactivate();
+        CPPUNIT_ASSERT_MESSAGE("Deactivate should hide the window", !m_window->isVisible());
+        const int visibleTrueCountBeforeActivate = m_window->getVisibleTrueCount();
         controller.activate();
 
-        // Verify controller is active by checking it wants data
-        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
-        CPPUNIT_ASSERT(controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Activate should show the window again", m_window->isVisible());
+        CPPUNIT_ASSERT(m_window->getVisibleTrueCount() > visibleTrueCountBeforeActivate);
     }
 
     void testActivateWhenAlreadyActive()
@@ -456,13 +474,13 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(100, 1, 2);
         DvbSubController controller(*packet, m_window, m_engine, *m_stcProvider);
 
-        // Constructor already activates
-        controller.activate(); // Should be idempotent
+        const int visibleFalseCountBeforeActivate = m_window->getVisibleFalseCount();
+        const int visibleTrueCountBeforeActivate = m_window->getVisibleTrueCount();
+        controller.activate();
 
-        // Verify controller still wants data
-        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
-        CPPUNIT_ASSERT_MESSAGE("Controller should still want data after redundant activate",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Redundant activate should leave the window visible", m_window->isVisible());
+        CPPUNIT_ASSERT(m_window->getVisibleFalseCount() > visibleFalseCountBeforeActivate);
+        CPPUNIT_ASSERT(m_window->getVisibleTrueCount() > visibleTrueCountBeforeActivate);
     }
 
     void testDeactivateWhenActive()
@@ -473,9 +491,7 @@ protected:
         controller.activate();
         controller.deactivate();
 
-        // Still wants data (deactivate doesn't reset channel)
-        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
-        CPPUNIT_ASSERT(controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Deactivate should hide the window", !m_window->isVisible());
     }
 
     void testDeactivateWhenAlreadyStopped()
@@ -515,10 +531,7 @@ protected:
 
         controller.mute(true);
 
-        // Verify controller still functional after mute
-        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
-        CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after mute",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Muting should hide the window", !m_window->isVisible());
     }
 
     void testUnmuteWhenMuted()
@@ -630,10 +643,10 @@ protected:
 
         controller.deactivate();
 
-        // Verify controller completed workflow and maintains state
-        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
-        CPPUNIT_ASSERT_MESSAGE("Controller should maintain state after complete workflow",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Complete workflow should end with a hidden window after deactivate",
+                       !m_window->isVisible());
+        CPPUNIT_ASSERT(m_window->getVisibleTrueCount() > 0);
+        CPPUNIT_ASSERT(m_window->getVisibleFalseCount() > 0);
     }
 
     void testWorkflowWithMuting()

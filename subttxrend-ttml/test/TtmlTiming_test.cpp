@@ -29,7 +29,6 @@ CPPUNIT_TEST_SUITE( TtmlTimingTest );
     CPPUNIT_TEST(testTimePointComparisonOperators);
     CPPUNIT_TEST(testTimePointToStrAndToMilliseconds);
     CPPUNIT_TEST(testTimePointInvalidInput);
-    CPPUNIT_TEST(testTimingConstructionAndGetters);
     CPPUNIT_TEST(testTimingIsOverlappingAndIsContinuous);
     CPPUNIT_TEST(testTimingMerge);
     CPPUNIT_TEST(testTimingOperators);
@@ -100,38 +99,25 @@ public:
     {
         TimePoint t(1h, 2min, 3s, 4ms);
         std::string str = t.toStr();
-        CPPUNIT_ASSERT(str.find("01:02:03.004") != std::string::npos);
+        CPPUNIT_ASSERT_EQUAL(std::string("01:02:03.004"), str);
         CPPUNIT_ASSERT(t.toMilliseconds().count() == ((1*3600+2*60+3)*1000+4));
     }
 
     void testTimePointInvalidInput()
     {
-        // Test TimePoint constructor validation - invalid values should result in default TimePoint (timestamp = 0)
-        TimePoint t1(1h, 61min, 0s); // invalid minutes (>59)
-        TimePoint t2(1h, 2min, 61s); // invalid seconds (>60) 
-        TimePoint defaultTp; // default constructor creates timestamp = 0
-        
-        // According to implementation, invalid input causes early return leaving timestamp as default (0)
-        CPPUNIT_ASSERT(t1 == defaultTp);
-        CPPUNIT_ASSERT(t2 == defaultTp);
-        
-        // Test boundary cases - these should be valid
-        TimePoint validMinutes(1h, 59min, 0s); // 59 minutes is valid
-        TimePoint validSeconds(1h, 0min, 60s); // 60 seconds is valid (leap second)
-        CPPUNIT_ASSERT(!(validMinutes == defaultTp));
-        CPPUNIT_ASSERT(!(validSeconds == defaultTp));
-    }
+        TimePoint invalidMinutes(1h, 61min, 0s);
+        TimePoint invalidSeconds(1h, 2min, 61s);
+        TimePoint defaultTp;
 
-    void testTimingConstructionAndGetters()
-    {
-        TimePoint begin(1h, 2min, 3s, 4ms);
-        TimePoint end(1h, 3min, 3s, 4ms);
-        Timing timing(begin, end);
-        CPPUNIT_ASSERT(timing.getStartTimeRef() == begin);
-        CPPUNIT_ASSERT(timing.getEndTimeRef() == end);
-        const Timing& ctiming = timing;
-        CPPUNIT_ASSERT(ctiming.getStartTimeRef() == begin);
-        CPPUNIT_ASSERT(ctiming.getEndTimeRef() == end);
+        CPPUNIT_ASSERT(invalidMinutes == defaultTp);
+        CPPUNIT_ASSERT(invalidSeconds == defaultTp);
+        CPPUNIT_ASSERT_EQUAL(static_cast<long long>(0), static_cast<long long>(invalidMinutes.toMilliseconds().count()));
+        CPPUNIT_ASSERT_EQUAL(static_cast<long long>(0), static_cast<long long>(invalidSeconds.toMilliseconds().count()));
+
+        TimePoint validMinutes(1h, 59min, 0s);
+        TimePoint validLeapSecond(1h, 0min, 60s);
+        CPPUNIT_ASSERT_EQUAL(std::string("01:59:00.000"), validMinutes.toStr());
+        CPPUNIT_ASSERT_EQUAL(std::string("01:01:00.000"), validLeapSecond.toStr());
     }
 
     void testTimingIsOverlappingAndIsContinuous()
@@ -141,6 +127,7 @@ public:
         Timing t3(TimePoint(0h,0min,1s,0ms), TimePoint(0h,0min,2s,0ms));
         Timing t4(TimePoint(0h,0min,2s,0ms), TimePoint(0h,0min,3s,0ms));
         CPPUNIT_ASSERT(t1.isOverlapping(t2));
+        CPPUNIT_ASSERT(!t1.isOverlapping(t3));
         CPPUNIT_ASSERT(!t1.isOverlapping(t4));
         CPPUNIT_ASSERT(t1.isContinous(t3));
         CPPUNIT_ASSERT(!t1.isContinous(t4));
@@ -177,7 +164,7 @@ public:
     {
         Timing t(TimePoint(1h, 2min, 3s, 4ms), TimePoint(1h, 3min, 4s, 5ms));
         std::string str = t.toStr();
-        CPPUNIT_ASSERT(str.find("01:02:03.004-01:03:04.005") != std::string::npos);
+        CPPUNIT_ASSERT_EQUAL(std::string("01:02:03.004-01:03:04.005"), str);
     }
 };
 

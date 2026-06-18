@@ -22,6 +22,7 @@
 #include <memory>
 #include <thread>
 #include <chrono>
+#include <atomic>
 
 #include "../src/EngineImpl.hpp"
 #include "../src/Backend.hpp"
@@ -69,6 +70,7 @@ public:
     bool init(const std::string& displayName) override
     {
         m_initCalled = true;
+        s_initCalled.store(true);
         m_displayName = displayName;
         return m_initResult;
     }
@@ -76,24 +78,28 @@ public:
     bool start() override
     {
         m_startCalled = true;
+        s_startCalled.store(true);
         return m_startResult;
     }
 
     void stop() override
     {
         m_stopCalled = true;
+        s_stopCalled.store(true);
     }
 
     void requestRender() override
     {
         m_requestRenderCalled = true;
         m_requestRenderCount++;
+        s_requestRenderCount.fetch_add(1);
     }
 
     void forceRender() override
     {
         m_forceRenderCalled = true;
         m_forceRenderCount++;
+        s_forceRenderCount.fetch_add(1);
     }
 
 #ifdef __APPLE__
@@ -115,6 +121,21 @@ public:
     bool wasRequestRenderCalled() const { return m_requestRenderCalled; }
     int getRequestRenderCount() const { return m_requestRenderCount; }
     std::string getDisplayName() const { return m_displayName; }
+
+    static void resetStaticFlags()
+    {
+        s_initCalled.store(false);
+        s_startCalled.store(false);
+        s_stopCalled.store(false);
+        s_requestRenderCount.store(0);
+        s_forceRenderCount.store(0);
+    }
+
+    static std::atomic<bool> s_initCalled;
+    static std::atomic<bool> s_startCalled;
+    static std::atomic<bool> s_stopCalled;
+    static std::atomic<int> s_requestRenderCount;
+    static std::atomic<int> s_forceRenderCount;
 
 private:
     bool m_isSyncNeeded;
@@ -152,6 +173,13 @@ std::unique_ptr<Backend> BackendFactory::createBackend(BackendListener* listener
 } // namespace gfx
 } // namespace subttxrend
 
+// Static flag definitions for MockBackend observable state
+std::atomic<bool> MockBackend::s_initCalled{false};
+std::atomic<bool> MockBackend::s_startCalled{false};
+std::atomic<bool> MockBackend::s_stopCalled{false};
+std::atomic<int> MockBackend::s_requestRenderCount{0};
+std::atomic<int> MockBackend::s_forceRenderCount{0};
+
 
 class EngineImplTest : public CppUnit::TestFixture
 {
@@ -159,7 +187,7 @@ CPPUNIT_TEST_SUITE( EngineImplTest );
     CPPUNIT_TEST(testConstructorInitializesEngineCorrectly);
     CPPUNIT_TEST(testConstructorDoesNotCreateBackend);
     CPPUNIT_TEST(testDestructorWithNoWindows);
-    CPPUNIT_TEST(testDestructorCallsStopOnBackend);
+    CPPUNIT_TEST(testDestructorDoesNotCallStopOnBackend);
     CPPUNIT_TEST(testInitWithEmptyDisplayName);
     CPPUNIT_TEST(testInitWithValidDisplayName);
     CPPUNIT_TEST(testInitCallsBackendFactoryCreateBackend);
@@ -236,6 +264,7 @@ public:
     {
         // Reset global mock backend pointer
         g_mockBackend = nullptr;
+        MockBackend::resetStaticFlags();
     }
 
     void tearDown()
@@ -259,21 +288,40 @@ public:
     void testConstructorDoesNotCreateBackend()
     {
         // Backend should only be created during init(), not constructor
+        auto sentinel = new MockBackend(nullptr);
+        g_mockBackend = sentinel;
+
         EngineImpl engine;
-        // Test passes if no backend factory was called during construction
-        CPPUNIT_ASSERT(true);
+
+        // If constructor created a backend, BackendFactory would have consumed g_mockBackend
+        CPPUNIT_ASSERT_MESSAGE("Constructor must not create backend", g_mockBackend == sentinel);
+
+        // Cleanup sentinel if it wasn't consumed
+        if (g_mockBackend)
+        {
+            delete g_mockBackend;
+            g_mockBackend = nullptr;
+        }
     }
 
     void testDestructorWithNoWindows()
     {
+        try
         {
             EngineImpl engine;
-            // Destructor should not fail if no windows are attached
+            // Destructor should not throw when going out of scope
         }
-        CPPUNIT_ASSERT(true);
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Destructor threw exception: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("Destructor threw unknown exception");
+        }
     }
 
-    void testDestructorCallsStopOnBackend()
+    void testDestructorDoesNotCallStopOnBackend()
     {
         auto mockBackend = new MockBackend(nullptr);
         g_mockBackend = mockBackend;
@@ -281,10 +329,14 @@ public:
         {
             EngineImpl engine;
             engine.init("test_display");
-            CPPUNIT_ASSERT(mockBackend->wasStartCalled());
+            // init should have triggered backend init/start
+            CPPUNIT_ASSERT(MockBackend::s_startCalled.load());
+            // BackendFactory should have consumed g_mockBackend (ownership transferred)
+            CPPUNIT_ASSERT_MESSAGE("BackendFactory should consume the provided mock backend", g_mockBackend == nullptr);
         }
-        // Backend is deleted by unique_ptr, stop should have been called
-        CPPUNIT_ASSERT(true);
+
+        // Destructor does not call stop(); ensure we don't fail if it didn't
+        CPPUNIT_ASSERT(!MockBackend::s_stopCalled.load());
     }
 
     void testInitWithEmptyDisplayName()
@@ -404,11 +456,19 @@ public:
 
     void testShutdownWithoutInit()
     {
-        EngineImpl engine;
-        engine.shutdown();
-
-        // Should handle shutdown without init gracefully
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            EngineImpl engine;
+            engine.shutdown();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("shutdown() threw exception: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("shutdown() threw unknown exception");
+        }
     }
 
     void testShutdownCallsBackendStop()
@@ -432,10 +492,16 @@ public:
         EngineImpl engine;
         engine.init("display");
         engine.shutdown();
-
-        // After shutdown, backend operations should be safe
-        engine.shutdown(); // Should not crash
-        CPPUNIT_ASSERT(true);
+        // After shutdown, backend operations should be safe and stop should have been called
+        CPPUNIT_ASSERT(MockBackend::s_stopCalled.load());
+        try
+        {
+            engine.shutdown(); // Second call should be safe
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Second shutdown() threw exception: ") + ex.what());
+        }
     }
 
     void testShutdownMultipleTimes()
@@ -445,12 +511,17 @@ public:
 
         EngineImpl engine;
         engine.init("display");
-
         engine.shutdown();
-        engine.shutdown(); // Second call should be safe
-        engine.shutdown(); // Third call should be safe
-
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            engine.shutdown(); // Second call should be safe
+            engine.shutdown(); // Third call should be safe
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("shutdown() repeated calls threw: ") + ex.what());
+        }
+        CPPUNIT_ASSERT(MockBackend::s_stopCalled.load());
     }
 
     void testShutdownAfterFailedInit()
@@ -462,8 +533,10 @@ public:
         EngineImpl engine;
         engine.init("display");
         engine.shutdown();
-
-        CPPUNIT_ASSERT(true);
+        // init failed; start should not have been called and stop should not be called
+        CPPUNIT_ASSERT(MockBackend::s_initCalled.load());
+        CPPUNIT_ASSERT(!MockBackend::s_startCalled.load());
+        CPPUNIT_ASSERT(!MockBackend::s_stopCalled.load());
     }
 
     void testCreateWindowReturnsWindowPtr()
@@ -677,10 +750,15 @@ public:
     {
         EngineImpl engine;
         WindowPtr window = engine.createWindow();
-
-        // Detaching unattached window should not throw, just log warning
-        engine.detach(window);
-        CPPUNIT_ASSERT(true);
+        // Detaching unattached window should not throw
+        try
+        {
+            engine.detach(window);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("detach() threw exception: ") + ex.what());
+        }
     }
 
     void testDetachWindowCallsSetEngineHooksNull()
@@ -706,20 +784,30 @@ public:
 
         // Window should be removed from internal list
         // Can verify by attaching again (should not throw)
-        engine.attach(window);
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            engine.attach(window);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Re-attach after detach threw: ") + ex.what());
+        }
     }
 
     void testDetachSameWindowTwice()
     {
         EngineImpl engine;
         WindowPtr window = engine.createWindow();
-
         engine.attach(window);
-        engine.detach(window);
-        engine.detach(window); // Second detach should be safe
-
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            engine.detach(window);
+            engine.detach(window); // Second detach should be safe
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("Second detach threw an exception");
+        }
     }
 
     void testDetachOneOfMultipleWindows()
@@ -753,18 +841,29 @@ public:
         EngineImpl engine;
         engine.init("display");
 
-        // Execute should call lock/unlock
-        engine.execute();
-        CPPUNIT_ASSERT(true);
+        // Execute should call lock/unlock; ensure it doesn't throw
+        try
+        {
+            engine.execute();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("execute() threw exception: ") + ex.what());
+        }
     }
 
     void testExecuteBeforeInit()
     {
         EngineImpl engine;
-
-        // Should be safe to execute before init
-        engine.execute();
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            // Should be safe to execute before init
+            engine.execute();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("execute() before init threw: ") + ex.what());
+        }
     }
 
     void testExecuteAfterInit()
@@ -774,9 +873,14 @@ public:
 
         EngineImpl engine;
         engine.init("display");
-
-        engine.execute();
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            engine.execute();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("execute() after init threw: ") + ex.what());
+        }
     }
 
     void testRequestRedrawWithBackend()
@@ -798,9 +902,17 @@ public:
     void testForceRedrawWithoutBackend()
     {
         EngineImpl engine;
-
-        // Should not crash if backend is not initialized
-        CPPUNIT_ASSERT(true);
+        WindowPtr window = engine.createWindow();
+        engine.attach(window);
+        try
+        {
+            // setVisible(false) calls forceRedraw() via EngineHooks
+            window->setVisible(false);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("forceRedraw without backend threw: ") + ex.what());
+        }
     }
 
     void testForceRedrawWithBackend()
@@ -825,9 +937,15 @@ public:
         EngineImpl engine;
         engine.init("display");
 
-        // Lock should acquire mutex when sync needed
-        engine.execute();
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            // Lock should acquire mutex when sync needed
+            engine.execute();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("execute() threw: ") + ex.what());
+        }
     }
 
     void testLockWithBackendSyncNotNeeded()
@@ -839,9 +957,15 @@ public:
         EngineImpl engine;
         engine.init("display");
 
-        // Lock should skip mutex when sync not needed
-        engine.execute();
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            // Lock should skip mutex when sync not needed
+            engine.execute();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("execute() threw: ") + ex.what());
+        }
     }
 
     void testUnlockWithBackendSyncNeeded()
@@ -853,9 +977,15 @@ public:
         EngineImpl engine;
         engine.init("display");
 
-        // Unlock should release mutex when sync needed
-        engine.execute();
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            // Unlock should release mutex when sync needed
+            engine.execute();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("execute() threw: ") + ex.what());
+        }
     }
 
     void testUnlockWithBackendSyncNotNeeded()
@@ -867,9 +997,15 @@ public:
         EngineImpl engine;
         engine.init("display");
 
-        // Unlock should skip mutex when sync not needed
-        engine.execute();
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            // Unlock should skip mutex when sync not needed
+            engine.execute();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("execute() threw: ") + ex.what());
+        }
     }
 
     void testCompleteLifecycleInitShutdown()
@@ -916,11 +1052,17 @@ public:
         engine.init("display");
 
         WindowPtr window = engine.createWindow();
-        engine.attach(window);
-        engine.detach(window);
+        try
+        {
+            engine.attach(window);
+            engine.detach(window);
 
-        engine.shutdown();
-        CPPUNIT_ASSERT(true);
+            engine.shutdown();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Lifecycle attach/detach threw: ") + ex.what());
+        }
     }
 
     void testLifecycleMultipleWindows()
@@ -939,12 +1081,18 @@ public:
         engine.attach(w2);
         engine.attach(w3);
 
-        engine.detach(w1);
-        engine.detach(w2);
-        engine.detach(w3);
+        try
+        {
+            engine.detach(w1);
+            engine.detach(w2);
+            engine.detach(w3);
 
-        engine.shutdown();
-        CPPUNIT_ASSERT(true);
+            engine.shutdown();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Lifecycle multiple windows threw: ") + ex.what());
+        }
     }
 
     void testLifecycleShutdownWithAttachedWindows()
@@ -962,8 +1110,14 @@ public:
         engine.shutdown();
 
         // Clean up to avoid destructor warning
-        engine.detach(window);
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            engine.detach(window);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("detach after shutdown threw: ") + ex.what());
+        }
     }
 
     void testAttachDetachMultipleWindowsSequence()
@@ -978,10 +1132,15 @@ public:
         engine.attach(w2);
         engine.detach(w1);
         engine.attach(w3);
-        engine.detach(w2);
-        engine.detach(w3);
-
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            engine.detach(w2);
+            engine.detach(w3);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("attach/detach sequence threw: ") + ex.what());
+        }
     }
 
     void testAttachDetachReattachWindow()
@@ -989,12 +1148,25 @@ public:
         EngineImpl engine;
         WindowPtr window = engine.createWindow();
 
+        // Attach should succeed first time
         engine.attach(window);
-        engine.detach(window);
-        engine.attach(window); // Should be able to reattach
-        engine.detach(window);
+        // Attaching the same window again must throw
+        CPPUNIT_ASSERT_THROW(engine.attach(window), std::logic_error);
 
-        CPPUNIT_ASSERT(true);
+        // Detach and ensure we can re-attach afterwards
+        engine.detach(window);
+        try
+        {
+            engine.attach(window); // Should be able to reattach
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("attach after detach threw an exception");
+        }
+
+        // Now that it's attached again, re-attaching must throw
+        CPPUNIT_ASSERT_THROW(engine.attach(window), std::logic_error);
+        engine.detach(window);
     }
 
     void testMultipleWindowCreationAndAttachment()
@@ -1029,16 +1201,24 @@ public:
         engine.attach(w2);
         engine.attach(w3);
 
+        // Verify initial attachments prevent re-attachment
+        CPPUNIT_ASSERT_THROW(engine.attach(w1), std::logic_error);
+        CPPUNIT_ASSERT_THROW(engine.attach(w2), std::logic_error);
+        CPPUNIT_ASSERT_THROW(engine.attach(w3), std::logic_error);
+
         engine.detach(w1);
-        engine.attach(w1); // Should work after detach
+        try { engine.attach(w1); } catch (...) { CPPUNIT_FAIL("attach after detach for w1 threw"); }
+        CPPUNIT_ASSERT_THROW(engine.attach(w1), std::logic_error);
         engine.detach(w1);
 
         engine.detach(w2);
-        engine.attach(w2); // Should work after detach
+        try { engine.attach(w2); } catch (...) { CPPUNIT_FAIL("attach after detach for w2 threw"); }
+        CPPUNIT_ASSERT_THROW(engine.attach(w2), std::logic_error);
         engine.detach(w2);
 
         engine.detach(w3);
-        engine.attach(w3); // Should work after detach
+        try { engine.attach(w3); } catch (...) { CPPUNIT_FAIL("attach after detach for w3 threw"); }
+        CPPUNIT_ASSERT_THROW(engine.attach(w3), std::logic_error);
         engine.detach(w3);
     }
 
@@ -1054,16 +1234,24 @@ public:
         engine.attach(w2);
         engine.attach(w3);
 
+        // Verify initial attachments prevent re-attachment
+        CPPUNIT_ASSERT_THROW(engine.attach(w1), std::logic_error);
+        CPPUNIT_ASSERT_THROW(engine.attach(w2), std::logic_error);
+        CPPUNIT_ASSERT_THROW(engine.attach(w3), std::logic_error);
+
         engine.detach(w3);
-        engine.attach(w3); // Should work
+        try { engine.attach(w3); } catch (...) { CPPUNIT_FAIL("attach after detach for w3 threw"); }
+        CPPUNIT_ASSERT_THROW(engine.attach(w3), std::logic_error);
         engine.detach(w3);
 
         engine.detach(w2);
-        engine.attach(w2); // Should work
+        try { engine.attach(w2); } catch (...) { CPPUNIT_FAIL("attach after detach for w2 threw"); }
+        CPPUNIT_ASSERT_THROW(engine.attach(w2), std::logic_error);
         engine.detach(w2);
 
         engine.detach(w1);
-        engine.attach(w1); // Should work
+        try { engine.attach(w1); } catch (...) { CPPUNIT_FAIL("attach after detach for w1 threw"); }
+        CPPUNIT_ASSERT_THROW(engine.attach(w1), std::logic_error);
         engine.detach(w1);
     }
 
@@ -1143,8 +1331,14 @@ public:
         engine.shutdown();
 
         // Operations after shutdown should be safe
-        engine.execute();
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            engine.execute();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("execute after shutdown threw: ") + ex.what());
+        }
     }
 
     void testAttachWindowAfterDetach()
@@ -1197,7 +1391,7 @@ public:
         // Backend should not receive further render calls after shutdown
         CPPUNIT_ASSERT_EQUAL(reqCountBeforeShutdown, mockBackend->getRequestRenderCount());
         CPPUNIT_ASSERT_EQUAL(forceCountBeforeShutdown, mockBackend->getForceRenderCount());
-        CPPUNIT_ASSERT(true);
+        // verified counts unchanged above
     }
 
     void testCreateWindowAfterShutdown()
@@ -1271,12 +1465,16 @@ public:
         // State should remain valid after shutdown
         WindowPtr window = engine.createWindow();
         CPPUNIT_ASSERT(window != nullptr);
-
-        engine.attach(window);
-        engine.execute();
-        engine.detach(window);
-
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            engine.attach(window);
+            engine.execute();
+            engine.detach(window);
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("post-shutdown operations threw an exception");
+        }
     }
 
     void testStateWithMultipleWindows()

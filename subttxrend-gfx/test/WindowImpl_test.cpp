@@ -133,6 +133,25 @@ private:
     int m_unlockCount;
 };
 
+// Helper for replacing vacuous CPPUNIT_ASSERT(true) checks.
+static void assert_window_ok(WindowImpl& window, const char* context)
+{
+    try
+    {
+        Pixmap& p = window.getPixmap();
+        CPPUNIT_ASSERT(p.getWidth() >= 0);
+        CPPUNIT_ASSERT(p.getHeight() >= 0);
+    }
+    catch (const std::exception& ex)
+    {
+        CPPUNIT_FAIL(std::string(context) + std::string(" threw: ") + ex.what());
+    }
+    catch (...)
+    {
+        CPPUNIT_FAIL(std::string(context) + std::string(" threw unknown exception"));
+    }
+}
+
 // ============================================================================
 // Test Fixture
 // ============================================================================
@@ -327,23 +346,47 @@ public:
 
     void testDestructorCleansUpResources()
     {
+        try
         {
-            WindowImpl window;
-            window.setSize(Size{100, 100});
+            {
+                WindowImpl window;
+                window.setSize(Size{100, 100});
+                // Exercise surfaces so destructor has something to clean
+                window.clear();
+                window.update();
+            } // destructor runs here
         }
-        // Destructor should clean up without errors
-        CPPUNIT_ASSERT(true);
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Destructor threw exception: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("Destructor threw unknown exception");
+        }
     }
 
     void testDestructorWithActiveListeners()
     {
         MockKeyEventListener listener;
+        try
         {
-            WindowImpl window;
-            window.addKeyEventListener(&listener);
+            {
+                WindowImpl window;
+                window.addKeyEventListener(&listener);
+                // exercise event processing before destruction
+                KeyEvent event(KeyEvent::Type::PRESSED, 0x41);
+                window.processKeyEvent(event);
+            }
         }
-        // Destructor should handle active listeners gracefully
-        CPPUNIT_ASSERT(true);
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Destructor with listeners threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("Destructor with listeners threw unknown exception");
+        }
     }
 
     void testAddKeyEventListenerWithValidListener()
@@ -423,9 +466,22 @@ public:
         WindowImpl window;
         MockKeyEventListener listener;
 
-        // Should not throw
+        // Should not throw and not deliver events
         window.removeKeyEventListener(&listener);
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            Pixmap& _p = window.getPixmap();
+            CPPUNIT_ASSERT(_p.getWidth() >= 0);
+            CPPUNIT_ASSERT(_p.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Unexpected exception after removeKeyEventListener: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("Unexpected exception after removeKeyEventListener");
+        }
     }
 
     void testRemoveKeyEventListenerWithNull()
@@ -433,8 +489,21 @@ public:
         WindowImpl window;
 
         // Should not crash
-        window.removeKeyEventListener(nullptr);
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            window.removeKeyEventListener(nullptr);
+            Pixmap& _p = window.getPixmap();
+            CPPUNIT_ASSERT(_p.getWidth() >= 0);
+            CPPUNIT_ASSERT(_p.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("removeKeyEventListener(nullptr) threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("removeKeyEventListener(nullptr) threw unknown exception");
+        }
     }
 
     void testRemoveKeyEventListenerRemovesAllInstances()
@@ -471,7 +540,20 @@ public:
 
         // Should not crash or throw
         window.removeKeyEventListener(&listener);
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            Pixmap& _p = window.getPixmap();
+            CPPUNIT_ASSERT(_p.getWidth() >= 0);
+            CPPUNIT_ASSERT(_p.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("removeKeyEventListener from empty list threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("removeKeyEventListener from empty list threw unknown exception");
+        }
     }
 
     void testGetBoundsReturnsCorrectRectangle()
@@ -627,8 +709,22 @@ public:
         window.setSize(Size{640, 480});
 
         // Background surfaces should be resized (verified by no crash on clear)
-        window.clear();
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            window.clear();
+            Pixmap& bg = window.getBgPixmap();
+            CPPUNIT_ASSERT_MESSAGE("Background pixmap accessible after resize", &bg != nullptr);
+            CPPUNIT_ASSERT(bg.getWidth() >= 0);
+            CPPUNIT_ASSERT(bg.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Unexpected exception during clear/getBgPixmap: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("Unknown exception during clear/getBgPixmap");
+        }
     }
 
     void testSetSizeUpdatesInternalSize()
@@ -838,10 +934,22 @@ public:
         window.setSize(Size{100, 100});
 
         // Update should swap background surfaces without crashing
-        window.update();
-        window.clear();
-
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            window.update();
+            window.clear();
+            Pixmap& bg = window.getBgPixmap();
+            CPPUNIT_ASSERT(bg.getWidth() >= 0);
+            CPPUNIT_ASSERT(bg.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Unexpected exception during update/clear/bg access: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("Unknown exception during update/clear/bg access");
+        }
     }
 
     void testUpdateWhenVisibleCallsRequestRedraw()
@@ -952,8 +1060,18 @@ public:
         window.setEngineHooks(nullptr);
 
         // Should use NullEngineHooks, which won't crash
-        window.setVisible(true);
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            window.setVisible(true);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("setVisible with null hooks threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("setVisible with null hooks threw unknown exception");
+        }
     }
 
     void testSetEngineHooksReplacesExisting()
@@ -980,11 +1098,20 @@ public:
         WindowImpl window;
 
         // Should not crash with default null hooks
-        window.setVisible(true);
-        window.update();
-        window.clear();
-
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            window.setVisible(true);
+            window.update();
+            window.clear();
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("Default null hooks operations threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("Default null hooks operations threw unknown exception");
+        }
     }
 
     void testEngineHooksCalledOnVisibilityChange()
@@ -1082,9 +1209,21 @@ public:
         KeyEvent event(KeyEvent::Type::PRESSED, 0x41);
 
         // Should not crash with no listeners
-        window.processKeyEvent(event);
-
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            window.processKeyEvent(event);
+            Pixmap& _p = window.getPixmap();
+            CPPUNIT_ASSERT(_p.getWidth() >= 0);
+            CPPUNIT_ASSERT(_p.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("processKeyEvent (no listeners) threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("processKeyEvent (no listeners) threw unknown exception");
+        }
     }
 
     void testProcessKeyEventWithOneListener()
@@ -1209,8 +1348,20 @@ public:
 
         window.setDrawDirection(DrawDirection::LEFT_TO_RIGHT);
 
-        // Should not crash
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            Pixmap& _p = window.getPixmap();
+            CPPUNIT_ASSERT(_p.getWidth() >= 0);
+            CPPUNIT_ASSERT(_p.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("setDrawDirection LEFT_TO_RIGHT threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("setDrawDirection LEFT_TO_RIGHT threw unknown exception");
+        }
     }
 
     void testSetDrawDirectionRightToLeft()
@@ -1219,8 +1370,20 @@ public:
 
         window.setDrawDirection(DrawDirection::RIGHT_TO_LEFT);
 
-        // Should not crash
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            Pixmap& _p = window.getPixmap();
+            CPPUNIT_ASSERT(_p.getWidth() >= 0);
+            CPPUNIT_ASSERT(_p.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("setDrawDirection RIGHT_TO_LEFT threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("setDrawDirection RIGHT_TO_LEFT threw unknown exception");
+        }
     }
 
     void testSetDrawDirectionTopBottom()
@@ -1229,8 +1392,20 @@ public:
 
         window.setDrawDirection(DrawDirection::TOP_BOTTOM);
 
-        // Should not crash
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            Pixmap& _p = window.getPixmap();
+            CPPUNIT_ASSERT(_p.getWidth() >= 0);
+            CPPUNIT_ASSERT(_p.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("setDrawDirection TOP_BOTTOM threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("setDrawDirection TOP_BOTTOM threw unknown exception");
+        }
     }
 
     void testSetDrawDirectionBottomTop()
@@ -1239,8 +1414,20 @@ public:
 
         window.setDrawDirection(DrawDirection::BOTTOM_TOP);
 
-        // Should not crash
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            Pixmap& _p = window.getPixmap();
+            CPPUNIT_ASSERT(_p.getWidth() >= 0);
+            CPPUNIT_ASSERT(_p.getHeight() >= 0);
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("setDrawDirection BOTTOM_TOP threw: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("setDrawDirection BOTTOM_TOP threw unknown exception");
+        }
     }
 
     void testSetDrawDirectionMultipleTimes()
@@ -1253,7 +1440,7 @@ public:
         window.setDrawDirection(DrawDirection::BOTTOM_TOP);
 
         // Should accept multiple changes
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "setDrawDirection multiple");
     }
 
     void testGetDrawContextReturnsValidContext()
@@ -1269,7 +1456,7 @@ public:
         window.setSize(Size{100, 100});
         context.fillRectangle(color, rect);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "getDrawContext fillRectangle");
     }
 
     void testFillRectangleWithValidColor()
@@ -1282,8 +1469,7 @@ public:
         Rectangle rect{10, 10, 50, 50};
 
         context.fillRectangle(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "fillRectangle valid color");
     }
 
     void testFillRectangleWithTransparentColor()
@@ -1296,8 +1482,7 @@ public:
         Rectangle rect{10, 10, 50, 50};
 
         context.fillRectangle(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "fillRectangle transparent");
     }
 
     void testFillRectangleWithOpaqueColor()
@@ -1310,8 +1495,7 @@ public:
         Rectangle rect{10, 10, 50, 50};
 
         context.fillRectangle(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "fillRectangle opaque");
     }
 
     void testFillRectangleWithZeroSizeRectangle()
@@ -1324,8 +1508,7 @@ public:
         Rectangle rect{10, 10, 0, 0};
 
         context.fillRectangle(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "fillRectangle zero size");
     }
 
     void testFillRectangleWithNegativeCoordinates()
@@ -1338,8 +1521,7 @@ public:
         Rectangle rect{-10, -10, 50, 50};
 
         context.fillRectangle(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "fillRectangle negative coords");
     }
 
     void testFillRectangleWithLargeRectangle()
@@ -1352,8 +1534,7 @@ public:
         Rectangle rect{0, 0, 1920, 1080};
 
         context.fillRectangle(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "fillRectangle large rect");
     }
 
     void testFillRectangleMultipleTimes()
@@ -1371,7 +1552,7 @@ public:
         context.fillRectangle(color2, rect);
         context.fillRectangle(color3, rect);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "fillRectangle multiple");
     }
 
     void testFillRectangleAfterSetSize()
@@ -1388,7 +1569,7 @@ public:
         window.setSize(Size{200, 200});
         context.fillRectangle(color, rect);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "fillRectangle after setSize");
     }
 
     void testDrawUnderlineWithValidColor()
@@ -1401,8 +1582,7 @@ public:
         Rectangle rect{10, 50, 100, 2}; // Thin underline
 
         context.drawUnderline(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawUnderline valid color");
     }
 
     void testDrawUnderlineWithTransparentColor()
@@ -1415,8 +1595,7 @@ public:
         Rectangle rect{10, 50, 100, 2};
 
         context.drawUnderline(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawUnderline transparent color");
     }
 
     void testDrawUnderlineWithOpaqueColor()
@@ -1429,8 +1608,7 @@ public:
         Rectangle rect{10, 50, 100, 2};
 
         context.drawUnderline(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawUnderline opaque color");
     }
 
     void testDrawUnderlineWithThinRectangle()
@@ -1443,8 +1621,7 @@ public:
         Rectangle rect{10, 50, 100, 1}; // 1 pixel height
 
         context.drawUnderline(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawUnderline thin rect");
     }
 
     void testDrawUnderlineWithWideRectangle()
@@ -1457,8 +1634,7 @@ public:
         Rectangle rect{0, 100, 1920, 3}; // Full width underline
 
         context.drawUnderline(color, rect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawUnderline wide rect");
     }
 
     void testDrawUnderlineMultipleTimes()
@@ -1477,7 +1653,7 @@ public:
         context.drawUnderline(color, rect2);
         context.drawUnderline(color, rect3);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawUnderline multiple");
     }
 
     void testDrawUnderlineAfterClear()
@@ -1492,7 +1668,7 @@ public:
         window.clear();
         context.drawUnderline(color, rect);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawUnderline after clear");
     }
 
     void testSetSizeAndUpdateInteraction()
@@ -1590,8 +1766,7 @@ public:
         Rectangle dstRect{10, 10, 10, 10};
 
         context.drawPixmap(bitmap, srcRect, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawPixmap valid bitmap");
     }
 
     void testDrawPixmapWithZeroSizeSource()
@@ -1609,8 +1784,7 @@ public:
         Rectangle dstRect{10, 10, 10, 10};
 
         context.drawPixmap(bitmap, srcRect, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawPixmap zero source");
     }
 
     void testDrawPixmapWithZeroSizeDestination()
@@ -1628,8 +1802,7 @@ public:
         Rectangle dstRect{10, 10, 0, 0}; // Zero size
 
         context.drawPixmap(bitmap, srcRect, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawPixmap zero destination");
     }
 
     void testDrawPixmapWithMatchingSrcDst()
@@ -1647,8 +1820,7 @@ public:
         Rectangle dstRect{50, 50, 20, 20}; // Same size as source
 
         context.drawPixmap(bitmap, srcRect, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawPixmap matching src dst");
     }
 
     void testDrawPixmapWithDifferentSrcDst()
@@ -1666,8 +1838,7 @@ public:
         Rectangle dstRect{50, 50, 40, 40}; // Different size (scaling)
 
         context.drawPixmap(bitmap, srcRect, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawPixmap different src dst");
     }
 
     void testDrawPixmapMultipleTimes()
@@ -1687,7 +1858,7 @@ public:
         context.drawPixmap(bitmap, srcRect, Rectangle{30, 30, 10, 10});
         context.drawPixmap(bitmap, srcRect, Rectangle{50, 50, 10, 10});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawPixmap multiple");
     }
 
     void testDrawPixmapAfterUpdate()
@@ -1707,8 +1878,7 @@ public:
         Rectangle dstRect{10, 10, 10, 10};
 
         context.drawPixmap(bitmap, srcRect, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawPixmap after update");
     }
 
     void testDrawBitmapWithValidBitmap()
@@ -1722,8 +1892,7 @@ public:
         Rectangle dstRect{10, 10, 10, 10};
 
         context.drawBitmap(bitmap, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawBitmap valid");
     }
 
     void testDrawBitmapWithSmallBitmap()
@@ -1737,8 +1906,7 @@ public:
         Rectangle dstRect{10, 10, 1, 1};
 
         context.drawBitmap(bitmap, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawBitmap small");
     }
 
     void testDrawBitmapWithLargeBitmap()
@@ -1752,8 +1920,7 @@ public:
         Rectangle dstRect{0, 0, 100, 100};
 
         context.drawBitmap(bitmap, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawBitmap large");
     }
 
     void testDrawBitmapMultipleTimes()
@@ -1769,7 +1936,7 @@ public:
         context.drawBitmap(bitmap, Rectangle{40, 40, 20, 20});
         context.drawBitmap(bitmap, Rectangle{70, 70, 20, 20});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawBitmap multiple");
     }
 
     void testDrawBitmapAtDifferentPositions()
@@ -1785,7 +1952,7 @@ public:
         context.drawBitmap(bitmap, Rectangle{100, 100, 15, 15});
         context.drawBitmap(bitmap, Rectangle{50, 150, 15, 15});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawBitmap positions");
     }
 
     void testDrawBitmapAfterClear()
@@ -1801,8 +1968,7 @@ public:
         Rectangle dstRect{10, 10, 10, 10};
 
         context.drawBitmap(bitmap, dstRect);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawBitmap after clear");
     }
 
     void testDrawGlyphWithValidFontStrip()
@@ -1820,8 +1986,7 @@ public:
         Rectangle rect{10, 10, 16, 16};
 
         context.drawGlyph(fontStrip, 0, rect, fgColor, bgColor);
-
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawGlyph valid fontstrip");
     }
 
     void testDrawGlyphWithNullFontStripThrows()
@@ -1856,7 +2021,7 @@ public:
 
         context.drawGlyph(fontStrip, 0, rect, fgColor, bgColor);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawGlyph single");
     }
 
     void testDrawGlyphWithMultipleIndices()
@@ -1875,7 +2040,7 @@ public:
         context.drawGlyph(fontStrip, 1, Rectangle{30, 10, 16, 16}, fgColor, bgColor);
         context.drawGlyph(fontStrip, 2, Rectangle{50, 10, 16, 16}, fgColor, bgColor);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawGlyph multiple indices");
     }
 
     void testDrawGlyphWithTransparentForeground()
@@ -1893,7 +2058,7 @@ public:
 
         context.drawGlyph(fontStrip, 0, rect, fgColor, bgColor);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawGlyph transparent fg");
     }
 
     void testDrawGlyphWithTransparentBackground()
@@ -1911,7 +2076,7 @@ public:
 
         context.drawGlyph(fontStrip, 0, rect, fgColor, bgColor);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawGlyph transparent bg");
     }
 
     void testDrawGlyphMultipleTimes()
@@ -1932,7 +2097,7 @@ public:
             context.drawGlyph(fontStrip, i, rect, fgColor, bgColor);
         }
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawGlyph multiple times");
     }
 
     void testDrawGlyphAfterSetSize()
@@ -1952,7 +2117,7 @@ public:
 
         context.drawGlyph(fontStrip, 0, rect, fgColor, bgColor);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawGlyph after setSize");
     }
 
     void testFillRectangleThenDrawUnderline()
@@ -1970,7 +2135,7 @@ public:
         Rectangle underlineRect{10, 58, 100, 2};
         context.drawUnderline(underlineColor, underlineRect);
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "fillRectangle then drawUnderline");
     }
 
     void testMultipleDrawingOperationsSequence()
@@ -1991,7 +2156,7 @@ public:
         // Draw underlines
         context.drawUnderline(ColorArgb(255, 0, 0, 0), Rectangle{10, 70, 170, 2});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "multiple drawing sequence");
     }
 
     void testDrawingOperationsWithUpdate()
@@ -2060,7 +2225,7 @@ public:
         context.fillRectangle(ColorArgb(255, 0, 255, 0), Rectangle{10, 10, 50, 50});
         context.drawUnderline(ColorArgb(255, 0, 0, 0), Rectangle{10, 70, 50, 2});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawing after clear");
     }
 
     void testConcurrentSurfaceOperations()
@@ -2085,7 +2250,7 @@ public:
         // Final drawing
         context.fillRectangle(ColorArgb(255, 0, 0, 255), Rectangle{130, 10, 50, 50});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "concurrent surface operations");
     }
 
     void testDrawContextPersistence()
@@ -2100,7 +2265,7 @@ public:
         context1.fillRectangle(ColorArgb(255, 255, 0, 0), Rectangle{10, 10, 50, 50});
         context2.fillRectangle(ColorArgb(255, 0, 255, 0), Rectangle{70, 10, 50, 50});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawContext persistence");
     }
 
     void testPreferredSizeAndActualSizeInteraction()
@@ -2220,7 +2385,7 @@ public:
         window.setDrawDirection(DrawDirection::BOTTOM_TOP);
         context.fillRectangle(ColorArgb(255, 0, 255, 0), Rectangle{70, 10, 50, 50});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "draw direction persistence");
     }
 
     void testBoundsConsistencyAfterOperations()
@@ -2332,7 +2497,7 @@ public:
         DrawContext& context = window.getDrawContext();
         context.fillRectangle(ColorArgb(255, 255, 0, 0), Rectangle{10, 10, 50, 50});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "recover from multiple clear calls");
     }
 
     void testRecoverFromMultipleUpdateCalls()

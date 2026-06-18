@@ -45,6 +45,8 @@ CPPUNIT_TEST_SUITE( ObjectTablePoolTest );
     CPPUNIT_TEST(testDifferentTemplateTypes);
     CPPUNIT_TEST(testComplexScenarios);
     CPPUNIT_TEST(testHighFrequencyOperations);
+    CPPUNIT_TEST(testObjectStateResetAfterReuse);
+    CPPUNIT_TEST(testOverfillWithUniqueIDs);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -710,6 +712,51 @@ public:
         }
         CPPUNIT_ASSERT(pool.getCount() == POOL_SIZE);
         CPPUNIT_ASSERT(pool.canAdd() == false);
+    }
+
+    void testObjectStateResetAfterReuse()
+    {
+        const std::size_t POOL_SIZE = 3;
+        ObjectTablePool<ComplexItem, IdType, POOL_SIZE> pool;
+        std::vector<ComplexItem*> objects;
+        // Add objects and mutate fields
+        for (IdType i = 0; i < POOL_SIZE; ++i) {
+            auto obj = pool.add(i);
+            CPPUNIT_ASSERT(obj);
+            obj->value = 9999 + i;
+            obj->name = "changed";
+            objects.push_back(obj);
+        }
+        pool.reset();
+        // Re-add with new IDs, check all fields are reset
+        for (IdType i = 0; i < POOL_SIZE; ++i) {
+            auto obj = pool.add(i + 100);
+            CPPUNIT_ASSERT(obj);
+            CPPUNIT_ASSERT(obj->value == 123); // default
+            CPPUNIT_ASSERT(obj->name == "default"); // default
+            CPPUNIT_ASSERT(obj->getId() == i + 100);
+        }
+    }
+
+    void testOverfillWithUniqueIDs()
+    {
+        const std::size_t POOL_SIZE = 5;
+        ObjectTablePool<PoolItem, IdType, POOL_SIZE> pool;
+        std::vector<PoolItem*> objects;
+        for (IdType i = 0; i < POOL_SIZE; ++i) {
+            auto obj = pool.add(i);
+            CPPUNIT_ASSERT(obj);
+            objects.push_back(obj);
+        }
+
+        // Attempt to add one more unique ID
+        auto extra = pool.add(POOL_SIZE + 100);
+        CPPUNIT_ASSERT(extra == nullptr);
+        CPPUNIT_ASSERT(pool.getCount() == POOL_SIZE);
+        // All original objects should still be present
+        for (IdType i = 0; i < POOL_SIZE; ++i) {
+            CPPUNIT_ASSERT(pool.getById(i) == objects[i]);
+        }
     }
 
 private:

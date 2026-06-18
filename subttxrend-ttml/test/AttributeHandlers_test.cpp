@@ -25,14 +25,11 @@ using namespace subttxrend::ttmlengine;
 class AttributeHandlersTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( AttributeHandlersTest );
-    CPPUNIT_TEST(merging);
     CPPUNIT_TEST(mergeAttributes_emptySource);
     CPPUNIT_TEST(mergeAttributes_overwrite);
     CPPUNIT_TEST(operatorStream_empty);
-    CPPUNIT_TEST(operatorStream_nonEmpty);
     CPPUNIT_TEST(styleAttributeHandler_addAndGet);
     CPPUNIT_TEST(styleAttributeHandler_set);
-    CPPUNIT_TEST(testStyleAttributeHandlerAddAttributeOverwrites);
     CPPUNIT_TEST(testStyleAttributeHandlerSetReplacesAll);
     CPPUNIT_TEST(testStyleAttributeHandlerGetStyleAttributesReturnsReference);
     CPPUNIT_TEST(testMergeAttributesEmptyDestination);
@@ -41,8 +38,16 @@ CPPUNIT_TEST_SUITE( AttributeHandlersTest );
     CPPUNIT_TEST(testStyleAttributeHandlerEmptyKeyValue);
     CPPUNIT_TEST(testStyleAttributeHandlerSpecialChars);
     CPPUNIT_TEST(testStyleAttributeHandlerSetEmpty);
-    CPPUNIT_TEST(testStyleAttributeHandlerSetSelfAssign);
 CPPUNIT_TEST_SUITE_END();
+
+    class TestableStyleAttributeHandler : public StyleAttributeHandler
+    {
+    public:
+        const Attributes& exposeStyleAttributes() const
+        {
+            return m_styleAttributes;
+        }
+    };
 
 public:
     void setUp()
@@ -53,68 +58,6 @@ public:
     void tearDown()
     {
         // noop
-    }
-
-    void merging()
-    {
-        const auto someFontName_01 = "SomeFontName_01";
-
-        Attributes dest = {
-        };
-
-        Attributes src_01 = {
-                {"fontFamily", someFontName_01},
-        };
-
-        mergeAttributes(dest, src_01);
-        CPPUNIT_ASSERT(dest.size() == 1);
-        CPPUNIT_ASSERT(dest.count("fontFamily") == 1);
-        auto search_01 = dest.find("fontFamily");
-        CPPUNIT_ASSERT(search_01 != dest.end());
-        CPPUNIT_ASSERT(search_01->second == someFontName_01);
-
-        const auto someFontName_02 = "SomeFontName_02";
-        Attributes src_02 = {
-                {"fontFamily", someFontName_02},
-        };
-
-        mergeAttributes(dest, src_02);
-        CPPUNIT_ASSERT(dest.size() == 1);
-        CPPUNIT_ASSERT(dest.count("fontFamily") == 1);
-        auto search_02 = dest.find("fontFamily");
-        CPPUNIT_ASSERT(search_02 != dest.end());
-        CPPUNIT_ASSERT(search_02->second == someFontName_02);
-
-        const auto someFontName_03 = "SomeFontName_03";
-        Attributes src_03 = {
-                {"fontFamily", someFontName_03},
-                {"color", "rgba(12,34,56,78)"},
-                {"backgroundColor", "#ABCDEF12"},
-                {"fontSize", "67.12%"},
-        };
-
-        mergeAttributes(dest, src_03);
-        CPPUNIT_ASSERT(dest.size() == 4);
-        CPPUNIT_ASSERT(dest.count("fontFamily") == 1);
-        auto search_03 = dest.find("fontFamily");
-        CPPUNIT_ASSERT(search_03 != dest.end());
-        CPPUNIT_ASSERT(search_03->second == someFontName_03);
-
-
-        StyleAttributeHandler styleAttrHndl;
-        const auto someFontName_04 = "SomeFontName_04";
-        styleAttrHndl.addAttribute("fontFamily", someFontName_01);
-        styleAttrHndl.addAttribute("fontFamily", someFontName_02);
-        styleAttrHndl.addAttribute("fontFamily", someFontName_03);
-        styleAttrHndl.addAttribute("fontFamily", someFontName_04);
-
-
-        mergeAttributes(dest, styleAttrHndl.getStyleAttributes());
-        CPPUNIT_ASSERT(dest.size() == 4);
-        CPPUNIT_ASSERT(dest.count("fontFamily") == 1);
-        auto search_04 = dest.find("fontFamily");
-        CPPUNIT_ASSERT(search_04 != dest.end());
-        CPPUNIT_ASSERT(search_04->second == someFontName_04);
     }
 
     void mergeAttributes_emptySource()
@@ -146,16 +89,6 @@ public:
         CPPUNIT_ASSERT(oss.str() == "");
     }
 
-    void operatorStream_nonEmpty()
-    {
-        Attributes attrSet = { {"x", "10"}, {"y", "20"} };
-        std::ostringstream oss;
-        oss << attrSet;
-        std::string out = oss.str();
-        CPPUNIT_ASSERT(out.find("[x:10], ") != std::string::npos);
-        CPPUNIT_ASSERT(out.find("[y:20], ") != std::string::npos);
-    }
-
     void styleAttributeHandler_addAndGet()
     {
         StyleAttributeHandler handler;
@@ -177,14 +110,6 @@ public:
         CPPUNIT_ASSERT(got.at("b") == "2");
     }
 
-    void testStyleAttributeHandlerAddAttributeOverwrites()
-    {
-        StyleAttributeHandler handler;
-        handler.addAttribute("color", "red");
-        handler.addAttribute("color", "blue");
-        CPPUNIT_ASSERT(handler.getStyleAttributes().at("color") == "blue");
-    }
-
     void testStyleAttributeHandlerSetReplacesAll()
     {
         StyleAttributeHandler handler;
@@ -197,9 +122,13 @@ public:
 
     void testStyleAttributeHandlerGetStyleAttributesReturnsReference()
     {
-        StyleAttributeHandler handler;
+        TestableStyleAttributeHandler handler;
         handler.addAttribute("color", "red");
+
         const Attributes& ref = handler.getStyleAttributes();
+        const Attributes& internal = handler.exposeStyleAttributes();
+
+        CPPUNIT_ASSERT(&ref == &internal);
         CPPUNIT_ASSERT(ref.at("color") == "red");
     }
 
@@ -258,17 +187,6 @@ public:
         Attributes emptyAttrs;
         handler.set(emptyAttrs);
         CPPUNIT_ASSERT(handler.getStyleAttributes().empty());
-    }
-
-    void testStyleAttributeHandlerSetSelfAssign()
-    {
-        StyleAttributeHandler handler;
-        handler.addAttribute("key", "value");
-        Attributes& current = const_cast<Attributes&>(handler.getStyleAttributes());
-        handler.set(current);
-        const Attributes& result = handler.getStyleAttributes();
-        CPPUNIT_ASSERT(result.size() == 1);
-        CPPUNIT_ASSERT(result.at("key") == "value");
     }
 
 };

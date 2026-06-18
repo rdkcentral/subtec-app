@@ -123,7 +123,7 @@ CPPUNIT_TEST_SUITE( PacketTest );
     CPPUNIT_TEST(testProtocolComplianceFieldOrdering);
     CPPUNIT_TEST(testProtocolComplianceLittleEndianConsistency);
     CPPUNIT_TEST(testMemorySafetyLargeSizeValue);
-    CPPUNIT_TEST(testMemorySafetySequentialReuseNoLeaks);
+    CPPUNIT_TEST(testSequentialReuseUpdatesParsedState);
     CPPUNIT_TEST(testIntegrationStaticHelpersCombined);
     CPPUNIT_TEST(testIntegrationParseWithAllStaticHelpers);
 CPPUNIT_TEST_SUITE_END();
@@ -296,9 +296,38 @@ public:
         CPPUNIT_ASSERT(Packet::isDataPacket(Packet::Type::INVALID) == false);
     }
 
+    void testIsDataPacketViaParse()
+    {
+        // Construct a header for WEBVTT_DATA and verify getType() + isDataPacket() work together
+        std::uint32_t webvttType = static_cast<std::uint32_t>(Packet::Type::WEBVTT_DATA);
+        std::uint8_t packetHeader[12] = {0};
+        // write little-endian type into first 4 bytes
+        packetHeader[0] = static_cast<std::uint8_t>(webvttType & 0xFF);
+        packetHeader[1] = static_cast<std::uint8_t>((webvttType >> 8) & 0xFF);
+        packetHeader[2] = static_cast<std::uint8_t>((webvttType >> 16) & 0xFF);
+        packetHeader[3] = static_cast<std::uint8_t>((webvttType >> 24) & 0xFF);
+
+        DataBuffer buffer(std::begin(packetHeader), std::end(packetHeader));
+
+        Packet::Type type = Packet::getType(buffer);
+        CPPUNIT_ASSERT(type == Packet::Type::WEBVTT_DATA);
+        CPPUNIT_ASSERT(Packet::isDataPacket(type) == true);
+    }
+
     void testGetHeaderSize()
     {
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), Packet::getHeaderSize());
+        // Also verify that parsing fails when buffer is smaller than header size
+        std::uint8_t tooSmall[11] = {0};
+        DataBufferPtr b1 = std::make_unique<DataBuffer>(std::begin(tooSmall), std::end(tooSmall));
+        PacketResetAll pSmall;
+        CPPUNIT_ASSERT(pSmall.parse(std::move(b1)) == false);
+
+        // Buffer exactly header size but invalid/zeroed -> parse should still fail
+        std::uint8_t headerOnly[12] = {0};
+        DataBufferPtr b2 = std::make_unique<DataBuffer>(std::begin(headerOnly), std::end(headerOnly));
+        PacketResetAll pHeader;
+        CPPUNIT_ASSERT(pHeader.parse(std::move(b2)) == false);
     }
 
     void testGetSizeFromHeader()
@@ -1386,9 +1415,9 @@ public:
         CPPUNIT_ASSERT(packet.isValid() == false);
     }
 
-    void testMemorySafetySequentialReuseNoLeaks()
+    void testSequentialReuseUpdatesParsedState()
     {
-        // Test packet object reuse doesn't cause memory issues
+        // Reusing the same packet object should refresh parsed state.
         PacketResetChannel packet;
 
         for (int i = 0; i < 5; ++i) {

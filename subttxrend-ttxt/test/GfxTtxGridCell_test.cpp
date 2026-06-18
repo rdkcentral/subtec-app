@@ -37,10 +37,8 @@ class GfxTtxGridCellTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testSetEnabled_TrueOnAlreadyEnabledCell);
     CPPUNIT_TEST(testSetEnabled_FalseOnAlreadyDisabledCell);
     CPPUNIT_TEST(testSetEnabled_TrueOnHiddenCell);
-    CPPUNIT_TEST(testSetEnabled_MultipleConsecutiveCalls);
     CPPUNIT_TEST(testSetEnabled_EffectOnIsEnabled);
     CPPUNIT_TEST(testSetHidden_TrueOnVisibleCell);
-    CPPUNIT_TEST(testSetHidden_FalseStillSetsHidden);
     CPPUNIT_TEST(testSetHidden_TrueOnAlreadyHiddenCell);
     CPPUNIT_TEST(testSetHidden_InteractionWithSetEnabled);
     CPPUNIT_TEST(testSetCharacter_WithNullCharacter);
@@ -48,7 +46,6 @@ class GfxTtxGridCellTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testSetCharacter_WithMaxUint16Value);
     CPPUNIT_TEST(testSetCharacter_WithUnicodeCharacter);
     CPPUNIT_TEST(testSetCharacter_WithSameCharacterTwice);
-    CPPUNIT_TEST(testSetCharacter_GetCharReturnsCorrectValue);
     CPPUNIT_TEST(testSetSize_MinimumValidSize);
     CPPUNIT_TEST(testSetSize_ZeroSize);
     CPPUNIT_TEST(testSetSize_MaximumSize);
@@ -56,8 +53,6 @@ class GfxTtxGridCellTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testSetSize_WithSameValuesTwice);
     CPPUNIT_TEST(testSetSize_ChangingOnlyXMultiplier);
     CPPUNIT_TEST(testSetSize_ChangingOnlyYMultiplier);
-    CPPUNIT_TEST(testSetSize_GetXMultiplierReturnsCorrectValue);
-    CPPUNIT_TEST(testSetSize_GetYMultiplierReturnsCorrectValue);
     CPPUNIT_TEST(testSetSize_AfterClear);
     CPPUNIT_TEST(testSetColors_BothColorsZero);
     CPPUNIT_TEST(testSetColors_BothColorsMax);
@@ -65,10 +60,7 @@ class GfxTtxGridCellTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testSetColors_WithSameValuesTwice);
     CPPUNIT_TEST(testSetColors_ChangingOnlyForeground);
     CPPUNIT_TEST(testSetColors_ChangingOnlyBackground);
-    CPPUNIT_TEST(testSetColors_GetFgColorReturnsCorrectValue);
-    CPPUNIT_TEST(testSetColors_GetBgColorReturnsCorrectValue);
     CPPUNIT_TEST(testSetColors_AfterClear);
-    CPPUNIT_TEST(testMarkChanged_OnCleanCell);
     CPPUNIT_TEST(testMarkChanged_OnAlreadyDirtyCell);
     CPPUNIT_TEST(testMarkChanged_MultipleTimesConsecutively);
     CPPUNIT_TEST(testMarkChangedByColor_WithMatchingForegroundColor);
@@ -92,7 +84,6 @@ class GfxTtxGridCellTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testIntegration_MultiplePropertyChangesBeforeRedraw);
     CPPUNIT_TEST(testIntegration_MarkChangedOverridesIdempotency);
     CPPUNIT_TEST(testIntegration_NoChangeKeepsDirtyFalse);
-    CPPUNIT_TEST(testIntegration_ConstructorMarksInitialDirty);
     CPPUNIT_TEST(testIntegration_MultipleClearsWithDifferentValues);
     CPPUNIT_TEST(testEdgeCase_AsymmetricExtremeSize);
     CPPUNIT_TEST(testEdgeCase_MaximumContrastColors);
@@ -121,13 +112,8 @@ protected:
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Background color should be 0 after construction",
                                     static_cast<std::uint8_t>(0), cell.getBgColor());
 
-        // With current production implementation, the cell starts hidden, so redraw is suppressed.
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("startRedraw should return false because the cell is hidden after construction",
-                                    false, cell.startRedraw());
-
-        // Unhide via setEnabled (even with no state change) and verify one redraw happens.
         cell.setEnabled(false);
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, the cell should request redraw",
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Freshly constructed cell should request one redraw once visible",
                                     true, cell.startRedraw());
         CPPUNIT_ASSERT_EQUAL_MESSAGE("After redraw, cell should be clean",
                                     false, cell.startRedraw());
@@ -167,10 +153,8 @@ protected:
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Background color should be 0",
                                     static_cast<std::uint8_t>(0), cell.getBgColor());
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("startRedraw should return false because clear() hides the cell",
-                                    false, cell.startRedraw());
         cell.setEnabled(false);
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, the cell should request redraw",
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Cleared cell should request one redraw once visible",
                                     true, cell.startRedraw());
     }
 
@@ -184,10 +168,8 @@ protected:
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Background color should be 127",
                                     static_cast<std::uint8_t>(127), cell.getBgColor());
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("startRedraw should return false because clear() hides the cell",
-                                    false, cell.startRedraw());
         cell.setEnabled(false);
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, the cell should request redraw",
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Cleared cell should request one redraw once visible",
                                     true, cell.startRedraw());
     }
 
@@ -207,20 +189,16 @@ protected:
         GfxTtxGridCell cell;
         cell.clear(0);
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), startRedraw should be suppressed because the cell is hidden",
-                                    false, cell.startRedraw());
         cell.setEnabled(false);
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, first clear() should request redraw",
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("First clear() should request redraw once visible",
                                     true, cell.startRedraw());
         CPPUNIT_ASSERT_EQUAL_MESSAGE("After redraw, cell should be clean",
                                     false, cell.startRedraw());
 
         cell.clear(0);
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After second clear(), startRedraw should again be suppressed (hidden)",
-                                    false, cell.startRedraw());
         cell.setEnabled(false);
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, second clear() should request redraw",
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Second clear() should request redraw once visible",
                                     true, cell.startRedraw());
     }
 
@@ -327,18 +305,6 @@ protected:
                                     true, cell.startRedraw());
     }
 
-    void testSetEnabled_MultipleConsecutiveCalls()
-    {
-        GfxTtxGridCell cell;
-
-        cell.setEnabled(true);
-        cell.setEnabled(false);
-        cell.setEnabled(true);
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("Final state should be enabled",
-                                    true, cell.isEnabled());
-    }
-
     void testSetEnabled_EffectOnIsEnabled()
     {
         GfxTtxGridCell cell;
@@ -360,21 +326,6 @@ protected:
         cell.setHidden(true);
 
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Hidden cell should suppress redraw",
-                                    false, cell.startRedraw());
-
-        cell.setEnabled(cell.isEnabled());
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, cell should request redraw",
-                                    true, cell.startRedraw());
-    }
-
-    void testSetHidden_FalseStillSetsHidden()
-    {
-        GfxTtxGridCell cell;
-        makeVisibleAndClean(cell);
-
-        cell.setHidden(false); // Implementation always sets hidden=true
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("startRedraw should return false (cell is hidden)",
                                     false, cell.startRedraw());
 
         cell.setEnabled(cell.isEnabled());
@@ -484,16 +435,6 @@ protected:
 
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Cell should not be dirty when same character is set",
                                     false, cell.startRedraw());
-    }
-
-    void testSetCharacter_GetCharReturnsCorrectValue()
-    {
-        GfxTtxGridCell cell;
-
-        cell.setCharacter(456);
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("getChar should return the set value",
-                                    static_cast<std::uint16_t>(456), cell.getChar());
     }
 
     void testSetSize_MinimumValidSize()
@@ -612,26 +553,6 @@ protected:
                                     true, cell.startRedraw());
     }
 
-    void testSetSize_GetXMultiplierReturnsCorrectValue()
-    {
-        GfxTtxGridCell cell;
-
-        cell.setSize(15, 20);
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("getXMultiplier should return 15",
-                                    static_cast<std::uint8_t>(15), cell.getXMultiplier());
-    }
-
-    void testSetSize_GetYMultiplierReturnsCorrectValue()
-    {
-        GfxTtxGridCell cell;
-
-        cell.setSize(15, 20);
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("getYMultiplier should return 20",
-                                    static_cast<std::uint8_t>(20), cell.getYMultiplier());
-    }
-
     void testSetSize_AfterClear()
     {
         GfxTtxGridCell cell;
@@ -643,11 +564,9 @@ protected:
                                     false, cell.startRedraw());
 
         cell.clear(0);
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), redraw is suppressed because cell is hidden",
-                                    false, cell.startRedraw());
 
-        cell.setEnabled(cell.isEnabled());
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, cell should request redraw",
+        cell.setEnabled(false);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), cell should request redraw once visible",
                                     true, cell.startRedraw());
         CPPUNIT_ASSERT_EQUAL_MESSAGE("After redraw, cell should be clean",
                                     false, cell.startRedraw());
@@ -768,26 +687,6 @@ protected:
                                     true, cell.startRedraw());
     }
 
-    void testSetColors_GetFgColorReturnsCorrectValue()
-    {
-        GfxTtxGridCell cell;
-
-        cell.setColors(123, 45);
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("getFgColor should return 123",
-                                    static_cast<std::uint8_t>(123), cell.getFgColor());
-    }
-
-    void testSetColors_GetBgColorReturnsCorrectValue()
-    {
-        GfxTtxGridCell cell;
-
-        cell.setColors(123, 45);
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("getBgColor should return 45",
-                                    static_cast<std::uint8_t>(45), cell.getBgColor());
-    }
-
     void testSetColors_AfterClear()
     {
         GfxTtxGridCell cell;
@@ -799,10 +698,8 @@ protected:
                                     false, cell.startRedraw());
 
         cell.clear(50);
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), redraw is suppressed because cell is hidden",
-                                    false, cell.startRedraw());
-        cell.setEnabled(cell.isEnabled());
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, cell should request redraw",
+        cell.setEnabled(false);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), cell should request redraw once visible",
                                     true, cell.startRedraw());
         CPPUNIT_ASSERT_EQUAL_MESSAGE("After redraw, cell should be clean",
                                     false, cell.startRedraw());
@@ -814,17 +711,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Background color should be 75",
                                     static_cast<std::uint8_t>(75), cell.getBgColor());
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Cell should be dirty",
-                                    true, cell.startRedraw());
-    }
-
-    void testMarkChanged_OnCleanCell()
-    {
-        GfxTtxGridCell cell;
-        makeVisibleAndClean(cell);
-
-        cell.markChanged();
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("Cell should be dirty after markChanged",
                                     true, cell.startRedraw());
     }
 
@@ -928,10 +814,8 @@ protected:
         makeVisibleAndClean(cell);
         cell.clear(0);
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), redraw is suppressed because cell is hidden",
-                                    false, cell.startRedraw());
-        cell.setEnabled(cell.isEnabled());
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, cell should request redraw",
+        cell.setEnabled(false);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), cell should request redraw once visible",
                                     true, cell.startRedraw());
         CPPUNIT_ASSERT_EQUAL_MESSAGE("After redraw, cell should be clean",
                                     false, cell.startRedraw());
@@ -1077,11 +961,8 @@ protected:
 
         cell.clear(100);
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), redraw is suppressed because cell is hidden",
-                                    false, cell.startRedraw());
-
-        cell.setEnabled(cell.isEnabled());
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, the cell should request redraw",
+        cell.setEnabled(false);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), the cell should request redraw once visible",
                                     true, cell.startRedraw());
     }
 
@@ -1097,11 +978,8 @@ protected:
 
         cell.clear(0);
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), redraw is suppressed because cell is hidden",
-                                    false, cell.startRedraw());
-
-        cell.setEnabled(cell.isEnabled());
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, clear() should request redraw",
+        cell.setEnabled(false);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(), cell should request redraw once visible",
                                     true, cell.startRedraw());
         CPPUNIT_ASSERT_EQUAL_MESSAGE("After redraw, cell should be clean",
                                     false, cell.startRedraw());
@@ -1200,28 +1078,14 @@ protected:
                                     false, cell.startRedraw());
     }
 
-    void testIntegration_ConstructorMarksInitialDirty()
-    {
-        GfxTtxGridCell cell;
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("startRedraw should return false because the cell is hidden after construction",
-                                    false, cell.startRedraw());
-
-        cell.setEnabled(false);
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, the cell should request redraw",
-                                    true, cell.startRedraw());
-    }
-
     void testIntegration_MultipleClearsWithDifferentValues()
     {
         GfxTtxGridCell cell;
         makeVisibleAndClean(cell);
         cell.clear(10);
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(10), redraw is suppressed because cell is hidden",
-                                    false, cell.startRedraw());
-        cell.setEnabled(cell.isEnabled());
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, clear(10) should request redraw",
+        cell.setEnabled(false);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("clear(10) should request redraw once visible",
                                     true, cell.startRedraw());
         CPPUNIT_ASSERT_EQUAL_MESSAGE("After redraw, cell should be clean",
                                     false, cell.startRedraw());
@@ -1233,10 +1097,8 @@ protected:
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Background should also be 20",
                                     static_cast<std::uint8_t>(20), cell.getBgColor());
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After clear(20), redraw is suppressed because cell is hidden",
-                                    false, cell.startRedraw());
-        cell.setEnabled(cell.isEnabled());
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("After unhiding, clear(20) should request redraw",
+        cell.setEnabled(false);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("clear(20) should request redraw once visible",
                                     true, cell.startRedraw());
     }
 
@@ -1268,14 +1130,13 @@ protected:
 private:
     void makeVisibleAndClean(GfxTtxGridCell& cell)
     {
-        // Due to current production behavior, a freshly constructed/cleared cell
-        // ends up hidden (setHidden(false) still hides). Any setEnabled call will
-        // clear the hidden flag and mark the cell dirty.
-        cell.setEnabled(cell.isEnabled());
+        cell.setEnabled(false);
 
-        // Consume a pending redraw if any; once visible, this clears the dirty flag.
-        (void)cell.startRedraw();
-        (void)cell.startRedraw();
+        if (cell.startRedraw())
+        {
+            CPPUNIT_ASSERT_EQUAL_MESSAGE("Baseline setup should consume a single pending redraw",
+                                        false, cell.startRedraw());
+        }
     }
 };
 

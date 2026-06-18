@@ -26,7 +26,6 @@ using namespace subttxrend::ttxt;
 class CharsetHandlerTest : public CppUnit::TestFixture
 {
     CPPUNIT_TEST_SUITE(CharsetHandlerTest);
-
     CPPUNIT_TEST(testDefaultConstructor);
     CPPUNIT_TEST(testCharA_WithGrave);
     CPPUNIT_TEST(testCharA_WithAcute);
@@ -68,12 +67,10 @@ class CharsetHandlerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCharLowerA_WithGrave);
     CPPUNIT_TEST(testCharLowerA_WithAcute);
     CPPUNIT_TEST(testCharLowerA_WithRing);
-    CPPUNIT_TEST(testCharB_WithAnyDiacritic_ReturnsUnchanged);
-    CPPUNIT_TEST(testCharF_WithAnyDiacritic_ReturnsUnchanged);
-    CPPUNIT_TEST(testCharM_WithAnyDiacritic_ReturnsUnchanged);
-    CPPUNIT_TEST(testZeroCharacter_WithDiacritic_ReturnsUnchanged);
-    CPPUNIT_TEST(testSpaceCharacter_WithDiacritic_ReturnsUnchanged);
-    CPPUNIT_TEST(testDigitZero_WithDiacritic_ReturnsUnchanged);
+    CPPUNIT_TEST(testCharLowerA_AdditionalMappings);
+    CPPUNIT_TEST(testUnsupportedBaseCharactersRemainUnchanged);
+    CPPUNIT_TEST(testUnsupportedCharactersRemainUnchanged);
+    CPPUNIT_TEST(testUnsupportedDiacriticsRemainUnchanged);
     CPPUNIT_TEST(testCharG_WithAcute);
     CPPUNIT_TEST(testCharG_WithCircumflex);
     CPPUNIT_TEST(testCharG_WithBreve);
@@ -160,6 +157,7 @@ class CharsetHandlerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCharLowerG_WithCedilla);
     CPPUNIT_TEST(testCharLowerH_WithCircumflex);
     CPPUNIT_TEST(testCharLowerH_WithCaron);
+    CPPUNIT_TEST(testCharLowerI_AdditionalMappings);
     CPPUNIT_TEST(testCharLowerI_WithCircumflex);
     CPPUNIT_TEST(testCharLowerI_WithTilde);
     CPPUNIT_TEST(testCharLowerI_WithMacron);
@@ -173,15 +171,12 @@ class CharsetHandlerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCharLowerL_WithAcute);
     CPPUNIT_TEST(testCharLowerL_WithCedilla);
     CPPUNIT_TEST(testCharLowerL_WithCaron);
-    CPPUNIT_TEST(testCharA_WithDoubleAcute_ReturnsUnchanged);
-    CPPUNIT_TEST(testCharD_WithAcute_ReturnsUnchanged);
-    CPPUNIT_TEST(testCharP_WithAnyDiacritic_ReturnsUnchanged);
-    CPPUNIT_TEST(testCharQ_WithAnyDiacritic_ReturnsUnchanged);
     CPPUNIT_TEST(testCharLowerN_WithGrave);
     CPPUNIT_TEST(testCharLowerN_WithAcute);
     CPPUNIT_TEST(testCharLowerN_WithTilde);
     CPPUNIT_TEST(testCharLowerN_WithCedilla);
     CPPUNIT_TEST(testCharLowerN_WithCaron);
+    CPPUNIT_TEST(testCharLowerO_AdditionalMappings);
     CPPUNIT_TEST(testCharLowerO_WithGrave);
     CPPUNIT_TEST(testCharLowerO_WithAcute);
     CPPUNIT_TEST(testCharLowerO_WithCircumflex);
@@ -197,12 +192,15 @@ class CharsetHandlerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCharLowerS_WithCaron);
     CPPUNIT_TEST(testCharLowerT_WithCedilla);
     CPPUNIT_TEST(testCharLowerT_WithCaron);
+    CPPUNIT_TEST(testCharLowerU_AdditionalMappings);
     CPPUNIT_TEST(testCharLowerU_WithGrave);
     CPPUNIT_TEST(testCharLowerU_WithAcute);
     CPPUNIT_TEST(testCharLowerU_WithCircumflex);
     CPPUNIT_TEST(testCharLowerU_WithUmlaut);
     CPPUNIT_TEST(testCharLowerU_WithRing);
     CPPUNIT_TEST(testCharLowerU_WithDoubleAcute);
+    CPPUNIT_TEST(testCharLowerW_Mappings);
+    CPPUNIT_TEST(testCharLowerY_AdditionalMappings);
     CPPUNIT_TEST(testCharLowerY_WithAcute);
     CPPUNIT_TEST(testCharLowerY_WithUmlaut);
     CPPUNIT_TEST(testCharLowerZ_WithAcute);
@@ -221,12 +219,32 @@ public:
     }
 
 protected:
+    void assertDiacriticCharacterCode(std::uint16_t character,
+                                      std::uint16_t diacriticProperty,
+                                      std::uint16_t expectedCharacter)
+    {
+        const auto result = CharsetHandler::getDiacriticCharacterCode(
+            character, diacriticProperty);
+        CPPUNIT_ASSERT_EQUAL(expectedCharacter, result);
+    }
+
+    template <std::size_t N>
+    void assertUnchangedForDiacritics(std::uint16_t character,
+                                      const std::uint16_t (&diacritics)[N])
+    {
+        for (const auto diacriticProperty : diacritics)
+        {
+            assertDiacriticCharacterCode(character, diacriticProperty, character);
+        }
+    }
+
     void testDefaultConstructor()
     {
         CharsetHandler handler;
-        // Constructor should complete without exceptions
-        // No meaningful state to verify for default constructor
-        CPPUNIT_ASSERT(true);
+
+        const auto& mapping = handler.getMapping();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), mapping.getNeededGlyphCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1), mapping.toGlyphIndex(0x0041));
     }
 
     void testCharA_WithGrave()
@@ -516,49 +534,65 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x00E5), result); // å
     }
 
-    void testCharB_WithAnyDiacritic_ReturnsUnchanged()
+    void testCharLowerA_AdditionalMappings()
     {
-        // Character 'B' has no diacritic support
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x0042, ttxdecoder::Property::VALUE_DIACRITIC_ACUTE);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0042), result); // B unchanged
+        assertDiacriticCharacterCode(0x0061,
+            ttxdecoder::Property::VALUE_DIACRITIC_CIRCUMFLEX, 0x00E2);
+        assertDiacriticCharacterCode(0x0061,
+            ttxdecoder::Property::VALUE_DIACRITIC_TILDE, 0x00E3);
+        assertDiacriticCharacterCode(0x0061,
+            ttxdecoder::Property::VALUE_DIACRITIC_MACRON, 0x0101);
+        assertDiacriticCharacterCode(0x0061,
+            ttxdecoder::Property::VALUE_DIACRITIC_BREVE, 0x0103);
+        assertDiacriticCharacterCode(0x0061,
+            ttxdecoder::Property::VALUE_DIACRITIC_UMLAUT, 0x00E4);
+        assertDiacriticCharacterCode(0x0061,
+            ttxdecoder::Property::VALUE_DIACRITIC_OGONEK, 0x0105);
+        assertDiacriticCharacterCode(0x0061,
+            ttxdecoder::Property::VALUE_DIACRITIC_CARON, 0x01CE);
+        assertDiacriticCharacterCode(0x0061,
+            ttxdecoder::Property::VALUE_DIACRITIC_DOT_ABOVE, 0x0227);
     }
 
-    void testCharF_WithAnyDiacritic_ReturnsUnchanged()
+    void testUnsupportedBaseCharactersRemainUnchanged()
     {
-        // Character 'F' has no diacritic support
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x0046, ttxdecoder::Property::VALUE_DIACRITIC_GRAVE);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0046), result); // F unchanged
+        const std::uint16_t diacritics[] = {
+            ttxdecoder::Property::VALUE_DIACRITIC_ACUTE,
+            ttxdecoder::Property::VALUE_DIACRITIC_GRAVE,
+            ttxdecoder::Property::VALUE_DIACRITIC_TILDE,
+            ttxdecoder::Property::VALUE_DIACRITIC_CARON
+        };
+
+        assertUnchangedForDiacritics(0x0042, diacritics);
+        assertUnchangedForDiacritics(0x0046, diacritics);
+        assertUnchangedForDiacritics(0x004D, diacritics);
+        assertUnchangedForDiacritics(0x0050, diacritics);
+        assertUnchangedForDiacritics(0x0051, diacritics);
     }
 
-    void testCharM_WithAnyDiacritic_ReturnsUnchanged()
+    void testUnsupportedCharactersRemainUnchanged()
     {
-        // Character 'M' has no diacritic support
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x004D, ttxdecoder::Property::VALUE_DIACRITIC_TILDE);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x004D), result); // M unchanged
+        const std::uint16_t diacritics[] = {
+            ttxdecoder::Property::VALUE_DIACRITIC_ACUTE,
+            ttxdecoder::Property::VALUE_DIACRITIC_GRAVE,
+            ttxdecoder::Property::VALUE_DIACRITIC_CIRCUMFLEX
+        };
+
+        assertUnchangedForDiacritics(0x0000, diacritics);
+        assertUnchangedForDiacritics(0x0020, diacritics);
+        assertUnchangedForDiacritics(0x0030, diacritics);
     }
 
-    void testZeroCharacter_WithDiacritic_ReturnsUnchanged()
+    void testUnsupportedDiacriticsRemainUnchanged()
     {
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x0000, ttxdecoder::Property::VALUE_DIACRITIC_ACUTE);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0000), result);
-    }
+        const std::uint16_t diacritics[] = {
+            ttxdecoder::Property::VALUE_DIACRITIC_DOUBLE_ACUTE,
+            ttxdecoder::Property::VALUE_DIACRITIC_DOT_BELOW,
+            ttxdecoder::Property::VALUE_DIACRITIC_UNDERLINE
+        };
 
-    void testSpaceCharacter_WithDiacritic_ReturnsUnchanged()
-    {
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x0020, ttxdecoder::Property::VALUE_DIACRITIC_GRAVE);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0020), result);
-    }
-
-    void testDigitZero_WithDiacritic_ReturnsUnchanged()
-    {
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x0030, ttxdecoder::Property::VALUE_DIACRITIC_CIRCUMFLEX);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0030), result);
+        assertUnchangedForDiacritics(0x0041, diacritics);
+        assertUnchangedForDiacritics(0x0044, diacritics);
     }
 
     void testCharG_WithAcute()
@@ -1163,6 +1197,16 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x021F), result); // ȟ
     }
 
+    void testCharLowerI_AdditionalMappings()
+    {
+        assertDiacriticCharacterCode(0x0069,
+            ttxdecoder::Property::VALUE_DIACRITIC_GRAVE, 0x00EC);
+        assertDiacriticCharacterCode(0x0069,
+            ttxdecoder::Property::VALUE_DIACRITIC_ACUTE, 0x00ED);
+        assertDiacriticCharacterCode(0x0069,
+            ttxdecoder::Property::VALUE_DIACRITIC_DOT_ABOVE, 0x0069);
+    }
+
     void testCharLowerI_WithCircumflex()
     {
         std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
@@ -1254,36 +1298,18 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x013E), result); // ľ
     }
 
-    void testCharA_WithDoubleAcute_ReturnsUnchanged()
+    void testCharLowerO_AdditionalMappings()
     {
-        // Character 'A' does not support DOUBLE_ACUTE (only O and U support it)
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x0041, ttxdecoder::Property::VALUE_DIACRITIC_DOUBLE_ACUTE);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0041), result); // A unchanged
-    }
-
-    void testCharD_WithAcute_ReturnsUnchanged()
-    {
-        // Character 'D' does not support ACUTE (only supports CARON)
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x0044, ttxdecoder::Property::VALUE_DIACRITIC_ACUTE);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0044), result); // D unchanged
-    }
-
-    void testCharP_WithAnyDiacritic_ReturnsUnchanged()
-    {
-        // Character 'P' has no diacritic support
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x0050, ttxdecoder::Property::VALUE_DIACRITIC_ACUTE);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0050), result); // P unchanged
-    }
-
-    void testCharQ_WithAnyDiacritic_ReturnsUnchanged()
-    {
-        // Character 'Q' has no diacritic support
-        std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
-            0x0051, ttxdecoder::Property::VALUE_DIACRITIC_GRAVE);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0051), result); // Q unchanged
+        assertDiacriticCharacterCode(0x006F,
+            ttxdecoder::Property::VALUE_DIACRITIC_MACRON, 0x014D);
+        assertDiacriticCharacterCode(0x006F,
+            ttxdecoder::Property::VALUE_DIACRITIC_BREVE, 0x014F);
+        assertDiacriticCharacterCode(0x006F,
+            ttxdecoder::Property::VALUE_DIACRITIC_CARON, 0x01D2);
+        assertDiacriticCharacterCode(0x006F,
+            ttxdecoder::Property::VALUE_DIACRITIC_OGONEK, 0x01EB);
+        assertDiacriticCharacterCode(0x006F,
+            ttxdecoder::Property::VALUE_DIACRITIC_DOT_ABOVE, 0x022F);
     }
 
     void testCharLowerN_WithGrave()
@@ -1426,6 +1452,20 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0165), result); // ť
     }
 
+    void testCharLowerU_AdditionalMappings()
+    {
+        assertDiacriticCharacterCode(0x0075,
+            ttxdecoder::Property::VALUE_DIACRITIC_TILDE, 0x0169);
+        assertDiacriticCharacterCode(0x0075,
+            ttxdecoder::Property::VALUE_DIACRITIC_MACRON, 0x016B);
+        assertDiacriticCharacterCode(0x0075,
+            ttxdecoder::Property::VALUE_DIACRITIC_OGONEK, 0x0173);
+        assertDiacriticCharacterCode(0x0075,
+            ttxdecoder::Property::VALUE_DIACRITIC_CARON, 0x01D4);
+        assertDiacriticCharacterCode(0x0075,
+            ttxdecoder::Property::VALUE_DIACRITIC_BREVE, 0x016D);
+    }
+
     void testCharLowerU_WithGrave()
     {
         std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
@@ -1466,6 +1506,30 @@ protected:
         std::uint16_t result = CharsetHandler::getDiacriticCharacterCode(
             0x0075, ttxdecoder::Property::VALUE_DIACRITIC_DOUBLE_ACUTE);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0171), result); // ű
+    }
+
+    void testCharLowerW_Mappings()
+    {
+        assertDiacriticCharacterCode(0x0077,
+            ttxdecoder::Property::VALUE_DIACRITIC_ACUTE, 0x1E83);
+        assertDiacriticCharacterCode(0x0077,
+            ttxdecoder::Property::VALUE_DIACRITIC_CIRCUMFLEX, 0x0175);
+        assertDiacriticCharacterCode(0x0077,
+            ttxdecoder::Property::VALUE_DIACRITIC_GRAVE, 0x1E81);
+        assertDiacriticCharacterCode(0x0077,
+            ttxdecoder::Property::VALUE_DIACRITIC_UMLAUT, 0x1E85);
+    }
+
+    void testCharLowerY_AdditionalMappings()
+    {
+        assertDiacriticCharacterCode(0x0079,
+            ttxdecoder::Property::VALUE_DIACRITIC_GRAVE, 0x1EF3);
+        assertDiacriticCharacterCode(0x0079,
+            ttxdecoder::Property::VALUE_DIACRITIC_CIRCUMFLEX, 0x0177);
+        assertDiacriticCharacterCode(0x0079,
+            ttxdecoder::Property::VALUE_DIACRITIC_TILDE, 0x1EF9);
+        assertDiacriticCharacterCode(0x0079,
+            ttxdecoder::Property::VALUE_DIACRITIC_MACRON, 0x0233);
     }
 
     void testCharLowerY_WithAcute()

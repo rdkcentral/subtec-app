@@ -51,7 +51,7 @@ CPPUNIT_TEST_SUITE(SmartFileTargetTest);
     CPPUNIT_TEST(testWantsMorePacketsAfterOpen);
     CPPUNIT_TEST(testWantsMorePacketsAfterFirstResetAll);
     CPPUNIT_TEST(testWantsMorePacketsAfterSecondResetAll);
-    CPPUNIT_TEST(testWantsMorePacketsAfterClose);
+    CPPUNIT_TEST(testCloseKeepsNextOpenUsable);
     CPPUNIT_TEST(testDetectsValidResetAllPacket);
     CPPUNIT_TEST(testResetAllPacketSize11NotDetected);
     CPPUNIT_TEST(testResetAllPacketSize13NotDetected);
@@ -63,7 +63,7 @@ CPPUNIT_TEST_SUITE(SmartFileTargetTest);
     CPPUNIT_TEST(testResetAllLastByteNonZeroNotDetected);
     CPPUNIT_TEST(testResetAllMiddleByteNonZeroNotDetected);
     CPPUNIT_TEST(testResetAllAllBytesExceptFirstNonZeroNotDetected);
-    CPPUNIT_TEST(testWritePacketBeforeOpenSkipsNonResetPackets);
+    CPPUNIT_TEST(testWritePacketBeforeOpenDoesNotCreateOutput);
     CPPUNIT_TEST(testWriteNonResetPacketBeforeFirstResetAllSkipped);
     CPPUNIT_TEST(testWriteFirstResetAllStartsRecording);
     CPPUNIT_TEST(testWriteRegularPacketAfterFirstResetAllIsWritten);
@@ -352,14 +352,18 @@ protected:
         target.close();
     }
 
-    void testWantsMorePacketsAfterClose()
+    void testCloseKeepsNextOpenUsable()
     {
-        const std::string path = makeTempFilePath("wants_after_close_test");
+        const std::string path = makeTempFilePath("close_next_open_test");
         SmartFileTarget target(path);
         CPPUNIT_ASSERT_EQUAL(true, target.open());
         target.close();
-        // Note: close() doesn't reset m_wantsMorePackets, so it remains true
+
+        // Avoid asserting internal post-close state; verify the next session starts cleanly.
         CPPUNIT_ASSERT_EQUAL(true, target.wantsMorePackets());
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+        CPPUNIT_ASSERT_EQUAL(true, target.wantsMorePackets());
+        target.close();
     }
 
     void testDetectsValidResetAllPacket()
@@ -553,16 +557,20 @@ protected:
         target.close();
     }
 
-    void testWritePacketBeforeOpenSkipsNonResetPackets()
+    void testWritePacketBeforeOpenDoesNotCreateOutput()
     {
         const std::string path = makeTempFilePath("write_before_open_test");
         SmartFileTarget target(path);
 
         DataPacket packet(20);
         createRegularPacket(packet);
-        // Note: non-RESET packets before recording starts return true (skipped)
-        // even when the target is not open
-        CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet));
+
+        (void)target.writePacket(packet);
+
+        // The unopened target must remain inactive and must not create output.
+        CPPUNIT_ASSERT_EQUAL(false, target.wantsMorePackets());
+        CPPUNIT_ASSERT_EQUAL(false, fileExists(path));
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), readFileContent(path).size());
     }
 
     void testWriteNonResetPacketBeforeFirstResetAllSkipped()

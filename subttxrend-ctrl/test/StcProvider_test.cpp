@@ -86,8 +86,9 @@ protected:
     {
         // Test that constructor completes without errors
         StcProvider provider;
-        // No exception means success - object is created
-        CPPUNIT_ASSERT(true);
+        // Verify initial state is sane: no timestamps processed yet
+        std::uint32_t stc = provider.getStc();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), stc);
     }
 
     void testInitialStcValue()
@@ -367,29 +368,27 @@ protected:
     void testConcurrentProcessTimestampCalls()
     {
         StcProvider provider;
-        std::atomic<bool> testComplete{false};
         std::atomic<int> writeCount{0};
+        const std::uint64_t oldTimestamp = getCurrentTimestampMs() - 7200000;
 
-        auto writer = [&provider, &testComplete, &writeCount]() {
+        auto writer = [&provider, &writeCount, oldTimestamp](std::uint32_t startStc) {
             for (int i = 0; i < 100; ++i) {
-                std::uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
-                provider.processTimestamp(1000 + i, timestamp);
+                provider.processTimestamp(startStc + i, oldTimestamp + i);
                 writeCount++;
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
-            testComplete = true;
         };
 
-        std::thread t1(writer);
-        std::thread t2(writer);
+        std::thread t1(writer, 1000);
+        std::thread t2(writer, 2000);
 
         t1.join();
         t2.join();
 
-        // Should complete without crashes
-        CPPUNIT_ASSERT_EQUAL(true, testComplete.load());
         CPPUNIT_ASSERT_EQUAL(200, writeCount.load());
+
+        const std::uint32_t finalStc = provider.getStc();
+        CPPUNIT_ASSERT(finalStc == 1099 || finalStc == 2099);
     }
 
     void testConcurrentGetStcCalls()
@@ -434,7 +433,7 @@ protected:
     void testConcurrentProcessAndGetStc()
     {
         StcProvider provider;
-        std::uint64_t baseTime = getCurrentTimestampMs();
+        std::uint64_t baseTime = getCurrentTimestampMs() - 7200000;
         provider.processTimestamp(90000, baseTime);
 
         std::atomic<bool> testComplete{false};
@@ -449,15 +448,11 @@ protected:
         };
 
         auto reader = [&provider, &testComplete, &hasInconsistency]() {
-            std::uint32_t previousStc = 0;
             while (!testComplete) {
                 std::uint32_t currentStc = provider.getStc();
-                // STC should generally increase (or wrap around)
-                // Just verify we don't crash and get reasonable values
-                if (currentStc > 0 && currentStc < 1000000) {
-                    // Value looks reasonable
+                if (currentStc < 90000 || currentStc > 109900) {
+                    hasInconsistency = true;
                 }
-                previousStc = currentStc;
                 std::this_thread::sleep_for(std::chrono::microseconds(50));
             }
         };
@@ -470,33 +465,37 @@ protected:
         t2.join();
         t3.join();
 
-        // Should complete without crashes
         CPPUNIT_ASSERT_EQUAL(true, testComplete.load());
+        CPPUNIT_ASSERT_EQUAL(false, hasInconsistency.load());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(109900), provider.getStc());
     }
 
     void testMultiThreadedStressTest()
     {
         StcProvider provider;
-        std::uint64_t baseTime = getCurrentTimestampMs();
-        provider.processTimestamp(100000, baseTime);
-
-        std::atomic<bool> testComplete{false};
+        const std::uint64_t baseTime = getCurrentTimestampMs() - 7200000;
         std::atomic<int> totalOperations{0};
+        std::atomic<std::uint32_t> maxObservedStc{0};
 
-        auto mixedOperations = [&provider, &testComplete, &totalOperations, baseTime]() {
+        auto recordObservedStc = [&maxObservedStc](std::uint32_t observedStc) {
+            auto currentMax = maxObservedStc.load();
+            while (currentMax < observedStc && !maxObservedStc.compare_exchange_weak(currentMax, observedStc)) {
+            }
+        };
+
+        auto mixedOperations = [&provider, &totalOperations, &recordObservedStc, baseTime](std::uint32_t startStc) {
             for (int i = 0; i < 50; ++i) {
-                // Mix of operations
-                provider.processTimestamp(100000 + i * 50, baseTime + i * 5);
+                provider.processTimestamp(startStc + i * 50, baseTime + i * 5);
                 totalOperations++;
 
                 std::uint32_t stc = provider.getStc();
                 totalOperations++;
-                (void)stc; // Suppress unused warning
+                recordObservedStc(stc);
 
                 void* inst = &provider;
                 std::uint32_t cbStc = StcProvider::stcCallback(inst);
                 totalOperations++;
-                (void)cbStc; // Suppress unused warning
+                recordObservedStc(cbStc);
 
                 std::this_thread::sleep_for(std::chrono::microseconds(10));
             }
@@ -504,17 +503,20 @@ protected:
 
         std::vector<std::thread> threads;
         for (int i = 0; i < 4; ++i) {
-            threads.emplace_back(mixedOperations);
+            threads.emplace_back(mixedOperations, 100000 + (i * 1000));
         }
 
         for (auto& thread : threads) {
             thread.join();
         }
 
-        testComplete = true;
-
-        // Should complete without crashes
         CPPUNIT_ASSERT_EQUAL(600, totalOperations.load()); // 4 threads * 50 iterations * 3 ops
+        CPPUNIT_ASSERT(maxObservedStc.load() >= 100000);
+        CPPUNIT_ASSERT(maxObservedStc.load() <= 105450);
+
+        const std::uint32_t finalStc = provider.getStc();
+        CPPUNIT_ASSERT(finalStc >= 100000);
+        CPPUNIT_ASSERT(finalStc <= 105450);
     }
 
     void testFullWorkflowWithRealTimeDelay()

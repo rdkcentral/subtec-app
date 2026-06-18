@@ -72,6 +72,12 @@ CPPUNIT_TEST_SUITE( ParserPCSTest );
     CPPUNIT_TEST(testModeChangeEpochReset);
     CPPUNIT_TEST(testRegionDataIntegrity);
     CPPUNIT_TEST(testMultiplePcsSequence);
+    CPPUNIT_TEST(testOutOfRangeRegionId);
+    CPPUNIT_TEST(testNegativeRegionId);
+    CPPUNIT_TEST(testSequentialParsingReliability);
+    CPPUNIT_TEST(testCorruptPCSPacket);
+    CPPUNIT_TEST(testTruncatedPCSPacket);
+    CPPUNIT_TEST(testMalformedPCSPacket);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -495,6 +501,55 @@ public:
         CPPUNIT_ASSERT(page.getRegion(1).m_regionId == 5);
         CPPUNIT_ASSERT(page.getRegion(1).m_positionX == 300);
         CPPUNIT_ASSERT(page.getRegion(1).m_positionY == 400);
+    }
+
+    void testOutOfRangeRegionId()
+    {
+        BitStreamWriter bitStreamWriter;
+        const std::uint8_t PAGE_STATE = dvbsubdecoder::PageStateBits::MODE_CHANGE;
+        const std::uint8_t PAGE_VERSION = 0x05;
+        bitStreamWriter.write(0x30, 8); // timeout
+        bitStreamWriter.write(PAGE_VERSION, 4);
+        bitStreamWriter.write(PAGE_STATE, 2);
+        bitStreamWriter.write(0, 2); // reserved
+        bitStreamWriter.write(255, 8); // regionId (max value)
+        bitStreamWriter.write(0, 8); // reserved
+        bitStreamWriter.write(100, 16); // x = 100
+        bitStreamWriter.write(200, 16); // y = 200
+
+        PesPacketReader reader(bitStreamWriter.data(), bitStreamWriter.size(), nullptr, 0);
+        ParserPCS parser;
+        parser.parsePageCompositionSegment(*m_database, reader);
+        const auto& page = m_database->getPage();
+        CPPUNIT_ASSERT(page.getRegionCount() == 1);
+        CPPUNIT_ASSERT(page.getRegion(0).m_regionId == 255);
+        CPPUNIT_ASSERT(page.getRegion(0).m_positionX == 100);
+        CPPUNIT_ASSERT(page.getRegion(0).m_positionY == 200);
+    }
+
+    void testNegativeRegionId()
+    {
+        BitStreamWriter bitStreamWriter;
+        const std::uint8_t PAGE_STATE = dvbsubdecoder::PageStateBits::MODE_CHANGE;
+        const std::uint8_t PAGE_VERSION = 0x05;
+        bitStreamWriter.write(0x30, 8); // timeout
+        bitStreamWriter.write(PAGE_VERSION, 4);
+        bitStreamWriter.write(PAGE_STATE, 2);
+        bitStreamWriter.write(0, 2); // reserved
+        int regionId = -1;
+        bitStreamWriter.write(static_cast<uint8_t>(regionId), 8); // regionId (-1 as 255)
+        bitStreamWriter.write(0, 8); // reserved
+        bitStreamWriter.write(100, 16); // x = 100
+        bitStreamWriter.write(200, 16); // y = 200
+
+        PesPacketReader reader(bitStreamWriter.data(), bitStreamWriter.size(), nullptr, 0);
+        ParserPCS parser;
+        parser.parsePageCompositionSegment(*m_database, reader);
+        const auto& page = m_database->getPage();
+        CPPUNIT_ASSERT(page.getRegionCount() == 1);
+        CPPUNIT_ASSERT(page.getRegion(0).m_regionId == 255);
+        CPPUNIT_ASSERT(page.getRegion(0).m_positionX == 100);
+        CPPUNIT_ASSERT(page.getRegion(0).m_positionY == 200);
     }
 
     void testReservedBitsIgnored()
@@ -1082,6 +1137,68 @@ public:
 
     }
 
+    void testTruncatedPCSPacket()
+    {
+        BitStreamWriter bitStreamWriter;
+        // Write only part of the header
+        bitStreamWriter.write(0x30, 8); // timeout
+        // Missing rest of header and region data
+        PesPacketReader reader(bitStreamWriter.data(), bitStreamWriter.size(), nullptr, 0);
+        ParserPCS parser;
+        CPPUNIT_ASSERT_THROW(parser.parsePageCompositionSegment(*m_database, reader), PesPacketReader::Exception);
+    }
+
+    void testMalformedPCSPacket()
+    {
+        std::vector<uint8_t> corruptData = {0xFF, 0xEE, 0xDD, 0xCC, 0xBB};
+        PesPacketReader reader(corruptData.data(), corruptData.size(), nullptr, 0);
+        ParserPCS parser;
+        CPPUNIT_ASSERT_THROW(parser.parsePageCompositionSegment(*m_database, reader), ParserException);
+    }
+
+    void testCorruptPCSPacket()
+    {
+        BitStreamWriter bitStreamWriter;
+        bitStreamWriter.write(0x30, 8); // timeout
+        bitStreamWriter.write(0xF, 4); // invalid page version (out of range)
+        bitStreamWriter.write(0x3, 2); // invalid page state (reserved)
+        bitStreamWriter.write(0xFF, 2); // reserved
+
+        PesPacketReader reader(bitStreamWriter.data(), bitStreamWriter.size(), nullptr, 0);
+        ParserPCS parser;
+        CPPUNIT_ASSERT_THROW(parser.parsePageCompositionSegment(*m_database, reader), ParserException);
+    }
+
+    void testSequentialParsingReliability()
+    {
+        const std::uint8_t PAGE_STATE = dvbsubdecoder::PageStateBits::MODE_CHANGE;
+        const std::uint8_t PAGE_VERSION = 0x05;
+        for (int round = 0; round < 10; ++round)
+        {
+            BitStreamWriter bitStreamWriter;
+            bitStreamWriter.write(0x30 + round, 8); // timeout
+            bitStreamWriter.write(PAGE_VERSION + round, 4); // version
+            bitStreamWriter.write(PAGE_STATE, 2);
+            bitStreamWriter.write(0, 2); // reserved
+            bitStreamWriter.write(round, 8); // regionId
+            bitStreamWriter.write(0, 8); // reserved
+            bitStreamWriter.write(100 + round, 16); // x
+            bitStreamWriter.write(200 + round, 16); // y
+
+            PesPacketReader reader(bitStreamWriter.data(), bitStreamWriter.size(), nullptr, 0);
+            ParserPCS parser;
+            parser.parsePageCompositionSegment(*m_database, reader);
+            const auto& page = m_database->getPage();
+            CPPUNIT_ASSERT(page.getVersion() == PAGE_VERSION + round);
+            CPPUNIT_ASSERT(page.getTimeout() == 0x30 + round);
+            CPPUNIT_ASSERT(page.getRegionCount() == 1);
+            CPPUNIT_ASSERT(page.getRegion(0).m_regionId == round);
+            CPPUNIT_ASSERT(page.getRegion(0).m_positionX == 100 + round);
+            CPPUNIT_ASSERT(page.getRegion(0).m_positionY == 200 + round);
+            // Reset DB for next round
+            m_database->epochReset();
+        }
+    }
 private:
     const Specification SPEC_VERSION = Specification::VERSION_1_3_1;
 

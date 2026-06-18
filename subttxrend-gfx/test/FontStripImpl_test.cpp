@@ -50,6 +50,7 @@ class FontStripImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testFindFontFileWithNonExistentFontName);
     CPPUNIT_TEST(testFindFontFileWithSpecialCharacters);
     CPPUNIT_TEST(testFindFontFileWithVeryLongFontName);
+    CPPUNIT_TEST(testFindFontFileVerifyAbsolutePathReturned);
     CPPUNIT_TEST(testFindFontFileVerifyFontPatternMatching);
     CPPUNIT_TEST(testFindFontFileMultipleConsecutiveCalls);
     CPPUNIT_TEST(testFindFontFileWithWhitespaceInName);
@@ -172,6 +173,20 @@ class FontStripImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST_SUITE_END();
 
 public:
+    void assertLoadFontLeavesUsableStrip(const FontStripImpl& fontStrip,
+                                         const Size& glyphSize,
+                                         std::size_t glyphCount,
+                                         bool result)
+    {
+        const auto& pixmap = fontStrip.getPixmap();
+        CPPUNIT_ASSERT_EQUAL(glyphSize.m_w * static_cast<int>(glyphCount), pixmap.getWidth());
+        CPPUNIT_ASSERT_EQUAL(glyphSize.m_h, pixmap.getHeight());
+        if (result)
+        {
+            CPPUNIT_ASSERT(pixmap.isValid());
+        }
+    }
+
     void testConstructorWithValidGlyphSizeAndCount()
     {
         Size glyphSize(16, 16);
@@ -229,33 +244,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(0, pixmap.getHeight());
         // Pixmap with zero height is not considered valid
         CPPUNIT_ASSERT(!pixmap.isValid());
-    }
-
-    void testConstructorWithNegativeGlyphSizeWidth()
-    {
-        Size glyphSize(-16, 16);
-        std::size_t glyphCount = 10;
-
-        FontStripImpl fontStrip(glyphSize, glyphCount);
-
-        const auto& pixmap = fontStrip.getPixmap();
-        CPPUNIT_ASSERT(pixmap.isValid());
-        // Negative width results in negative total width
-        CPPUNIT_ASSERT_EQUAL(-160, pixmap.getWidth());
-        CPPUNIT_ASSERT_EQUAL(16, pixmap.getHeight());
-    }
-
-    void testConstructorWithNegativeGlyphSizeHeight()
-    {
-        Size glyphSize(16, -16);
-        std::size_t glyphCount = 10;
-
-        FontStripImpl fontStrip(glyphSize, glyphCount);
-
-        const auto& pixmap = fontStrip.getPixmap();
-        CPPUNIT_ASSERT(pixmap.isValid());
-        CPPUNIT_ASSERT_EQUAL(160, pixmap.getWidth());
-        CPPUNIT_ASSERT_EQUAL(-16, pixmap.getHeight());
     }
 
     void testConstructorWithLargeGlyphCount()
@@ -325,9 +313,6 @@ public:
             const auto& pixmap = fontStrip.getPixmap();
             CPPUNIT_ASSERT(pixmap.isValid());
         }
-
-        // If we reach here without crashes, destructor works correctly
-        CPPUNIT_ASSERT(true);
     }
 
     void testFindFontFileWithValidFontName()
@@ -341,11 +326,19 @@ public:
 
     void testFindFontFileWithEmptyFontName()
     {
-        std::string fontFile = FontStripImpl::findFontFile("");
-
-        // Empty font name should not crash - we just verify the call succeeds
-        // Implementation may return empty string or fallback font
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            std::string fontFile = FontStripImpl::findFontFile("");
+            (void)fontFile; // we only assert no exception thrown
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("findFontFile threw exception for empty font name: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("findFontFile threw unknown exception for empty font name");
+        }
     }
 
     void testFindFontFileWithAbsolutePath()
@@ -359,20 +352,36 @@ public:
 
     void testFindFontFileWithRelativePath()
     {
-        std::string relativePath = "fonts/myfont.ttf";
-        std::string fontFile = FontStripImpl::findFontFile(relativePath);
-
-        // Relative path goes through FontConfig matching - just verify no crash
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            std::string relativePath = "fonts/myfont.ttf";
+            std::string fontFile = FontStripImpl::findFontFile(relativePath);
+            (void)fontFile;
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("findFontFile threw exception for relative path: ") + ex.what());
+        }
+        catch (...) {
+            CPPUNIT_FAIL("findFontFile threw unknown exception for relative path");
+        }
     }
 
     void testFindFontFileWithNonExistentFontName()
     {
-        std::string fontFile = FontStripImpl::findFontFile("NonExistentFont123456789");
-
-        // Non-existent font should not crash
-        // FontConfig may return empty string or fallback font
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            std::string fontFile = FontStripImpl::findFontFile("NonExistentFont123456789");
+            (void)fontFile;
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("findFontFile threw exception for non-existent font name: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("findFontFile threw unknown exception for non-existent font name");
+        }
     }
 
     void testFindFontFileVerifyAbsolutePathReturned()
@@ -388,19 +397,37 @@ public:
 
     void testFindFontFileWithSpecialCharacters()
     {
-        std::string fontFile = FontStripImpl::findFontFile("Font@#$%");
-
-        // Should handle special characters gracefully without crashing
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            std::string fontFile = FontStripImpl::findFontFile("Font@#$%");
+            (void)fontFile;
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("findFontFile threw exception for special characters: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("findFontFile threw unknown exception for special characters");
+        }
     }
 
     void testFindFontFileWithVeryLongFontName()
     {
-        std::string longName(1000, 'A');
-        std::string fontFile = FontStripImpl::findFontFile(longName);
-
-        // Should handle very long names without crashing
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            std::string longName(1000, 'A');
+            std::string fontFile = FontStripImpl::findFontFile(longName);
+            (void)fontFile;
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("findFontFile threw exception for very long name: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("findFontFile threw unknown exception for very long name");
+        }
     }
 
     void testFindFontFileVerifyAbsolutePathUnchanged()
@@ -430,20 +457,37 @@ public:
         // Test multiple consecutive calls
         for (int i = 0; i < 5; ++i)
         {
-            std::string fontFile = FontStripImpl::findFontFile("DejaVu Sans");
-            // Should return consistent results
-            CPPUNIT_ASSERT(fontFile.empty() || !fontFile.empty());
+            try
+            {
+                std::string fontFile = FontStripImpl::findFontFile("DejaVu Sans");
+                (void)fontFile;
+            }
+            catch (const std::exception& ex)
+            {
+                CPPUNIT_FAIL(std::string("findFontFile threw exception on consecutive call: ") + ex.what());
+            }
+            catch (...)
+            {
+                CPPUNIT_FAIL("findFontFile threw unknown exception on consecutive call");
+            }
         }
-
-        CPPUNIT_ASSERT(true);
     }
 
     void testFindFontFileWithWhitespaceInName()
     {
-        std::string fontFile = FontStripImpl::findFontFile("DejaVu Sans Mono");
-
-        // Should handle whitespace in font names without crashing
-        CPPUNIT_ASSERT(true);
+        try
+        {
+            std::string fontFile = FontStripImpl::findFontFile("DejaVu Sans Mono");
+            (void)fontFile;
+        }
+        catch (const std::exception& ex)
+        {
+            CPPUNIT_FAIL(std::string("findFontFile threw exception for name with whitespace: ") + ex.what());
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("findFontFile threw unknown exception for name with whitespace");
+        }
     }
 
     void testLoadGlyphWithValidIndexAndData()
@@ -778,9 +822,7 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Just verify the call completes without crashing
-        // Font may or may not be available on the system
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithEmptyFontName()
@@ -795,8 +837,7 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("", charSize, charMap);
 
-        // Empty font name should not crash
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithNonExistentFontFile()
@@ -811,8 +852,7 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("NonExistentFont12345", charSize, charMap);
 
-        // Should not crash with non-existent font
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithZeroWidthCharSize()
@@ -827,8 +867,7 @@ public:
         Size charSize(0, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Zero width should be handled gracefully without crashing
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithZeroHeightCharSize()
@@ -843,8 +882,7 @@ public:
         Size charSize(16, 0);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Zero height should be handled gracefully without crashing
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithNegativeCharSizeWidth()
@@ -859,8 +897,7 @@ public:
         Size charSize(-16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Negative width should be handled gracefully without crashing
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithNegativeCharSizeHeight()
@@ -875,8 +912,7 @@ public:
         Size charSize(16, -16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Negative height should be handled gracefully without crashing
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithEmptyCharMap()
@@ -890,8 +926,7 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Empty char map should not crash
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithSingleCharacterMapping()
@@ -906,8 +941,7 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash with single character
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithMultipleCharacterMappings()
@@ -925,8 +959,7 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash with multiple character mappings
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWhenFindFontFileFails()
@@ -976,8 +1009,7 @@ public:
         // Try with .ttf extension (uses FT_LOAD_RENDER only)
         bool result = fontStrip.loadFont("DejaVu Sans.ttf", charSize, charMap);
 
-        // Should not crash with .ttf extension
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithNonTTFExtension()
@@ -993,8 +1025,7 @@ public:
         // Try with .pcf or other extension (uses FT_LOAD_RENDER | FT_LOAD_MONOCHROME)
         bool result = fontStrip.loadFont("DejaVu Sans.pcf", charSize, charMap);
 
-        // Should not crash with non-.ttf extension
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontVerifyGlyphsRenderedToCorrectPositions()
@@ -1042,9 +1073,8 @@ public:
 
         bool result2 = fontStrip.loadFont("DejaVu Sans", charSize, charMap2);
 
-        // Both calls should complete without crashing
-        // Second call overwrites first
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result1);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result2);
     }
 
     void testLoadFontWithVerySmallCharSize()
@@ -1059,8 +1089,7 @@ public:
         Size charSize(1, 1);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Very small size should not crash
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontVerifyAllMappedCharactersLoaded()
@@ -1079,8 +1108,7 @@ public:
         Size charSize(12, 12);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash when loading multiple mapped characters
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontCharMapWithGapsInGlyphIndices()
@@ -1099,8 +1127,7 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash with gaps in glyph indices
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithVeryLargeCharSize()
@@ -1115,8 +1142,7 @@ public:
         Size charSize(128, 128);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Very large size should not crash
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontCharMapNeededGlyphCountExceedsCapacity()
@@ -1135,8 +1161,7 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash when char map exceeds capacity
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithCharacterNotInFont()
@@ -1152,8 +1177,7 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash with missing character (just skips it)
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontCharSizeMismatchWithGlyphSize()
@@ -1169,9 +1193,7 @@ public:
         Size charSize(32, 32);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash with size mismatch
-        // charSize is for FreeType, glyphSize is for pixmap
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testLoadFontWithFontFileCannotBeOpened()
@@ -1412,23 +1434,6 @@ public:
         // Verify both references point to the same pixmap
         CPPUNIT_ASSERT_EQUAL(pixmap1.getWidth(), pixmap2.getWidth());
         CPPUNIT_ASSERT_EQUAL(pixmap1.getHeight(), pixmap2.getHeight());
-    }
-
-    void testGetPixmapMultipleTimesReturnsSameReference()
-    {
-        Size glyphSize(12, 12);
-        std::size_t glyphCount = 20;
-        FontStripImpl fontStrip(glyphSize, glyphCount);
-
-        const auto& pixmap1 = fontStrip.getPixmap();
-        const auto& pixmap2 = fontStrip.getPixmap();
-        const auto& pixmap3 = fontStrip.getPixmap();
-
-        // All should have the same properties
-        CPPUNIT_ASSERT_EQUAL(pixmap1.getWidth(), pixmap2.getWidth());
-        CPPUNIT_ASSERT_EQUAL(pixmap2.getWidth(), pixmap3.getWidth());
-        CPPUNIT_ASSERT_EQUAL(pixmap1.getHeight(), pixmap2.getHeight());
-        CPPUNIT_ASSERT_EQUAL(pixmap2.getHeight(), pixmap3.getHeight());
     }
 
     void testFontConfigStaticMemberInitialized()

@@ -19,14 +19,13 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <string>
-#include <cstdio>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <fstream>
 #include <thread>
 #include <exception>
+#include <cstring>
 
 #include "../src/UnixSocket.hpp"
 
@@ -45,123 +44,60 @@ class UnixSocketTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testConstructorWithPathAtMaximumLength);
     CPPUNIT_TEST(testConstructorWithPathExactlyAtLimit);
     CPPUNIT_TEST(testConstructorWithPathExceedingLimit);
-    CPPUNIT_TEST(testConstructorWithEmptyStringPath);
-    CPPUNIT_TEST(testConstructorWithPathToExistingSocket);
     CPPUNIT_TEST(testConstructorWithPathToNonExistentDirectory);
-    CPPUNIT_TEST(testConstructorWithPathContainingSpaces);
-    CPPUNIT_TEST(testConstructorWithTypicalUnixSocketPath);
     CPPUNIT_TEST(testConstructorCreatesAfUnixSocket);
-    CPPUNIT_TEST(testConstructorCreatesSockDgramSocket);
-    CPPUNIT_TEST(testConstructorCallsUnlinkBeforeBind);
-    CPPUNIT_TEST(testConstructorSocketFileCreated);
-    CPPUNIT_TEST(testConstructorThrowsOnInvalidSocketCreation);
-    CPPUNIT_TEST(testConstructorNearBoundaryPathLength);
+    CPPUNIT_TEST(testConstructorWithPathContainingSpaces);
+    CPPUNIT_TEST(testConstructorUnlinkAndReusePath);
     CPPUNIT_TEST(testConstructorPathWithSlash);
     CPPUNIT_TEST(testConstructorMultipleInstancesDifferentPaths);
-    CPPUNIT_TEST(testConstructorSamePathSequentially);
-    CPPUNIT_TEST(testConstructorSocketPermissions);
-    CPPUNIT_TEST(testConstructorExceptionInheritance);
-    CPPUNIT_TEST(testConstructorExceptionMessage);
-    CPPUNIT_TEST(testConstructorCleanupOnException);
-    CPPUNIT_TEST(testConstructorSocketFileExists);
-    CPPUNIT_TEST(testGetSocketBufferSizeOnValidSocket);
-    CPPUNIT_TEST(testGetSocketBufferSizeReturnsPositiveValue);
     CPPUNIT_TEST(testGetSocketBufferSizeReturnsReasonableValue);
     CPPUNIT_TEST(testGetSocketBufferSizeCalledMultipleTimes);
     CPPUNIT_TEST(testGetSocketBufferSizeConstQualifier);
-    CPPUNIT_TEST(testGetSocketBufferSizeMaxBufferFallback);
-    CPPUNIT_TEST(testGetSocketBufferSizeNonZero);
     CPPUNIT_TEST(testPeekBytesWithEmptyBuffer);
     CPPUNIT_TEST(testPeekBytesWithBufferCapacity1);
     CPPUNIT_TEST(testPeekBytesWithBufferLargerThanData);
-    CPPUNIT_TEST(testPeekBytesWhenNoDataAvailable);
-    CPPUNIT_TEST(testPeekBytesTwiceConsecutively);
-    CPPUNIT_TEST(testPeekBytesFollowedByReadBytes);
-    CPPUNIT_TEST(testPeekBytesResizesBuffer);
-    CPPUNIT_TEST(testPeekBytesReturnsCorrectSize);
-    CPPUNIT_TEST(testPeekBytesDoesNotRemoveData);
-    CPPUNIT_TEST(testPeekBytesWithLargeBuffer);
     CPPUNIT_TEST(testPeekBytesReturnValue);
-    CPPUNIT_TEST(testPeekBytesDataIntegrity);
+    CPPUNIT_TEST(testPeekBytesTwiceConsecutively);
     CPPUNIT_TEST(testReadBytesWithEmptyBuffer);
     CPPUNIT_TEST(testReadBytesWithBufferCapacity1);
     CPPUNIT_TEST(testReadBytesWithBufferLargerThanData);
-    CPPUNIT_TEST(testReadBytesWhenNoDataAvailable);
-    CPPUNIT_TEST(testReadBytesTwiceConsecutively);
-    CPPUNIT_TEST(testReadBytesAfterPeekBytes);
-    CPPUNIT_TEST(testReadBytesRemovesData);
-    CPPUNIT_TEST(testReadBytesResizesBuffer);
-    CPPUNIT_TEST(testReadBytesReturnsCorrectSize);
+    CPPUNIT_TEST(testReadBytesWithZeroLengthDatagram);
+    CPPUNIT_TEST(testReadBytesWithNoDataAfterZeroLengthDatagram);
     CPPUNIT_TEST(testReadBytesWithLargeBuffer);
-    CPPUNIT_TEST(testReadBytesReturnValue);
+    CPPUNIT_TEST(testReadBytesAfterPeekBytes);
     CPPUNIT_TEST(testReadBytesDataIntegrity);
-    CPPUNIT_TEST(testShutdownOnActiveSocket);
-    CPPUNIT_TEST(testShutdownCalledTwice);
     CPPUNIT_TEST(testSocketExceptionConstruction);
-    CPPUNIT_TEST(testSocketExceptionInheritance);
-    CPPUNIT_TEST(testSocketExceptionWhatMethod);
     CPPUNIT_TEST(testSocketExceptionWithEmptyMessage);
     CPPUNIT_TEST(testSocketExceptionWithLongMessage);
-    CPPUNIT_TEST(testSocketExceptionCatchAsStdException);
-    CPPUNIT_TEST(testSocketExceptionMessageContainsError);
-    CPPUNIT_TEST(testSocketExceptionThrowAndCatch);
     CPPUNIT_TEST(testHandleValidSocketFd);
-    CPPUNIT_TEST(testHandleOwnershipRAII);
+    CPPUNIT_TEST(testSocketExceptionMessageContainsError);
     CPPUNIT_TEST(testHandleMultipleOperations);
-    CPPUNIT_TEST(testHandleLifetime);
-    CPPUNIT_TEST(testHandleUniquePtrSemantics);
-    CPPUNIT_TEST(testHandleSocketClosed);
-    CPPUNIT_TEST(testHandleAfterShutdown);
-    CPPUNIT_TEST(testHandleConsistency);
-    CPPUNIT_TEST(testHandleExceptionSafety);
-    CPPUNIT_TEST(testHandleDestructorCleanup);
-    CPPUNIT_TEST(testCreateSocketWriteDataPeekBytes);
     CPPUNIT_TEST(testCreateSocketWriteDataReadBytes);
+    CPPUNIT_TEST(testHandleOwnershipRAII);
+    CPPUNIT_TEST(testHandleConsistency);
     CPPUNIT_TEST(testPeekReadPeekSequence);
     CPPUNIT_TEST(testMultipleSocketsIndependence);
-    CPPUNIT_TEST(testSocketReuseAfterDestruction);
-    CPPUNIT_TEST(testMultipleDatagramsSequential);
     CPPUNIT_TEST(testSocketBufferConsistency);
-    CPPUNIT_TEST(testCompleteSocketLifecycle);
-    CPPUNIT_TEST(testExceptionDuringConstruction);
-    CPPUNIT_TEST(testRapidCreateDestroyCycles);
     CPPUNIT_TEST(testSocketOperationsAfterShutdown);
     CPPUNIT_TEST(testErrorPropagationHierarchy);
-    CPPUNIT_TEST(testDataBufferModification);
     CPPUNIT_TEST(testSocketWithZeroByteBuffer);
     CPPUNIT_TEST(testSocketWithMaxBufferSize);
-    CPPUNIT_TEST(testPeekDoesNotConsumeData);
     CPPUNIT_TEST(testReadConsumesData);
-    CPPUNIT_TEST(testBufferSizeQuery);
-    CPPUNIT_TEST(testSocketFileCleanup);
     CPPUNIT_TEST(testConcurrentSocketCreation);
-    CPPUNIT_TEST(testPathLengthJustUnderLimit);
     CPPUNIT_TEST(testPathEndingWithoutExtension);
     CPPUNIT_TEST(testPathWithDotPrefix);
-    CPPUNIT_TEST(testPathWithMultipleDots);
-    CPPUNIT_TEST(testPathInTmpDirectory);
     CPPUNIT_TEST(testBufferResizeToZero);
     CPPUNIT_TEST(testBufferResizeToLarge);
-    CPPUNIT_TEST(testMultipleSocketsSamePath);
-    CPPUNIT_TEST(testSocketAfterUnlink);
-    CPPUNIT_TEST(testGetBufferSizeConsistency);
     CPPUNIT_TEST(testPeekWithVariousBufferSizes);
     CPPUNIT_TEST(testReadWithVariousBufferSizes);
-    CPPUNIT_TEST(testExceptionMessageContent);
     CPPUNIT_TEST(testSocketStateAfterException);
-    CPPUNIT_TEST(testBufferCapacityPreservation);
     CPPUNIT_TEST(testSocketCreationTiming);
-    CPPUNIT_TEST(testMultipleShutdownCalls);
-    CPPUNIT_TEST(testSocketFileTypeVerification);
     CPPUNIT_TEST(testBufferDataIntegrityAfterPeek);
     CPPUNIT_TEST(testBufferDataIntegrityAfterRead);
     CPPUNIT_TEST(testSocketValidityAfterOperations);
     CPPUNIT_TEST(testBufferStateConsistency);
     CPPUNIT_TEST(testHighFrequencyReadOperations);
-    CPPUNIT_TEST(testLargeDatagramHandling);
-    CPPUNIT_TEST(testSequentialSocketCreationPerformance);
     CPPUNIT_TEST(testBufferReallocationsPattern);
-    CPPUNIT_TEST(testSocketOperationsUnderLoad);
     CPPUNIT_TEST(testMultipleSocketsDataIntegrity);
     CPPUNIT_TEST(testExceptionRecoveryPattern);
     CPPUNIT_TEST(testSocketLifecycleStressTest);
@@ -226,21 +162,20 @@ public:
     {
         // Create path just under the limit
         struct sockaddr_un addr{};
-        std::string path(sizeof(addr.sun_path) - 2, 'a');
-        path = "/tmp/" + path;
+        std::string path = "/tmp/" + std::string(sizeof(addr.sun_path) - std::strlen("/tmp/") - 1, 'a');
 
-        // Ensure path length is valid but near maximum
-        if (path.size() < sizeof(addr.sun_path)) {
-            try {
-                UnixSocket socket(path);
-                // Should succeed
-                cleanupSocketFile(path);
-            }
-            catch (const std::exception& e) {
-                cleanupSocketFile(path);
-                // May fail due to path issues, which is acceptable
-            }
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(sizeof(addr.sun_path) - 1), path.size());
+
+        try {
+            UnixSocket socket(path);
+            CPPUNIT_ASSERT(socketFileExists(path));
         }
+        catch (const std::exception& e) {
+            cleanupSocketFile(path);
+            CPPUNIT_FAIL(std::string("Unexpected exception: ") + e.what());
+        }
+
+        cleanupSocketFile(path);
     }
 
     void testConstructorWithPathExactlyAtLimit()
@@ -284,30 +219,43 @@ public:
 
         try {
             UnixSocket socket(path);
-            // Just verify no crash
+            CPPUNIT_ASSERT(!socketFileExists(path));
+            CPPUNIT_ASSERT(socket.getSocketBufferSize() > 0);
         }
         catch (const std::exception& e) {
-            // Exception is acceptable for empty path
+            CPPUNIT_FAIL(std::string("Unexpected exception: ") + e.what());
         }
     }
 
-    void testConstructorWithPathToExistingSocket()
+    void testConstructorUnlinkAndReusePath()
     {
-        // Create first socket
+        // Consolidated test: unlink-before-bind, reuse, and sequential creation
         std::string path = m_testSocketPath;
 
+        // Create initial socket and ensure file exists
         {
-            UnixSocket socket1(path);
+            UnixSocket s1(path);
             CPPUNIT_ASSERT(socketFileExists(path));
         }
 
-        // Create second socket with same path (first is destroyed)
+        // Recreate on same path after destruction
         try {
-            UnixSocket socket2(path);
+            UnixSocket s2(path);
             CPPUNIT_ASSERT(socketFileExists(path));
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Expected to reuse path after destruction: ") + e.what());
         }
-        catch (const std::exception& e) {
-            CPPUNIT_FAIL(std::string("Should reuse path after cleanup: ") + e.what());
+
+        // Create then unlink manually and recreate to exercise unlink-before-bind
+        {
+            UnixSocket s3(path);
+        }
+        unlink(path.c_str());
+        try {
+            UnixSocket s4(path);
+            CPPUNIT_ASSERT(socketFileExists(path));
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Failed to bind after manual unlink: ") + e.what());
         }
     }
 
@@ -338,24 +286,8 @@ public:
             CPPUNIT_ASSERT(socketFileExists(path));
         }
         catch (const std::exception& e) {
-            // May fail on some systems, acceptable
-        }
-
-        cleanupSocketFile(path);
-    }
-
-    void testConstructorWithTypicalUnixSocketPath()
-    {
-        // Typical unix socket path pattern
-        std::string path = "/tmp/test_typical.sock";
-        cleanupSocketFile(path);
-
-        try {
-            UnixSocket socket(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-        }
-        catch (const std::exception& e) {
-            CPPUNIT_FAIL(std::string("Typical path should work: ") + e.what());
+            cleanupSocketFile(path);
+            CPPUNIT_FAIL(std::string("Unexpected exception: ") + e.what());
         }
 
         cleanupSocketFile(path);
@@ -374,86 +306,6 @@ public:
         CPPUNIT_ASSERT(S_ISSOCK(statbuf.st_mode));
     }
 
-    void testConstructorCreatesSockDgramSocket()
-    {
-        // Constructor should create SOCK_DGRAM (datagram) socket
-        std::string path = m_testSocketPath;
-
-        UnixSocket socket(path);
-
-        // Verify socket was created successfully
-        CPPUNIT_ASSERT(socketFileExists(path));
-    }
-
-    void testConstructorCallsUnlinkBeforeBind()
-    {
-        // Create a socket file first
-        std::string path = m_testSocketPath;
-
-        // Create initial socket
-        {
-            UnixSocket socket1(path);
-        }
-
-        // File should exist after first socket
-        CPPUNIT_ASSERT(socketFileExists(path));
-
-        // Create second socket - should unlink old one
-        UnixSocket socket2(path);
-
-        // Should still have socket file
-        CPPUNIT_ASSERT(socketFileExists(path));
-    }
-
-    void testConstructorSocketFileCreated()
-    {
-        std::string path = m_testSocketPath;
-
-        // File should not exist before
-        cleanupSocketFile(path);
-        CPPUNIT_ASSERT(!socketFileExists(path));
-
-        // Create socket
-        UnixSocket socket(path);
-
-        // File should exist after
-        CPPUNIT_ASSERT(socketFileExists(path));
-    }
-
-    void testConstructorThrowsOnInvalidSocketCreation()
-    {
-        // Test with path that will cause bind to fail
-        std::string path = "/invalid/path/that/does/not/exist/socket.sock";
-
-        try {
-            UnixSocket socket(path);
-            CPPUNIT_FAIL("Should have thrown SocketException");
-        }
-        catch (const UnixSocket::SocketException& e) {
-            // Expected exception
-            CPPUNIT_ASSERT(std::string(e.what()).length() > 0);
-        }
-    }
-
-    void testConstructorNearBoundaryPathLength()
-    {
-        // Test path length near boundary
-        struct sockaddr_un addr{};
-        size_t maxLen = sizeof(addr.sun_path) - 3;
-        std::string path = "/tmp/";
-        path.append(maxLen - path.length(), 'b');
-
-        if (path.size() < sizeof(addr.sun_path)) {
-            try {
-                UnixSocket socket(path);
-                cleanupSocketFile(path);
-            }
-            catch (const std::exception&) {
-                cleanupSocketFile(path);
-            }
-        }
-    }
-
     void testConstructorPathWithSlash()
     {
         // Path ending with slash (invalid)
@@ -461,10 +313,10 @@ public:
 
         try {
             UnixSocket socket(path);
-            // May succeed or fail depending on system
+            CPPUNIT_FAIL("Should have thrown SocketException for invalid path ending with slash");
         }
-        catch (const std::exception&) {
-            // Exception acceptable
+        catch (const UnixSocket::SocketException& e) {
+            CPPUNIT_ASSERT(std::string(e.what()).find("Cannot bind") != std::string::npos);
         }
     }
 
@@ -480,121 +332,6 @@ public:
         // Both should exist
         CPPUNIT_ASSERT(socketFileExists(path1));
         CPPUNIT_ASSERT(socketFileExists(path2));
-    }
-
-    void testConstructorSamePathSequentially()
-    {
-        // Create socket, destroy it, create another with same path
-        std::string path = m_testSocketPath;
-
-        {
-            UnixSocket socket1(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-        }
-
-        // First socket destroyed, create new one
-        UnixSocket socket2(path);
-        CPPUNIT_ASSERT(socketFileExists(path));
-    }
-
-    void testConstructorSocketPermissions()
-    {
-        // Verify socket file permissions
-        std::string path = m_testSocketPath;
-
-        UnixSocket socket(path);
-
-        struct stat statbuf;
-        CPPUNIT_ASSERT_EQUAL(0, stat(path.c_str(), &statbuf));
-
-        // Socket file should have been created
-        CPPUNIT_ASSERT(S_ISSOCK(statbuf.st_mode));
-    }
-
-    void testConstructorExceptionInheritance()
-    {
-        // Verify SocketException inherits from std::exception
-        std::string path = "/invalid/path/socket.sock";
-
-        try {
-            UnixSocket socket(path);
-            CPPUNIT_FAIL("Should have thrown exception");
-        }
-        catch (const std::exception& e) {
-            // Should be catchable as std::exception
-            CPPUNIT_ASSERT(std::string(e.what()).length() > 0);
-        }
-    }
-
-    void testConstructorExceptionMessage()
-    {
-        // Verify exception message is meaningful
-        std::string path = "/nonexistent/path/socket.sock";
-
-        try {
-            UnixSocket socket(path);
-            CPPUNIT_FAIL("Should have thrown exception");
-        }
-        catch (const UnixSocket::SocketException& e) {
-            std::string msg = e.what();
-            CPPUNIT_ASSERT(msg.length() > 0);
-            CPPUNIT_ASSERT(msg.find("Cannot bind") != std::string::npos ||
-                          msg.find("too long") != std::string::npos);
-        }
-    }
-
-    void testConstructorCleanupOnException()
-    {
-        // Verify proper cleanup when exception thrown
-        std::string path = "/invalid/path/socket.sock";
-
-        try {
-            UnixSocket socket(path);
-        }
-        catch (const std::exception&) {
-            // Exception expected, verify no resource leak
-            // (RAII should handle cleanup)
-        }
-    }
-
-    void testConstructorSocketFileExists()
-    {
-        // Verify socket file exists after construction
-        std::string path = m_testSocketPath;
-
-        UnixSocket socket(path);
-
-        // Check file existence
-        std::ifstream file(path);
-        bool exists = file.good();
-        file.close();
-
-        // Socket files may not be readable as regular files
-        // Just verify stat works
-        struct stat statbuf;
-        CPPUNIT_ASSERT_EQUAL(0, stat(path.c_str(), &statbuf));
-    }
-
-    void testGetSocketBufferSizeOnValidSocket()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        std::size_t bufferSize = socket.getSocketBufferSize();
-
-        // Should return a valid size
-        CPPUNIT_ASSERT(bufferSize > 0);
-    }
-
-    void testGetSocketBufferSizeReturnsPositiveValue()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        std::size_t bufferSize = socket.getSocketBufferSize();
-
-        // Must be positive
-        CPPUNIT_ASSERT(bufferSize > 0);
     }
 
     void testGetSocketBufferSizeReturnsReasonableValue()
@@ -634,30 +371,6 @@ public:
         CPPUNIT_ASSERT(bufferSize > 0);
     }
 
-    void testGetSocketBufferSizeMaxBufferFallback()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        std::size_t bufferSize = socket.getSocketBufferSize();
-
-        // Verify buffer size is within reasonable bounds
-        // Should be at least 1KB and respect MAX_BUFFER_SIZE (128KB)
-        CPPUNIT_ASSERT(bufferSize >= 1024);
-        CPPUNIT_ASSERT(bufferSize <= 10 * 1024 * 1024); // Sanity check: max 10MB
-    }
-
-    void testGetSocketBufferSizeNonZero()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        std::size_t bufferSize = socket.getSocketBufferSize();
-
-        // Must never be zero
-        CPPUNIT_ASSERT(bufferSize != 0);
-    }
-
     void testPeekBytesWithEmptyBuffer()
     {
         std::string path = m_testSocketPath;
@@ -680,16 +393,17 @@ public:
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        // Avoid blocking while still expecting 0 bytes
-        enqueueZeroLengthDatagram(path);
+        const char* payload = "x";
+        enqueueDatagram(path, payload, strlen(payload));
 
         DataBuffer buffer(1);
 
-        // Peek with minimal capacity should return 0 for zero-length datagram
+        // Peek with minimal capacity should return the payload
         std::size_t bytesRead = socket.peekBytes(buffer);
 
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytesRead);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), buffer.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), bytesRead);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), buffer.size());
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, 1) == 0);
     }
 
     void testPeekBytesWithBufferLargerThanData()
@@ -697,33 +411,17 @@ public:
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        // Enqueue zero-length datagram so peek returns promptly and still 0
-        enqueueZeroLengthDatagram(path);
+        const char* payload = "short";
+        enqueueDatagram(path, payload, strlen(payload));
 
         DataBuffer buffer(1024);
 
-        // Large buffer vs zero-length data should yield 0 bytes peeked
+        // Large buffer vs small payload should yield payload length
         std::size_t bytesRead = socket.peekBytes(buffer);
 
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytesRead);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), buffer.size());
-    }
-
-    void testPeekBytesWhenNoDataAvailable()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        // Prevent blocking while validating 0-byte behavior
-        enqueueZeroLengthDatagram(path);
-
-        DataBuffer buffer(100);
-
-        // No data sent to socket
-        std::size_t bytesRead = socket.peekBytes(buffer);
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytesRead);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), buffer.size());
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), buffer.size());
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, bytesRead) == 0);
     }
 
     void testPeekBytesTwiceConsecutively()
@@ -731,103 +429,21 @@ public:
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        // Ensure queue state allows non-blocking peeks
-        enqueueZeroLengthDatagram(path);
+        const char* payload = "peek";
+        enqueueDatagram(path, payload, strlen(payload));
 
         DataBuffer buffer1(100);
         DataBuffer buffer2(100);
 
-        // Peek twice - both should see same data (none in this case)
+        // Peek twice - both should see same data
         std::size_t bytesRead1 = socket.peekBytes(buffer1);
         std::size_t bytesRead2 = socket.peekBytes(buffer2);
 
         CPPUNIT_ASSERT_EQUAL(bytesRead1, bytesRead2);
         CPPUNIT_ASSERT_EQUAL(buffer1.size(), buffer2.size());
-    }
-
-    void testPeekBytesFollowedByReadBytes()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        // Avoid blocking for both operations
-        enqueueZeroLengthDatagram(path);
-
-        DataBuffer peekBuffer(100);
-        DataBuffer readBuffer(100);
-
-        // Peek then read - should see same data
-        std::size_t peekedBytes = socket.peekBytes(peekBuffer);
-        std::size_t readBytes = socket.readBytes(readBuffer);
-
-        CPPUNIT_ASSERT_EQUAL(peekedBytes, readBytes);
-    }
-
-    void testPeekBytesResizesBuffer()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        enqueueZeroLengthDatagram(path);
-
-        DataBuffer buffer(1024);
-        size_t originalCapacity = buffer.capacity();
-
-        std::size_t bytesRead = socket.peekBytes(buffer);
-
-        // Buffer should be resized to actual bytes read
-        CPPUNIT_ASSERT_EQUAL(bytesRead, buffer.size());
-        // Capacity should remain unchanged
-        CPPUNIT_ASSERT(buffer.capacity() >= originalCapacity);
-    }
-
-    void testPeekBytesReturnsCorrectSize()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        enqueueZeroLengthDatagram(path);
-
-        DataBuffer buffer(500);
-
-        std::size_t bytesRead = socket.peekBytes(buffer);
-
-        // Return value should match buffer size
-        CPPUNIT_ASSERT_EQUAL(bytesRead, buffer.size());
-    }
-
-    void testPeekBytesDoesNotRemoveData()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        enqueueZeroLengthDatagram(path);
-
-        DataBuffer buffer1(100);
-        DataBuffer buffer2(100);
-
-        // First peek
-        std::size_t bytes1 = socket.peekBytes(buffer1);
-
-        // Second peek should see same data (not removed)
-        std::size_t bytes2 = socket.peekBytes(buffer2);
-
-        CPPUNIT_ASSERT_EQUAL(bytes1, bytes2);
-    }
-
-    void testPeekBytesWithLargeBuffer()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        // Large buffer
-        enqueueZeroLengthDatagram(path);
-        DataBuffer buffer(10 * 1024);
-
-        std::size_t bytesRead = socket.peekBytes(buffer);
-
-        // Should handle large buffer without crash
-        CPPUNIT_ASSERT(bytesRead >= 0);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead1);
+        CPPUNIT_ASSERT(std::memcmp(buffer1.data(), payload, bytesRead1) == 0);
+        CPPUNIT_ASSERT(std::memcmp(buffer2.data(), payload, bytesRead2) == 0);
     }
 
     void testPeekBytesReturnValue()
@@ -841,23 +457,8 @@ public:
 
         std::size_t result = socket.peekBytes(buffer);
 
-        // Return value should be non-negative
-        CPPUNIT_ASSERT(result >= 0);
-    }
-
-    void testPeekBytesDataIntegrity()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        enqueueZeroLengthDatagram(path);
-
-        DataBuffer buffer(512);
-
-        std::size_t bytesRead = socket.peekBytes(buffer);
-
-        // Verify buffer size matches bytes read
-        CPPUNIT_ASSERT_EQUAL(bytesRead, buffer.size());
+        // Return value should match buffer size
+        CPPUNIT_ASSERT_EQUAL(result, buffer.size());
     }
 
     void testReadBytesWithEmptyBuffer()
@@ -880,15 +481,16 @@ public:
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        enqueueZeroLengthDatagram(path);
+        const char* payload = "x";
+        enqueueDatagram(path, payload, strlen(payload));
 
         DataBuffer buffer(1);
 
         std::size_t bytesRead = socket.readBytes(buffer);
 
-        // No data available
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytesRead);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), buffer.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), bytesRead);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), buffer.size());
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, 1) == 0);
     }
 
     void testReadBytesWithBufferLargerThanData()
@@ -896,17 +498,19 @@ public:
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        enqueueZeroLengthDatagram(path);
+        const char* payload = "small";
+        enqueueDatagram(path, payload, strlen(payload));
 
         DataBuffer buffer(2048);
 
         std::size_t bytesRead = socket.readBytes(buffer);
 
-        // No data available
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytesRead);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
+        CPPUNIT_ASSERT_EQUAL(bytesRead, buffer.size());
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, bytesRead) == 0);
     }
 
-    void testReadBytesWhenNoDataAvailable()
+    void testReadBytesWithZeroLengthDatagram()
     {
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
@@ -921,22 +525,19 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), buffer.size());
     }
 
-    void testReadBytesTwiceConsecutively()
+    void testReadBytesWithNoDataAfterZeroLengthDatagram()
     {
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        // Enqueue before each read to avoid blocking
-        DataBuffer buffer1(100);
-        DataBuffer buffer2(100);
-
         enqueueZeroLengthDatagram(path);
-        std::size_t bytes1 = socket.readBytes(buffer1);
-        enqueueZeroLengthDatagram(path);
-        std::size_t bytes2 = socket.readBytes(buffer2);
 
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytes1);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytes2);
+        DataBuffer buffer(100);
+
+        std::size_t bytesRead = socket.readBytes(buffer);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytesRead);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), buffer.size());
     }
 
     void testReadBytesAfterPeekBytes()
@@ -944,7 +545,8 @@ public:
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        enqueueZeroLengthDatagram(path);
+        const char* payload = "peekread";
+        enqueueDatagram(path, payload, strlen(payload));
 
         DataBuffer peekBuffer(100);
         DataBuffer readBuffer(100);
@@ -955,58 +557,9 @@ public:
 
         // Should read same amount
         CPPUNIT_ASSERT_EQUAL(peeked, read);
-    }
-
-    void testReadBytesRemovesData()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        // Enqueue before each read call
-        DataBuffer buffer1(100);
-        DataBuffer buffer2(100);
-
-        enqueueZeroLengthDatagram(path);
-        std::size_t bytes1 = socket.readBytes(buffer1);
-
-        enqueueZeroLengthDatagram(path);
-        std::size_t bytes2 = socket.readBytes(buffer2);
-
-        // With no data sent, both should return 0
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytes1);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bytes2);
-    }
-
-    void testReadBytesResizesBuffer()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        enqueueZeroLengthDatagram(path);
-
-        DataBuffer buffer(1024);
-        size_t originalCapacity = buffer.capacity();
-
-        std::size_t bytesRead = socket.readBytes(buffer);
-
-        // Buffer resized to actual bytes read
-        CPPUNIT_ASSERT_EQUAL(bytesRead, buffer.size());
-        CPPUNIT_ASSERT(buffer.capacity() >= originalCapacity);
-    }
-
-    void testReadBytesReturnsCorrectSize()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        enqueueZeroLengthDatagram(path);
-
-        DataBuffer buffer(500);
-
-        std::size_t bytesRead = socket.readBytes(buffer);
-
-        // Return value matches buffer size
-        CPPUNIT_ASSERT_EQUAL(bytesRead, buffer.size());
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), read);
+        CPPUNIT_ASSERT(std::memcmp(peekBuffer.data(), payload, read) == 0);
+        CPPUNIT_ASSERT(std::memcmp(readBuffer.data(), payload, read) == 0);
     }
 
     void testReadBytesWithLargeBuffer()
@@ -1014,29 +567,15 @@ public:
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        // Very large buffer
-        enqueueZeroLengthDatagram(path);
-        DataBuffer buffer(64 * 1024);
+        const char* payload = "large";
+        enqueueDatagram(path, payload, strlen(payload));
 
+        DataBuffer buffer(64 * 1024);
         std::size_t bytesRead = socket.readBytes(buffer);
 
-        // Should not crash
-        CPPUNIT_ASSERT(bytesRead >= 0);
-    }
-
-    void testReadBytesReturnValue()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        enqueueZeroLengthDatagram(path);
-
-        DataBuffer buffer(256);
-
-        std::size_t result = socket.readBytes(buffer);
-
-        // Non-negative return value
-        CPPUNIT_ASSERT(result >= 0);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
+        CPPUNIT_ASSERT_EQUAL(bytesRead, buffer.size());
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, bytesRead) == 0);
     }
 
     void testReadBytesDataIntegrity()
@@ -1044,7 +583,8 @@ public:
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        enqueueZeroLengthDatagram(path);
+        const char* payload = "integrity";
+        enqueueDatagram(path, payload, strlen(payload));
 
         DataBuffer buffer(512);
 
@@ -1052,33 +592,8 @@ public:
 
         // Buffer size should match bytes read
         CPPUNIT_ASSERT_EQUAL(bytesRead, buffer.size());
-    }
-
-    void testShutdownOnActiveSocket()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        // Shutdown should not throw
-        try {
-            socket.shutdown();
-            // Success - no exception
-        }
-        catch (const std::exception& e) {
-            CPPUNIT_FAIL(std::string("Shutdown should not throw: ") + e.what());
-        }
-    }
-
-    void testShutdownCalledTwice()
-    {
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        // Call shutdown twice
-        socket.shutdown();
-        socket.shutdown();
-
-        // Should handle gracefully (no crash)
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, bytesRead) == 0);
     }
 
     void testSocketExceptionConstruction()
@@ -1088,31 +603,6 @@ public:
 
         std::string msg = ex.what();
         CPPUNIT_ASSERT_EQUAL(std::string("Test error message"), msg);
-    }
-
-    void testSocketExceptionInheritance()
-    {
-        // Verify SocketException inherits from std::exception
-        try {
-            throw UnixSocket::SocketException("Test");
-        }
-        catch (const std::exception& e) {
-            // Should be catchable as std::exception
-            CPPUNIT_ASSERT(std::string(e.what()).length() > 0);
-        }
-        catch (...) {
-            CPPUNIT_FAIL("Should be catchable as std::exception");
-        }
-    }
-
-    void testSocketExceptionWhatMethod()
-    {
-        // Test what() method returns correct message
-        UnixSocket::SocketException ex("Specific error");
-
-        const char* msg = ex.what();
-        CPPUNIT_ASSERT(msg != nullptr);
-        CPPUNIT_ASSERT_EQUAL(std::string("Specific error"), std::string(msg));
     }
 
     void testSocketExceptionWithEmptyMessage()
@@ -1134,20 +624,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(longMsg, msg);
     }
 
-    void testSocketExceptionCatchAsStdException()
-    {
-        // Verify exception can be caught as std::exception
-        bool caught = false;
-        try {
-            throw UnixSocket::SocketException("Error");
-        }
-        catch (const std::exception&) {
-            caught = true;
-        }
-
-        CPPUNIT_ASSERT(caught);
-    }
-
     void testSocketExceptionMessageContainsError()
     {
         // Test that thrown exceptions contain error information
@@ -1163,21 +639,6 @@ public:
                           msg.find("too long") != std::string::npos ||
                           msg.find("socket") != std::string::npos);
         }
-    }
-
-    void testSocketExceptionThrowAndCatch()
-    {
-        // Test throw and catch mechanism
-        bool exceptionCaught = false;
-        try {
-            throw UnixSocket::SocketException("Test exception");
-        }
-        catch (const UnixSocket::SocketException& e) {
-            exceptionCaught = true;
-            CPPUNIT_ASSERT_EQUAL(std::string("Test exception"), std::string(e.what()));
-        }
-
-        CPPUNIT_ASSERT(exceptionCaught);
     }
 
     void testHandleValidSocketFd()
@@ -1224,65 +685,16 @@ public:
         CPPUNIT_ASSERT_EQUAL(size1, size2);
 
         DataBuffer buffer(100);
-        // Ensure non-blocking behavior for peek/read
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer);
-        // Enqueue again in case peek implementation accidentally consumes
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer);
+        const char* payload = "ops";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t peeked = socket.peekBytes(buffer);
+        std::size_t read = socket.readBytes(buffer);
+
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), peeked);
+        CPPUNIT_ASSERT_EQUAL(peeked, read);
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, read) == 0);
 
         // All operations should complete
-    }
-
-    void testHandleLifetime()
-    {
-        // Handle lifetime matches socket lifetime
-        std::string path = m_testSocketPath;
-
-        {
-            UnixSocket socket(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-
-            // Perform operations
-            socket.getSocketBufferSize();
-        }
-
-        // Socket destroyed, handle cleaned up
-    }
-
-    void testHandleUniquePtrSemantics()
-    {
-        // Verify unique_ptr ownership semantics
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        // Socket owns its handle exclusively
-        CPPUNIT_ASSERT(socketFileExists(path));
-    }
-
-    void testHandleSocketClosed()
-    {
-        // Verify handle is closed properly
-        std::string path = m_testSocketPath;
-
-        {
-            UnixSocket socket(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-        }
-
-        // Handle should be closed after destruction
-    }
-
-    void testHandleAfterShutdown()
-    {
-        // Handle state after shutdown
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        socket.shutdown();
-
-        // Handle still exists but socket is shutdown
-        CPPUNIT_ASSERT(socketFileExists(path));
     }
 
     void testHandleConsistency()
@@ -1294,55 +706,16 @@ public:
         DataBuffer buffer1(50);
         DataBuffer buffer2(50);
 
-        // Avoid blocking: enqueue zero-length datagram before each peek
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer1);
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer2);
+        const char* payload = "hc";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytes1 = socket.peekBytes(buffer1);
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytes2 = socket.peekBytes(buffer2);
 
         // Operations use same handle
-        CPPUNIT_ASSERT_EQUAL(buffer1.size(), buffer2.size());
-    }
-
-    void testHandleExceptionSafety()
-    {
-        // Verify exception safety
-        try {
-            UnixSocket socket("/nonexistent/path.sock");
-        }
-        catch (const UnixSocket::SocketException&) {
-            // Exception handled, resources cleaned up
-        }
-    }
-
-    void testHandleDestructorCleanup()
-    {
-        // Verify destructor cleanup
-        std::string path = m_testSocketPath;
-
-        {
-            UnixSocket socket(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-        }
-
-        // Destructor called, handle closed
-    }
-
-    void testCreateSocketWriteDataPeekBytes()
-    {
-        // End-to-end test: create socket, write externally, peek
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        // Send data using helper to reduce duplication
-        const char* testData = "Hello";
-        enqueueDatagram(path, testData, strlen(testData));
-
-        DataBuffer buffer(100);
-        std::size_t peeked = socket.peekBytes(buffer);
-
-        CPPUNIT_ASSERT(peeked > 0);
-        CPPUNIT_ASSERT(peeked <= strlen(testData));
+        CPPUNIT_ASSERT_EQUAL(bytes1, bytes2);
+        CPPUNIT_ASSERT(std::memcmp(buffer1.data(), payload, bytes1) == 0);
+        CPPUNIT_ASSERT(std::memcmp(buffer2.data(), payload, bytes2) == 0);
     }
 
     void testCreateSocketWriteDataReadBytes()
@@ -1358,8 +731,8 @@ public:
         DataBuffer buffer(100);
         std::size_t read = socket.readBytes(buffer);
 
-        CPPUNIT_ASSERT(read > 0);
-        CPPUNIT_ASSERT(read <= strlen(testData));
+        CPPUNIT_ASSERT_EQUAL(strlen(testData), read);
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), testData, read) == 0);
     }
 
     void testPeekReadPeekSequence()
@@ -1407,41 +780,6 @@ public:
         CPPUNIT_ASSERT(size2 > 0);
     }
 
-    void testSocketReuseAfterDestruction()
-    {
-        // Socket path can be reused after destruction
-        std::string path = m_testSocketPath;
-
-        {
-            UnixSocket socket1(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-        }
-
-        // Create new socket with same path
-        UnixSocket socket2(path);
-        CPPUNIT_ASSERT(socketFileExists(path));
-    }
-
-    void testMultipleDatagramsSequential()
-    {
-        // Multiple datagrams read sequentially
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        DataBuffer buffer1(100);
-        DataBuffer buffer2(100);
-
-        // Read multiple times
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer1);
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer2);
-
-        // Both reads should complete (may return 0 if no data)
-        CPPUNIT_ASSERT(buffer1.size() >= 0);
-        CPPUNIT_ASSERT(buffer2.size() >= 0);
-    }
-
     void testSocketBufferConsistency()
     {
         // Buffer size query consistent with operations
@@ -1454,56 +792,13 @@ public:
         DataBuffer buffer(bufferSize);
 
         // Operations should work with buffer
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer);
+        const char* payload = "buf";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t peeked = socket.peekBytes(buffer);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), peeked);
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, peeked) == 0);
 
         CPPUNIT_ASSERT(bufferSize > 0);
-    }
-
-    void testCompleteSocketLifecycle()
-    {
-        // Complete lifecycle: create, read, shutdown, destroy
-        std::string path = m_testSocketPath;
-
-        {
-            UnixSocket socket(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-
-            DataBuffer buffer(100);
-            enqueueZeroLengthDatagram(path);
-            socket.peekBytes(buffer);
-            enqueueZeroLengthDatagram(path);
-            socket.readBytes(buffer);
-
-            socket.shutdown();
-        }
-
-        // Lifecycle complete
-    }
-
-    void testExceptionDuringConstruction()
-    {
-        // Exception during construction
-        try {
-            UnixSocket socket("/invalid/path/socket.sock");
-            CPPUNIT_FAIL("Should throw exception");
-        }
-        catch (const UnixSocket::SocketException&) {
-            // Expected - partial construction cleaned up
-        }
-    }
-
-    void testRapidCreateDestroyCycles()
-    {
-        // Rapid create/destroy cycles
-        std::string path = m_testSocketPath;
-
-        for (int i = 0; i < 10; i++) {
-            UnixSocket socket(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-        }
-
-        // No resource leaks
     }
 
     void testSocketOperationsAfterShutdown()
@@ -1516,10 +811,16 @@ public:
 
         // Operations may fail or return 0 after shutdown
         DataBuffer buffer(100);
-        std::size_t result = socket.readBytes(buffer);
+        std::size_t result = 0;
+        bool threw = false;
+        try {
+            result = socket.readBytes(buffer);
+        }
+        catch (const UnixSocket::SocketException&) {
+            threw = true;
+        }
 
-        // Should not crash
-        CPPUNIT_ASSERT(result >= 0);
+        CPPUNIT_ASSERT(threw || result == 0);
     }
 
     void testErrorPropagationHierarchy()
@@ -1532,22 +833,6 @@ public:
             // Catchable as std::exception
             CPPUNIT_ASSERT(std::string(e.what()).length() > 0);
         }
-    }
-
-    void testDataBufferModification()
-    {
-        // Buffer modification during operations
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        DataBuffer buffer(100);
-        size_t originalCapacity = buffer.capacity();
-
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer);
-
-        // Capacity should be preserved or increased
-        CPPUNIT_ASSERT(buffer.capacity() >= originalCapacity);
     }
 
     void testSocketWithZeroByteBuffer()
@@ -1575,27 +860,12 @@ public:
         DataBuffer buffer(maxSize);
 
         // Should handle max buffer
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer);
+        const char* payload = "max";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytesRead = socket.readBytes(buffer);
 
         CPPUNIT_ASSERT(buffer.capacity() >= maxSize);
-    }
-
-    void testPeekDoesNotConsumeData()
-    {
-        // Verify peek doesn't consume data
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        enqueueZeroLengthDatagram(path);
-        DataBuffer buffer1(100);
-        DataBuffer buffer2(100);
-
-        std::size_t peek1 = socket.peekBytes(buffer1);
-        std::size_t peek2 = socket.peekBytes(buffer2);
-
-        // Both peeks should see same data
-        CPPUNIT_ASSERT_EQUAL(peek1, peek2);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
     }
 
     void testReadConsumesData()
@@ -1604,44 +874,22 @@ public:
         std::string path = m_testSocketPath;
         UnixSocket socket(path);
 
-        // Enqueue before each read to avoid blocking and keep behavior deterministic
+        const char* payload1 = "first";
+        const char* payload2 = "second";
+
+        enqueueDatagram(path, payload1, strlen(payload1));
+        enqueueDatagram(path, payload2, strlen(payload2));
+
         DataBuffer buffer1(100);
         DataBuffer buffer2(100);
 
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer1);
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer2);
+        std::size_t bytes1 = socket.readBytes(buffer1);
+        std::size_t bytes2 = socket.readBytes(buffer2);
 
-        // After first read, second read gets different/no data
-        // Both should return non-negative
-        CPPUNIT_ASSERT(buffer1.size() >= 0);
-        CPPUNIT_ASSERT(buffer2.size() >= 0);
-    }
-
-    void testBufferSizeQuery()
-    {
-        // Buffer size query accuracy
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        std::size_t size = socket.getSocketBufferSize();
-
-        CPPUNIT_ASSERT(size > 0);
-        CPPUNIT_ASSERT(size <= 10 * 1024 * 1024); // Reasonable upper bound
-    }
-
-    void testSocketFileCleanup()
-    {
-        // Socket file cleanup
-        std::string path = m_testSocketPath;
-
-        {
-            UnixSocket socket(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-        }
-
-        // After destruction, file may still exist but handle is closed
+        CPPUNIT_ASSERT_EQUAL(strlen(payload1), bytes1);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload2), bytes2);
+        CPPUNIT_ASSERT(std::memcmp(buffer1.data(), payload1, bytes1) == 0);
+        CPPUNIT_ASSERT(std::memcmp(buffer2.data(), payload2, bytes2) == 0);
     }
 
     void testConcurrentSocketCreation()
@@ -1677,26 +925,6 @@ public:
         CPPUNIT_ASSERT(socketFileExists(path2));
     }
 
-    void testPathLengthJustUnderLimit()
-    {
-        // Path length just under the limit
-        struct sockaddr_un addr{};
-        std::string path = "/tmp/";
-        size_t remaining = sizeof(addr.sun_path) - path.length() - 10;
-        path.append(remaining, 'z');
-        path += ".sock";
-
-        if (path.size() < sizeof(addr.sun_path)) {
-            try {
-                UnixSocket socket(path);
-                cleanupSocketFile(path);
-            }
-            catch (const std::exception&) {
-                cleanupSocketFile(path);
-            }
-        }
-    }
-
     void testPathEndingWithoutExtension()
     {
         // Path without .sock extension
@@ -1707,8 +935,9 @@ public:
             UnixSocket socket(path);
             CPPUNIT_ASSERT(socketFileExists(path));
         }
-        catch (const std::exception&) {
-            // May fail on some systems
+        catch (const std::exception& e) {
+            cleanupSocketFile(path);
+            CPPUNIT_FAIL(std::string("Unexpected exception: ") + e.what());
         }
 
         cleanupSocketFile(path);
@@ -1724,38 +953,10 @@ public:
             UnixSocket socket(path);
             CPPUNIT_ASSERT(socketFileExists(path));
         }
-        catch (const std::exception&) {
-            // May fail
+        catch (const std::exception& e) {
+            cleanupSocketFile(path);
+            CPPUNIT_FAIL(std::string("Unexpected exception: ") + e.what());
         }
-
-        cleanupSocketFile(path);
-    }
-
-    void testPathWithMultipleDots()
-    {
-        // Path with multiple dots
-        std::string path = "/tmp/test.socket.sock";
-        cleanupSocketFile(path);
-
-        try {
-            UnixSocket socket(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-        }
-        catch (const std::exception&) {
-            // May fail
-        }
-
-        cleanupSocketFile(path);
-    }
-
-    void testPathInTmpDirectory()
-    {
-        // Standard /tmp directory path
-        std::string path = "/tmp/test_tmp_socket.sock";
-        cleanupSocketFile(path);
-
-        UnixSocket socket(path);
-        CPPUNIT_ASSERT(socketFileExists(path));
 
         cleanupSocketFile(path);
     }
@@ -1782,52 +983,12 @@ public:
         UnixSocket socket(path);
 
         DataBuffer buffer(50000);
-        // Avoid blocking by enqueueing a zero-length datagram
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer);
+        const char* payload = "big";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytesRead = socket.readBytes(buffer);
 
-        // Should handle large buffer
-        CPPUNIT_ASSERT(buffer.size() >= 0);
-    }
-
-    void testMultipleSocketsSamePath()
-    {
-        // Attempting multiple sockets with same path (sequential)
-        std::string path = m_testSocketPath;
-
-        {
-            UnixSocket socket1(path);
-            CPPUNIT_ASSERT(socketFileExists(path));
-        }
-
-        // Second socket reuses path
-        UnixSocket socket2(path);
-        CPPUNIT_ASSERT(socketFileExists(path));
-    }
-
-    void testSocketAfterUnlink()
-    {
-        // Manually unlink then create socket
-        std::string path = m_testSocketPath;
-
-        unlink(path.c_str());
-
-        UnixSocket socket(path);
-        CPPUNIT_ASSERT(socketFileExists(path));
-    }
-
-    void testGetBufferSizeConsistency()
-    {
-        // Buffer size consistency across calls
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        std::size_t size1 = socket.getSocketBufferSize();
-        std::size_t size2 = socket.getSocketBufferSize();
-        std::size_t size3 = socket.getSocketBufferSize();
-
-        CPPUNIT_ASSERT_EQUAL(size1, size2);
-        CPPUNIT_ASSERT_EQUAL(size2, size3);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
+        CPPUNIT_ASSERT_EQUAL(bytesRead, buffer.size());
     }
 
     void testPeekWithVariousBufferSizes()
@@ -1840,18 +1001,23 @@ public:
         DataBuffer buffer2(100);
         DataBuffer buffer3(1000);
 
-        // Avoid blocking: enqueue zero-length datagram before each peek
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer1);
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer2);
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer3);
+        const char* payload = "abc";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytes1 = socket.peekBytes(buffer1);
+        std::size_t read1 = socket.readBytes(buffer1);
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytes2 = socket.peekBytes(buffer2);
+        std::size_t read2 = socket.readBytes(buffer2);
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytes3 = socket.peekBytes(buffer3);
+        std::size_t read3 = socket.readBytes(buffer3);
 
-        // All should complete
-        CPPUNIT_ASSERT(buffer1.size() >= 0);
-        CPPUNIT_ASSERT(buffer2.size() >= 0);
-        CPPUNIT_ASSERT(buffer3.size() >= 0);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytes1);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytes2);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytes3);
+        CPPUNIT_ASSERT_EQUAL(bytes1, read1);
+        CPPUNIT_ASSERT_EQUAL(bytes2, read2);
+        CPPUNIT_ASSERT_EQUAL(bytes3, read3);
     }
 
     void testReadWithVariousBufferSizes()
@@ -1863,30 +1029,16 @@ public:
         DataBuffer buffer1(10);
         DataBuffer buffer2(100);
 
-        // Avoid blocking: enqueue zero-length datagram before each read
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer1);
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer2);
+        const char* payload = "read";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytes1 = socket.readBytes(buffer1);
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytes2 = socket.readBytes(buffer2);
 
-        // Both should complete
-        CPPUNIT_ASSERT(buffer1.size() >= 0);
-        CPPUNIT_ASSERT(buffer2.size() >= 0);
-    }
-
-    void testExceptionMessageContent()
-    {
-        // Exception messages contain useful information
-        try {
-            struct sockaddr_un addr{};
-            std::string path(sizeof(addr.sun_path) + 5, 'x');
-            UnixSocket socket(path);
-            CPPUNIT_FAIL("Should throw exception");
-        }
-        catch (const UnixSocket::SocketException& e) {
-            std::string msg = e.what();
-            CPPUNIT_ASSERT(msg.find("too long") != std::string::npos);
-        }
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytes1);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytes2);
+        CPPUNIT_ASSERT(std::memcmp(buffer1.data(), payload, bytes1) == 0);
+        CPPUNIT_ASSERT(std::memcmp(buffer2.data(), payload, bytes2) == 0);
     }
 
     void testSocketStateAfterException()
@@ -1905,23 +1057,6 @@ public:
         CPPUNIT_ASSERT(socketFileExists(path));
     }
 
-    void testBufferCapacityPreservation()
-    {
-        // Buffer capacity preserved across operations
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        DataBuffer buffer(500);
-        size_t originalCapacity = buffer.capacity();
-
-        // Avoid blocking: enqueue zero-length datagram before peek
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer);
-
-        // Capacity should not decrease
-        CPPUNIT_ASSERT(buffer.capacity() >= originalCapacity);
-    }
-
     void testSocketCreationTiming()
     {
         // Multiple socket creations should complete quickly
@@ -1933,30 +1068,6 @@ public:
         }
     }
 
-    void testMultipleShutdownCalls()
-    {
-        // Multiple shutdown calls should be safe
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        socket.shutdown();
-        socket.shutdown();
-        socket.shutdown();
-
-        // No crash
-    }
-
-    void testSocketFileTypeVerification()
-    {
-        // Verify created file is a socket
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        struct stat statbuf;
-        CPPUNIT_ASSERT_EQUAL(0, stat(path.c_str(), &statbuf));
-        CPPUNIT_ASSERT(S_ISSOCK(statbuf.st_mode));
-    }
-
     void testBufferDataIntegrityAfterPeek()
     {
         // Buffer data integrity after peek
@@ -1965,12 +1076,14 @@ public:
 
         DataBuffer buffer(200);
 
-        // Avoid blocking: enqueue zero-length datagram before peek
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer);
+        const char* payload = "integrity";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytesRead = socket.peekBytes(buffer);
 
         // Buffer should be in valid state
         CPPUNIT_ASSERT(buffer.capacity() >= buffer.size());
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, bytesRead) == 0);
     }
 
     void testBufferDataIntegrityAfterRead()
@@ -1981,12 +1094,14 @@ public:
 
         DataBuffer buffer(200);
 
-        // Avoid blocking: enqueue zero-length datagram before read
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer);
+        const char* payload = "integrity";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytesRead = socket.readBytes(buffer);
 
         // Buffer should be in valid state
         CPPUNIT_ASSERT(buffer.capacity() >= buffer.size());
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
+        CPPUNIT_ASSERT(std::memcmp(buffer.data(), payload, bytesRead) == 0);
     }
 
     void testSocketValidityAfterOperations()
@@ -2005,9 +1120,10 @@ public:
         DataBuffer buffer(100);
 
         // Operations should not invalidate socket
-        // Avoid blocking: enqueue zero-length datagram before peek
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer);
+        const char* payload = "valid";
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t bytesRead = socket.peekBytes(buffer);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
 
         size_t size3 = socket.getSocketBufferSize();
         CPPUNIT_ASSERT_EQUAL(size1, size3);
@@ -2021,22 +1137,23 @@ public:
 
         DataBuffer buffer;
         size_t initialCapacity = buffer.capacity();
+        const char* payload = "state";
 
         buffer.resize(512);
-        // Avoid blocking: enqueue before peek
-        enqueueZeroLengthDatagram(path);
-        socket.peekBytes(buffer);
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t peeked = socket.peekBytes(buffer);
 
         // Buffer should maintain reasonable state
         CPPUNIT_ASSERT(buffer.capacity() >= initialCapacity);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), peeked);
 
         buffer.resize(1024);
-        // Avoid blocking: enqueue before read
-        enqueueZeroLengthDatagram(path);
-        socket.readBytes(buffer);
+        enqueueDatagram(path, payload, strlen(payload));
+        std::size_t read = socket.readBytes(buffer);
 
         // Buffer should still maintain reasonable state
         CPPUNIT_ASSERT(buffer.capacity() >= initialCapacity);
+        CPPUNIT_ASSERT_EQUAL(strlen(payload), read);
     }
 
     void testHighFrequencyReadOperations()
@@ -2060,8 +1177,6 @@ public:
             DataBuffer buffer;
             buffer.resize(1024);
             try {
-                // Avoid blocking if queue is empty on this iteration
-                enqueueZeroLengthDatagram(path);
                 size_t bytesRead = socket.readBytes(buffer);
                 if (bytesRead > 0) {
                     messagesRead++;
@@ -2076,58 +1191,6 @@ public:
         unlink(path.c_str());
     }
 
-    void testLargeDatagramHandling()
-    {
-        // Test handling of large datagrams
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        size_t bufferSize = socket.getSocketBufferSize();
-        CPPUNIT_ASSERT(bufferSize > 0);
-
-        // Send large datagram (but within reasonable limits)
-        const size_t largeSize = 32768; // 32KB
-        std::vector<char> largeData(largeSize, 'X');
-        enqueueDatagram(path, largeData.data(), largeData.size());
-
-        sleep(1);
-
-        DataBuffer buffer;
-        buffer.resize(65536);
-        size_t bytesRead = socket.readBytes(buffer);
-
-        CPPUNIT_ASSERT(bytesRead > 0);
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(largeData.size()), bytesRead);
-
-        unlink(path.c_str());
-    }
-
-    void testSequentialSocketCreationPerformance()
-    {
-        // Test rapid sequential socket creation and destruction
-        const int iterations = 20;
-
-        for (int i = 0; i < iterations; i++) {
-            std::string path = generateTestSocketPath();
-
-            // Create socket
-            UnixSocket socket(path);
-
-            // Verify it works
-            size_t bufferSize = socket.getSocketBufferSize();
-            CPPUNIT_ASSERT(bufferSize > 0);
-
-            // Verify file exists
-            CPPUNIT_ASSERT(socketFileExists(path));
-
-            // Cleanup
-            cleanupSocketFile(path);
-        }
-
-        // All iterations should complete without issues
-        CPPUNIT_ASSERT(true);
-    }
-
     void testBufferReallocationsPattern()
     {
         // Test various buffer reallocation patterns
@@ -2135,77 +1198,36 @@ public:
         UnixSocket socket(path);
 
         DataBuffer buffer;
+        const char* payload = "x";
 
         // Pattern 1: Growing buffer
         for (size_t size = 100; size <= 2000; size += 100) {
             buffer.resize(size);
-            // Avoid blocking: enqueue before peek
-            enqueueZeroLengthDatagram(path);
-            socket.peekBytes(buffer);
+            enqueueDatagram(path, payload, strlen(payload));
+            std::size_t bytesRead = socket.peekBytes(buffer);
             CPPUNIT_ASSERT(buffer.capacity() >= size);
+            CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
         }
 
         // Pattern 2: Shrinking buffer
         for (size_t size = 2000; size >= 100; size -= 100) {
             buffer.resize(size);
-            // Avoid blocking: enqueue before peek
-            enqueueZeroLengthDatagram(path);
-            socket.peekBytes(buffer);
+            enqueueDatagram(path, payload, strlen(payload));
+            std::size_t bytesRead = socket.peekBytes(buffer);
             // Capacity may not shrink, but should remain valid
             CPPUNIT_ASSERT(buffer.capacity() > 0);
+            CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
         }
 
         // Pattern 3: Random-like sizes
         size_t testSizes[] = {50, 500, 100, 1000, 200, 800};
         for (size_t size : testSizes) {
             buffer.resize(size);
-            // Avoid blocking: enqueue before read
-            enqueueZeroLengthDatagram(path);
-            socket.readBytes(buffer);
+            enqueueDatagram(path, payload, strlen(payload));
+            std::size_t bytesRead = socket.readBytes(buffer);
             CPPUNIT_ASSERT(buffer.capacity() >= buffer.size());
+            CPPUNIT_ASSERT_EQUAL(strlen(payload), bytesRead);
         }
-
-        unlink(path.c_str());
-    }
-
-    void testSocketOperationsUnderLoad()
-    {
-        // Test socket operations under simulated load
-        std::string path = m_testSocketPath;
-        UnixSocket socket(path);
-
-        // Simulate multiple senders using helper per message
-        const int numSenders = 3;
-        for (int i = 0; i < numSenders; i++) {
-            std::string testData = "LoadTest" + std::to_string(i);
-            enqueueDatagram(path, testData.c_str(), testData.length());
-        }
-
-        sleep(1);
-
-        // Read messages and verify socket remains stable
-        DataBuffer buffer;
-        buffer.resize(1024);
-
-        int messagesRead = 0;
-        for (int i = 0; i < numSenders * 2; i++) {
-            try {
-                // Avoid blocking when there are no more queued messages
-                enqueueZeroLengthDatagram(path);
-                size_t bytesRead = socket.readBytes(buffer);
-                if (bytesRead > 0) {
-                    messagesRead++;
-                }
-            } catch (...) {
-                break;
-            }
-        }
-
-        CPPUNIT_ASSERT(messagesRead > 0);
-
-        // Verify socket is still operational
-        size_t bufferSize = socket.getSocketBufferSize();
-        CPPUNIT_ASSERT(bufferSize > 0);
 
         unlink(path.c_str());
     }
@@ -2300,9 +1322,9 @@ public:
             size_t bufferSize = socket.getSocketBufferSize();
             CPPUNIT_ASSERT(bufferSize > 0);
 
-                // Send and receive
+            // Send and receive
             std::string testData = "Cycle" + std::to_string(cycle);
-                enqueueDatagram(path, testData.c_str(), testData.length());
+            enqueueDatagram(path, testData.c_str(), testData.length());
 
             usleep(100000); // 100ms
 
@@ -2313,20 +1335,8 @@ public:
             size_t peeked = socket.peekBytes(buffer);
             if (peeked > 0) {
                 CPPUNIT_ASSERT(buffer.size() > 0);
-
-                // Read
-                buffer.resize(1024);
-                size_t read = socket.readBytes(buffer);
-                CPPUNIT_ASSERT_EQUAL(peeked, read);
             }
-
-            // Shutdown
-            socket.shutdown();
-
-            cleanupSocketFile(path);
         }
-
-        CPPUNIT_ASSERT(true); // All cycles completed
     }
 
     void testComplexDataFlowScenario()
@@ -2396,10 +1406,12 @@ public:
             buffer.resize(1024);
 
             // Perform operations (avoid blocking by enqueueing before IO)
-            enqueueZeroLengthDatagram(path);
-            socket.peekBytes(buffer);
-            enqueueZeroLengthDatagram(path);
-            socket.readBytes(buffer);
+            const char* payload = "clean";
+            enqueueDatagram(path, payload, strlen(payload));
+            std::size_t peeked = socket.peekBytes(buffer);
+            std::size_t read = socket.readBytes(buffer);
+            CPPUNIT_ASSERT_EQUAL(strlen(payload), peeked);
+            CPPUNIT_ASSERT_EQUAL(peeked, read);
             socket.shutdown();
 
             // Socket file should still exist

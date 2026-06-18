@@ -225,12 +225,10 @@ CPPUNIT_TEST_SUITE(TopNavProcessorTest);
     CPPUNIT_TEST(testGetPageBufferBoundaryMaxPageId);
     CPPUNIT_TEST(testGetPageBufferAfterReset);
     CPPUNIT_TEST(testProcessPageWithNonBttType);
-    CPPUNIT_TEST(testProcessPageWithValidBttData);
     CPPUNIT_TEST(testProcessPageWithInvalidBttData);
     CPPUNIT_TEST(testProcessPageWithMissingPacket);
     CPPUNIT_TEST(testNavigationWithAllNavigablePages);
-    CPPUNIT_TEST(testNavigationWithNoNavigablePages);
-    CPPUNIT_TEST(testNavigationWithSingleNavigablePage);
+    CPPUNIT_TEST(testNavigationWithOnlyConvertedFirstPageNavigable);
     CPPUNIT_TEST(testPrevPageNavigation);
     CPPUNIT_TEST(testNextPageNavigation);
     CPPUNIT_TEST(testNavigationWraparound);
@@ -242,7 +240,6 @@ CPPUNIT_TEST_SUITE(TopNavProcessorTest);
     CPPUNIT_TEST(testBlockNavigationWithNoBlockPages);
     CPPUNIT_TEST(testBlockNavigationWithSingleBlockPage);
     CPPUNIT_TEST(testBlockNavigationMixedTypes);
-    CPPUNIT_TEST(testFirstPageBttNoPageConversion);
     CPPUNIT_TEST(testAllPageTypesHandled);
     CPPUNIT_TEST(testSubtitlePageNavigation);
     CPPUNIT_TEST(testMixedPageTypeNavigation);
@@ -373,23 +370,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0xFFFF), metadata.m_nextPage);
     }
 
-    void testProcessPageWithValidBttData()
-    {
-        TestPageBtt bttPage;
-        PageBttBuilder builder;
-
-        // Set all pages as normal navigable pages
-        builder.setAllPageTypes(8); // BTT_NORMAL_S
-        builder.build(bttPage);
-
-        m_processor->processPage(bttPage);
-
-        // Verify database was updated
-        const Database::TopMetadata& metadata = m_database->getTopMetatadata(0x100);
-        CPPUNIT_ASSERT(metadata.m_nextPage != 0xFFFF);
-        CPPUNIT_ASSERT(metadata.m_prevPage != 0xFFFF);
-    }
-
     void testProcessPageWithInvalidBttData()
     {
         TestPageBtt bttPage;
@@ -447,27 +427,7 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x898), metadata899.m_prevPage);
     }
 
-    void testNavigationWithNoNavigablePages()
-    {
-        TestPageBtt bttPage;
-        PageBttBuilder builder;
-
-        builder.setAllPageTypes(0); // BTT_NO_PAGE - not navigable
-        builder.build(bttPage);
-
-        m_processor->processPage(bttPage);
-
-        // All pages should point to page 0 (index 0 = page 100)
-        const Database::TopMetadata& metadata100 = m_database->getTopMetatadata(0x100);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata100.m_nextPage);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata100.m_prevPage);
-
-        const Database::TopMetadata& metadata500 = m_database->getTopMetatadata(0x500);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata500.m_nextPage);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata500.m_prevPage);
-    }
-
-    void testNavigationWithSingleNavigablePage()
+    void testNavigationWithOnlyConvertedFirstPageNavigable()
     {
         TestPageBtt bttPage;
         PageBttBuilder builder;
@@ -713,39 +673,51 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x120), metadata110.m_nextBlockPage);
     }
 
-    void testFirstPageBttNoPageConversion()
-    {
-        TestPageBtt bttPage;
-        PageBttBuilder builder;
-
-        builder.setAllPageTypes(0); // All BTT_NO_PAGE
-        builder.build(bttPage);
-
-        m_processor->processPage(bttPage);
-
-        // First page (100) should be converted to BTT_BLOCK_M and become navigable
-        const Database::TopMetadata& metadata100 = m_database->getTopMetatadata(0x100);
-        // Since first page is now a block type, it should have block navigation
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata100.m_nextBlockPage);
-    }
-
     void testAllPageTypesHandled()
     {
-        TestPageBtt bttPage;
-        PageBttBuilder builder;
-
         // Test with all valid page type values (0-15)
         for (std::int8_t type = 0; type <= 15; ++type)
         {
+            TestPageBtt bttPage;
+            PageBttBuilder builder;
             builder.setAllPageTypes(type);
             builder.build(bttPage);
 
-            // Should process without crashing
             m_processor->processPage(bttPage);
-        }
 
-        // If we get here, all types were handled
-        CPPUNIT_ASSERT(true);
+            const Database::TopMetadata& metadata = m_database->getTopMetatadata(0x100);
+
+            if (type == 0)
+            {
+                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextPage);
+                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_prevPage);
+                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextGroupPage);
+                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextBlockPage);
+            }
+            else
+            {
+                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x101), metadata.m_nextPage);
+                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x899), metadata.m_prevPage);
+
+                if ((type == 6) || (type == 7))
+                {
+                    CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x101), metadata.m_nextGroupPage);
+                }
+                else
+                {
+                    CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextGroupPage);
+                }
+
+                if ((type == 4) || (type == 5))
+                {
+                    CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x101), metadata.m_nextBlockPage);
+                }
+                else
+                {
+                    CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextBlockPage);
+                }
+            }
+        }
     }
 
     void testSubtitlePageNavigation()
@@ -758,9 +730,11 @@ protected:
 
         m_processor->processPage(bttPage);
 
-        // Subtitle pages are navigable (based on isNavigableType implementation)
         const Database::TopMetadata& metadata100 = m_database->getTopMetatadata(0x100);
-        CPPUNIT_ASSERT(metadata100.m_nextPage != 0xFFFF);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x101), metadata100.m_nextPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x899), metadata100.m_prevPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata100.m_nextGroupPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata100.m_nextBlockPage);
     }
 
     void testMixedPageTypeNavigation()
@@ -781,10 +755,14 @@ protected:
         // Verify navigation skips non-navigable pages
         const Database::TopMetadata& metadata100 = m_database->getTopMetatadata(0x100);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x101), metadata100.m_nextPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x300), metadata100.m_nextBlockPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x400), metadata100.m_nextGroupPage);
 
-        // Page 200 (first in non-navigable range) should skip to navigable page
         const Database::TopMetadata& metadata200 = m_database->getTopMetatadata(0x200);
-        CPPUNIT_ASSERT(metadata200.m_nextPage != 0x201); // Should skip non-navigable
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x300), metadata200.m_nextPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x199), metadata200.m_prevPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x300), metadata200.m_nextBlockPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x400), metadata200.m_nextGroupPage);
     }
 
     void testInvalidDataResetsDatabase()

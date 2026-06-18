@@ -81,21 +81,35 @@ CPPUNIT_TEST_SUITE_END();
 public:
     void setUp() override
     {
+        m_createdSockets.clear();
+        m_createdDirectories.clear();
         m_testSocketCounter = 0;
     }
 
     void tearDown() override
     {
+        for (const auto& path : m_createdDirectories)
+        {
+            (void) ::chmod(path.c_str(), 0755);
+        }
+
         // Clean up any test socket files
         for (const auto& path : m_createdSockets)
         {
-            unlink(path.c_str());
+            (void) ::unlink(path.c_str());
         }
         m_createdSockets.clear();
+
+        for (const auto& path : m_createdDirectories)
+        {
+            (void) ::rmdir(path.c_str());
+        }
+        m_createdDirectories.clear();
     }
 
 protected:
     std::vector<std::string> m_createdSockets;
+    std::vector<std::string> m_createdDirectories;
     int m_testSocketCounter;
 
     // Helper function to generate unique socket path
@@ -106,6 +120,16 @@ protected:
         std::string path = "/tmp/test_unix_socket_" + std::to_string(stamp) +
                           "_" + std::to_string(m_testSocketCounter++);
         m_createdSockets.push_back(path);
+        return path;
+    }
+
+    std::string getTestDirectoryPath(const std::string& prefix)
+    {
+        auto now = std::chrono::steady_clock::now().time_since_epoch();
+        auto stamp = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+        std::string path = "/tmp/" + prefix + "_" + std::to_string(stamp) +
+                          "_" + std::to_string(m_testSocketCounter++);
+        m_createdDirectories.push_back(path);
         return path;
     }
 
@@ -311,22 +335,20 @@ protected:
 
     void testOpenWithReadOnlyDirectory()
     {
-        // Create a read-only directory
-        std::string dirPath = "/tmp/readonly_test_dir_" +
-                             std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-        mkdir(dirPath.c_str(), 0555); // read-only
-
+        std::string dirPath = getTestDirectoryPath("readonly_test_dir");
         std::string socketPath = dirPath + "/socket";
+
+        m_createdSockets.push_back(socketPath);
+
+        CPPUNIT_ASSERT_EQUAL(0, mkdir(dirPath.c_str(), 0555));
+
+        if (::geteuid() == 0)
+        {
+            return;
+        }
+
         UnixSocketSource source(socketPath);
-
-        // Should fail due to permission denied
-        bool result = source.open();
-
-        // Cleanup
-        chmod(dirPath.c_str(), 0755);
-        rmdir(dirPath.c_str());
-
-        CPPUNIT_ASSERT_EQUAL(false, result);
+        CPPUNIT_ASSERT_EQUAL(false, source.open());
     }
 
     void testOpenVerifiesSocketFileCreated()

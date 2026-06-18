@@ -257,8 +257,6 @@ protected:
             UnixSocketTarget target(path);
             // Destructor called without open
         }
-        // No crash expected
-        CPPUNIT_ASSERT(true);
     }
 
     void testDestructorOnOpenSocket()
@@ -272,8 +270,6 @@ protected:
             CPPUNIT_ASSERT_EQUAL(true, target.open());
             // Destructor called with open socket
         }
-        // Socket should be cleaned up, no crash expected
-        CPPUNIT_ASSERT(true);
     }
 
     void testDestructorAfterExplicitClose()
@@ -288,8 +284,6 @@ protected:
             target.close();
             // Destructor called after explicit close
         }
-        // No double-close issues expected
-        CPPUNIT_ASSERT(true);
     }
 
     void testOpenWithValidPath()
@@ -430,8 +424,12 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, target.open());
 
         target.close();
-        // No crash expected, close should succeed
-        CPPUNIT_ASSERT(true);
+
+        DataPacket packet(10);
+        std::memset(packet.getBuffer(), 0x42, 10);
+        packet.setSize(10);
+
+        CPPUNIT_ASSERT_EQUAL(false, target.writePacket(packet));
     }
 
     void testCloseOnAlreadyClosedSocket()
@@ -445,8 +443,11 @@ protected:
         target.close();
         target.close(); // Second close
 
-        // No crash expected, close is idempotent
-        CPPUNIT_ASSERT(true);
+        DataPacket packet(10);
+        std::memset(packet.getBuffer(), 0x42, 10);
+        packet.setSize(10);
+
+        CPPUNIT_ASSERT_EQUAL(false, target.writePacket(packet));
     }
 
     void testCloseOnNeverOpenedSocket()
@@ -455,8 +456,12 @@ protected:
         UnixSocketTarget target(path);
 
         target.close();
-        // Close on unopened socket should be safe
-        CPPUNIT_ASSERT(true);
+
+        DataPacket packet(10);
+        std::memset(packet.getBuffer(), 0x42, 10);
+        packet.setSize(10);
+
+        CPPUNIT_ASSERT_EQUAL(false, target.writePacket(packet));
     }
 
     void testCloseMultipleTimesInSequence()
@@ -468,8 +473,11 @@ protected:
         target.close();
         target.close();
 
-        // Multiple closes should all be safe
-        CPPUNIT_ASSERT(true);
+        DataPacket packet(10);
+        std::memset(packet.getBuffer(), 0x42, 10);
+        packet.setSize(10);
+
+        CPPUNIT_ASSERT_EQUAL(false, target.writePacket(packet));
     }
 
     void testWantsMorePacketsAlwaysReturnsTrue()
@@ -624,16 +632,22 @@ protected:
         UnixSocketTarget target(path);
         CPPUNIT_ASSERT_EQUAL(true, target.open());
 
-        DataPacket packet(65536);
+        const size_t packetSize = 4096;
+        DataPacket packet(packetSize);
         char* buffer = packet.getBuffer();
-        std::memset(buffer, 0xAA, 65536);
-        packet.setSize(65536);
+        std::memset(buffer, 0xAA, packetSize);
+        packet.setSize(packetSize);
 
-        bool result = target.writePacket(packet);
-        // Large datagram might fail or succeed depending on system limits
-        // Just verify it doesn't crash
-        (void)result;
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet));
+
+        std::vector<char> recvBuffer(packetSize);
+        ssize_t received = receiveData(serverFd, recvBuffer.data(), recvBuffer.size(), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(packetSize), received);
+
+        for (size_t i = 0; i < packetSize; i++)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0xAA), recvBuffer[i]);
+        }
 
         target.close();
     }
@@ -682,17 +696,21 @@ protected:
         // Close server socket
         ::close(serverFd);
         unlink(path.c_str());
+        for (int& fd : m_openServerSockets)
+        {
+            if (fd == serverFd)
+            {
+                fd = -1;
+                break;
+            }
+        }
 
         DataPacket packet(10);
         char* buffer = packet.getBuffer();
         std::memset(buffer, 0x42, 10);
         packet.setSize(10);
 
-        // Write might still succeed for DGRAM sockets as they are connectionless
-        // Just verify it doesn't crash
-        bool result = target.writePacket(packet);
-        (void)result;
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(false, target.writePacket(packet));
 
         target.close();
     }
@@ -784,10 +802,18 @@ protected:
         packet.setSize(20);
         CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet));
 
+        char recvBuffer[32];
+        ssize_t received = receiveData(serverFd, recvBuffer, sizeof(recvBuffer), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(20), received);
+        for (int i = 0; i < 20; i++)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0xBB), recvBuffer[i]);
+        }
+
         // Close
         target.close();
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(false, target.writePacket(packet));
     }
 
     void testReopenAfterClose()
@@ -801,6 +827,7 @@ protected:
         // First open-write-close cycle
         CPPUNIT_ASSERT_EQUAL(true, target.open());
         DataPacket packet1(10);
+        std::memset(packet1.getBuffer(), 0x11, 10);
         packet1.setSize(10);
         CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet1));
         target.close();
@@ -808,11 +835,26 @@ protected:
         // Second open-write-close cycle
         CPPUNIT_ASSERT_EQUAL(true, target.open());
         DataPacket packet2(10);
+        std::memset(packet2.getBuffer(), 0x22, 10);
         packet2.setSize(10);
         CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet2));
         target.close();
 
-        CPPUNIT_ASSERT(true);
+        char recvBuffer[16];
+
+        ssize_t receivedFirst = receiveData(serverFd, recvBuffer, sizeof(recvBuffer), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(10), receivedFirst);
+        for (int i = 0; i < 10; i++)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x11), recvBuffer[i]);
+        }
+
+        ssize_t receivedSecond = receiveData(serverFd, recvBuffer, sizeof(recvBuffer), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(10), receivedSecond);
+        for (int i = 0; i < 10; i++)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x22), recvBuffer[i]);
+        }
     }
 
     void testMultipleWritesVerifyOrdering()

@@ -66,8 +66,19 @@ CPPUNIT_TEST_SUITE(SmartFileSourceTest);
 CPPUNIT_TEST_SUITE_END();
 
 public:
-    void setUp() override {}
-    void tearDown() override {}
+    void setUp() override
+    {
+        m_tempFiles.clear();
+    }
+
+    void tearDown() override
+    {
+        for (const auto& path : m_tempFiles)
+        {
+            removeFileNoThrow(path);
+        }
+        m_tempFiles.clear();
+    }
 
 protected:
     static void appendLeUint32(std::vector<std::uint8_t>& out, std::uint32_t value)
@@ -118,13 +129,15 @@ protected:
         return makePacket(2U, counter, payload);
     }
 
-    static std::string makeTempFilePath(const std::string& baseName)
+    std::string makeTempFilePath(const std::string& baseName)
     {
         // Keep it simple and local: tests run from build dir.
         // Use a time-based suffix to avoid collisions when tests are re-run.
         auto now = std::chrono::steady_clock::now().time_since_epoch();
         auto stamp = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
-        return baseName + "_" + std::to_string(stamp) + ".bin";
+        std::string path = baseName + "_" + std::to_string(stamp) + ".bin";
+        m_tempFiles.push_back(path);
+        return path;
     }
 
     static void writeFile(const std::string& path, const std::vector<std::vector<std::uint8_t>>& packets)
@@ -156,6 +169,9 @@ protected:
         return static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
     }
+
+private:
+    std::vector<std::string> m_tempFiles;
 
     void testConstructorWithValidPath()
     {

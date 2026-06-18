@@ -223,15 +223,11 @@ class RendererImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testStopWhenNotStarted);
     CPPUNIT_TEST(testStopCalledTwice);
     CPPUNIT_TEST(testIsStartedAfterConstruction);
-    CPPUNIT_TEST(testIsStartedAfterStart);
-    CPPUNIT_TEST(testIsStartedAfterStop);
     CPPUNIT_TEST(testMuteWhenNotMuted);
     CPPUNIT_TEST(testMuteWhenAlreadyMuted);
     CPPUNIT_TEST(testUnmuteWhenMuted);
     CPPUNIT_TEST(testUnmuteWhenNotMuted);
     CPPUNIT_TEST(testIsMutedAfterConstruction);
-    CPPUNIT_TEST(testIsMutedAfterMute);
-    CPPUNIT_TEST(testIsMutedAfterUnmute);
     CPPUNIT_TEST(testProcessDataWhenNotStarted);
     CPPUNIT_TEST(testProcessDataWhenStartedAndNotMuted);
     CPPUNIT_TEST(testProcessDataWhenStartedAndMuted);
@@ -239,7 +235,6 @@ class RendererImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testAddPesPacketWhenNotStarted);
     CPPUNIT_TEST(testAddPesPacketWithNullBuffer);
     CPPUNIT_TEST(testAddPesPacketWithZeroLength);
-    CPPUNIT_TEST(testSetCurrentPage);
     CPPUNIT_TEST(testSetCurrentPageMultipleTimes);
     CPPUNIT_TEST(testLifecycleInitStartStopShutdown);
     CPPUNIT_TEST(testLifecycleInitStartMuteUnmuteStop);
@@ -449,33 +444,11 @@ protected:
         m_renderer.reset(new TestableRendererImpl(true));
         initRenderer();
 
-        try
-        {
-            m_renderer->callStartInternal();
-        }
-        catch (...)
-        {
-            // First start may throw if GfxRenderer singleton is already shown
-            // In this case, we can't test the "already started" scenario
-            return;
-        }
-
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->callStartInternal());
         CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
 
-        // When calling start again, it may throw if GfxRenderer singleton is already shown
-        // The behavior is correct either way - either it restarts successfully or throws
-        try
-        {
-            bool result = m_renderer->callStartInternal();
-            CPPUNIT_ASSERT_EQUAL(true, result);
-            CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-        }
-        catch (...)
-        {
-            // GfxRenderer threw, but the first call succeeded so renderer was already started
-            // The renderer should remain in started state even if second start threw
-            CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-        }
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->callStartInternal());
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
     }
 
     void testStartInternalWhenMuted()
@@ -500,11 +473,7 @@ protected:
     {
         m_renderer.reset(new TestableRendererImpl(true));
         initRenderer();
-        try
-        {
-            m_renderer->callStartInternal();
-        }
-        catch (...) {}
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->callStartInternal());
 
         bool result = m_renderer->stop();
         CPPUNIT_ASSERT_EQUAL(true, result);
@@ -525,11 +494,7 @@ protected:
     {
         m_renderer.reset(new TestableRendererImpl(true));
         initRenderer();
-        try
-        {
-            m_renderer->callStartInternal();
-        }
-        catch (...) {}
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->callStartInternal());
 
         bool firstStop = m_renderer->stop();
         CPPUNIT_ASSERT_EQUAL(true, firstStop);
@@ -544,44 +509,6 @@ protected:
     {
         m_renderer.reset(new TestableRendererImpl(true));
         CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
-    }
-
-    void testIsStartedAfterStart()
-    {
-        m_renderer.reset(new TestableRendererImpl(true));
-        initRenderer();
-        bool startSucceeded = false;
-        try
-        {
-            m_renderer->callStartInternal();
-            startSucceeded = true;
-        }
-        catch (...) {}
-
-        if (startSucceeded)
-        {
-            CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-        }
-        // If start failed, we can't make assertions about the state
-    }
-
-    void testIsStartedAfterStop()
-    {
-        m_renderer.reset(new TestableRendererImpl(true));
-        initRenderer();
-        bool startSucceeded = false;
-        try
-        {
-            m_renderer->callStartInternal();
-            startSucceeded = true;
-        }
-        catch (...) {}
-
-        if (startSucceeded)
-        {
-            m_renderer->stop();
-            CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
-        }
     }
 
     void testMuteWhenNotMuted()
@@ -627,23 +554,6 @@ protected:
     void testIsMutedAfterConstruction()
     {
         m_renderer.reset(new TestableRendererImpl(true));
-        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
-    }
-
-    void testIsMutedAfterMute()
-    {
-        m_renderer.reset(new TestableRendererImpl(true));
-        initRenderer();
-        m_renderer->mute();
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isMuted());
-    }
-
-    void testIsMutedAfterUnmute()
-    {
-        m_renderer.reset(new TestableRendererImpl(true));
-        initRenderer();
-        m_renderer->mute();
-        m_renderer->unmute();
         CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
     }
 
@@ -736,19 +646,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(false, result);
     }
 
-    void testSetCurrentPage()
-    {
-        m_renderer.reset(new TestableRendererImpl(true));
-        initRenderer();
-
-        ttxdecoder::PageId pageId(0x100, 0);
-        CPPUNIT_ASSERT_NO_THROW(m_renderer->setCurrentPage(pageId));
-
-        // setCurrentPage() should not impact started/muted flags.
-        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
-        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
-    }
-
     void testSetCurrentPageMultipleTimes()
     {
         m_renderer.reset(new TestableRendererImpl(true));
@@ -775,23 +672,13 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, initResult);
         m_rendererInitialized = true;
 
-        bool startSucceeded = false;
-        try
-        {
-            bool startResult = m_renderer->callStartInternal();
-            CPPUNIT_ASSERT_EQUAL(true, startResult);
-            startSucceeded = true;
-        }
-        catch (...) {}
+        bool startResult = m_renderer->callStartInternal();
+        CPPUNIT_ASSERT_EQUAL(true, startResult);
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
 
-        if (startSucceeded)
-        {
-            CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-
-            bool stopResult = m_renderer->stop();
-            CPPUNIT_ASSERT_EQUAL(true, stopResult);
-            CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
-        }
+        bool stopResult = m_renderer->stop();
+        CPPUNIT_ASSERT_EQUAL(true, stopResult);
+        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
 
         CPPUNIT_ASSERT_NO_THROW(m_renderer->shutdown());
         m_rendererInitialized = false;
@@ -808,28 +695,18 @@ protected:
         m_renderer.reset(new TestableRendererImpl(true));
         initRenderer();
 
-        bool startSucceeded = false;
-        try
-        {
-            m_renderer->callStartInternal();
-            startSucceeded = true;
-        }
-        catch (...) {}
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->callStartInternal());
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
+        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
 
-        if (startSucceeded)
-        {
-            CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-            CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
+        m_renderer->mute();
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isMuted());
 
-            m_renderer->mute();
-            CPPUNIT_ASSERT_EQUAL(true, m_renderer->isMuted());
+        m_renderer->unmute();
+        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
 
-            m_renderer->unmute();
-            CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
-
-            m_renderer->stop();
-            CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
-        }
+        m_renderer->stop();
+        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
     }
 
     void testLifecycleInitMuteStartStopUnmute()

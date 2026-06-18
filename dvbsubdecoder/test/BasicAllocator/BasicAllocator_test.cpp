@@ -22,6 +22,7 @@
 
 #include <array>
 #include <string>
+#include <vector>
 
 #include "BasicAllocator.hpp"
 #include "AllocatorTraits.hpp"
@@ -354,9 +355,17 @@ public:
     void testInitWithNullptr()
     {
         BasicAllocator allocator;
-        // Init with nullptr should work (though not useful)
-        allocator.init(nullptr, 0);
-        // With nullptr buffer, allocate should throw logic_error "Allocator not initialized"
+        // Current contract: init(nullptr, 0) is accepted,
+        // but allocator remains not-usable for allocate().
+        try
+        {
+            allocator.init(nullptr, 0);
+        }
+        catch (...)
+        {
+            CPPUNIT_FAIL("init(nullptr, 0) is expected to succeed");
+        }
+
         CPPUNIT_ASSERT_THROW(allocator.allocate(1, 1), std::logic_error);
         allocator.reset();
     }
@@ -423,14 +432,19 @@ public:
         
         // Exhaust memory
         std::vector<void*> blocks;
+        bool observedBadAlloc = false;
+        const std::size_t MAX_ALLOC_ATTEMPTS = BUFFER_SIZE;
         try {
-            while (true) {
+            for (std::size_t attempt = 0; attempt < MAX_ALLOC_ATTEMPTS; ++attempt) {
                 void* block = allocator.allocate(100, 1);
+                CPPUNIT_ASSERT(block != nullptr);
                 blocks.push_back(block);
             }
         } catch (const std::bad_alloc&) {
-            // Expected
+            observedBadAlloc = true;
         }
+
+        CPPUNIT_ASSERT(observedBadAlloc);
         
         // Free some blocks and verify recovery
         for (size_t i = 0; i < blocks.size() / 2; ++i) {

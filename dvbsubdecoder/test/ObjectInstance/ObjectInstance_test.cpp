@@ -46,6 +46,11 @@ CPPUNIT_TEST_SUITE( ObjectInstanceTest );
     CPPUNIT_TEST(testIterationEdgeCases);
     CPPUNIT_TEST(testLargeScaleOperations);
     CPPUNIT_TEST(testObjectOwnership);
+    CPPUNIT_TEST(testDanglingPointerAfterRemoval);
+    CPPUNIT_TEST(testListInvariantsInLargeOps);
+    CPPUNIT_TEST(testExceptionSafetyBatch);
+    CPPUNIT_TEST(testInvalidInputsBroader);
+    CPPUNIT_TEST(testMultiListAddRemovePermutations);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -742,6 +747,112 @@ public:
         } // localObj goes out of scope here, but list should be unaffected
         
         CPPUNIT_ASSERT(list.getFirst() == nullptr);
+    }
+
+    void testDanglingPointerAfterRemoval()
+    {
+        ObjectInstanceList list;
+        ObjectInstance* ptr = nullptr;
+        {
+            ObjectInstance localObj;
+            ptr = &localObj;
+            list.add(ptr);
+            CPPUNIT_ASSERT(list.getFirst() == ptr);
+            ObjectInstance* removed = list.removeFirst();
+            CPPUNIT_ASSERT(removed == ptr);
+        } // localObj is destroyed here
+        // After scope, list should not return pointer to destroyed object
+        CPPUNIT_ASSERT(list.getFirst() == nullptr);
+    }
+
+    void testListInvariantsInLargeOps()
+    {
+        const int N = 200;
+        std::vector<ObjectInstance> objects(N);
+        ObjectInstanceList list;
+        for (int i = 0; i < N; ++i) {
+            objects[i].m_objectId = i;
+            list.add(&objects[i]);
+            // Check size invariant
+            int count = 0;
+            for (const ObjectInstance* cur = list.getFirst(); cur; cur = list.getNext(cur)) ++count;
+            CPPUNIT_ASSERT_EQUAL(i+1, count);
+        }
+        // Remove all, check count each time
+        for (int i = 0; i < N; ++i) {
+            ObjectInstance* removed = list.removeFirst();
+            CPPUNIT_ASSERT(removed == &objects[i]);
+            int count = 0;
+            for (const ObjectInstance* cur = list.getFirst(); cur; cur = list.getNext(cur)) ++count;
+            CPPUNIT_ASSERT_EQUAL(N-i-1, count);
+        }
+        CPPUNIT_ASSERT(list.getFirst() == nullptr);
+    }
+
+    void testExceptionSafetyBatch()
+    {
+        ObjectInstanceList list;
+        std::vector<ObjectInstance> objects(10);
+        // Add all
+        for (auto& obj : objects) list.add(&obj);
+        // Simulate exception in middle of removals
+        int removedCount = 0;
+        try {
+            for (size_t i = 0; i < objects.size(); ++i) {
+                if (i == 5) throw std::runtime_error("Simulated error");
+                ObjectInstance* removed = list.removeFirst();
+                CPPUNIT_ASSERT(removed == &objects[i]);
+                ++removedCount;
+            }
+        } catch (...) {}
+        // After exception, remaining objects should be in order
+        int idx = removedCount;
+        for (const ObjectInstance* cur = list.getFirst(); cur; cur = list.getNext(cur)) {
+            CPPUNIT_ASSERT(cur == &objects[idx++]);
+        }
+    }
+
+    void testInvalidInputsBroader()
+    {
+        ObjectInstanceList list1, list2;
+        ObjectInstance obj1, obj2;
+        // Remove object never added
+        CPPUNIT_ASSERT_THROW(list1.getNext(&obj2), std::logic_error);
+        // getNext for object from different list
+        list1.add(&obj1);
+        list2.add(&obj2);
+        CPPUNIT_ASSERT_THROW(list1.getNext(&obj2), std::logic_error);
+        // getNext on pointer not in any list
+        ObjectInstance orphan;
+        CPPUNIT_ASSERT_THROW(list1.getNext(&orphan), std::logic_error);
+    }
+
+    void testMultiListAddRemovePermutations()
+    {
+        ObjectInstanceList listA, listB;
+        ObjectInstance obj1, obj2, obj3;
+        // Add to A, move to B, back to A
+        listA.add(&obj1);
+        CPPUNIT_ASSERT(listA.getFirst() == &obj1);
+        ObjectInstance* removed = listA.removeFirst();
+        CPPUNIT_ASSERT(removed == &obj1);
+        listB.add(&obj1);
+        CPPUNIT_ASSERT(listB.getFirst() == &obj1);
+        removed = listB.removeFirst();
+        CPPUNIT_ASSERT(removed == &obj1);
+        listA.add(&obj1);
+        CPPUNIT_ASSERT(listA.getFirst() == &obj1);
+        // Interleaved add/remove
+        listA.add(&obj2);
+        listB.add(&obj3);
+        removed = listA.removeFirst();
+        CPPUNIT_ASSERT(removed == &obj1);
+        removed = listA.removeFirst();
+        CPPUNIT_ASSERT(removed == &obj2);
+        removed = listB.removeFirst();
+        CPPUNIT_ASSERT(removed == &obj3);
+        CPPUNIT_ASSERT(listA.getFirst() == nullptr);
+        CPPUNIT_ASSERT(listB.getFirst() == nullptr);
     }
 };
 

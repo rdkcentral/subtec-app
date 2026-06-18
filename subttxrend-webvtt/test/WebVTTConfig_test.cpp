@@ -31,8 +31,7 @@ class WebVTTConfigTest : public CppUnit::TestFixture {
     CPPUNIT_TEST_SUITE(WebVTTConfigTest);
     CPPUNIT_TEST(testGetConfigFractionalReturnsDefault);
     CPPUNIT_TEST(testInitUsesDefaults);
-    CPPUNIT_TEST(testGetConfigFractionalWithDifferentFractions);
-    CPPUNIT_TEST(testConfigFieldsInitialization);
+    CPPUNIT_TEST(testDefaultFieldInitialization);
     CPPUNIT_TEST_SUITE_END();
 public:
     void testGetConfigFractionalReturnsDefault() {
@@ -46,55 +45,27 @@ public:
         WebVTTConfig config;
         config.init(&stub);
 
-        // Verify all fields are set to their expected default values
+        CPPUNIT_ASSERT_EQUAL(constants::kDefaultFontHeight, config.fontHeightH);
+        CPPUNIT_ASSERT_EQUAL(constants::kDefaultLineHeight, config.lineHeightH);
+        CPPUNIT_ASSERT_EQUAL(constants::kScreenPaddingVmH, config.screenPadding);
+        CPPUNIT_ASSERT_EQUAL(static_cast<float>(constants::kDefaultHorizPaddingEmTenths), config.horizontalPaddingEm);
+        CPPUNIT_ASSERT_EQUAL(static_cast<float>(constants::kDefaultVerticalPaddingEmTenths), config.verticalPaddingEm);
         CPPUNIT_ASSERT_EQUAL(std::string("Cinecav Sans"), config.fontFamily);
         CPPUNIT_ASSERT_EQUAL(std::string("WHITE"), config.textColour);
         CPPUNIT_ASSERT_EQUAL(std::string("BLACK"), config.bgColour);
-
-        // Verify numeric defaults are reasonable (non-zero positive values)
-        CPPUNIT_ASSERT(config.fontHeightH > 0);
-        CPPUNIT_ASSERT(config.lineHeightH > 0);
-        CPPUNIT_ASSERT(config.screenPadding >= 0);
-        CPPUNIT_ASSERT(config.horizontalPaddingEm > 0);
-        CPPUNIT_ASSERT(config.verticalPaddingEm > 0);
     }
 
-    void testGetConfigFractionalWithDifferentFractions() {
-        subttxrend::common::ConfigProvider stub;
+    void testDefaultFieldInitialization() {
+        WebVTTConfig config;
 
-        // Test with different fraction values
-        double result1 = getConfigFractional(&stub, "TEST.KEY", 50, 100);
-        CPPUNIT_ASSERT_EQUAL(50.0, result1);
-
-        double result2 = getConfigFractional(&stub, "TEST.KEY", 25, 10);
-        CPPUNIT_ASSERT_EQUAL(25.0, result2);
-
-        double result3 = getConfigFractional(&stub, "TEST.KEY", 0, 1000);
-        CPPUNIT_ASSERT_EQUAL(0.0, result3);
-    }
-
-    void testConfigFieldsInitialization() {
-        subttxrend::common::ConfigProvider stub;
-
-        // Test that WebVTTConfig properly initializes all fields
-        WebVTTConfig config1;
-        WebVTTConfig config2;
-
-        // Before init, should have default values
-        CPPUNIT_ASSERT_EQUAL(std::string("Cinecav Sans"), config1.fontFamily);
-        CPPUNIT_ASSERT_EQUAL(std::string("WHITE"), config1.textColour);
-        CPPUNIT_ASSERT_EQUAL(std::string("BLACK"), config1.bgColour);
-
-        // After init with stub provider, should still have default values
-        config1.init(&stub);
-        config2.init(&stub);
-
-        // Both configs should be identical
-        CPPUNIT_ASSERT_EQUAL(config1.fontHeightH, config2.fontHeightH);
-        CPPUNIT_ASSERT_EQUAL(config1.lineHeightH, config2.lineHeightH);
-        CPPUNIT_ASSERT_EQUAL(config1.fontFamily, config2.fontFamily);
-        CPPUNIT_ASSERT_EQUAL(config1.textColour, config2.textColour);
-        CPPUNIT_ASSERT_EQUAL(config1.bgColour, config2.bgColour);
+        CPPUNIT_ASSERT_EQUAL(constants::kDefaultFontHeight, config.fontHeightH);
+        CPPUNIT_ASSERT_EQUAL(constants::kDefaultLineHeight, config.lineHeightH);
+        CPPUNIT_ASSERT_EQUAL(constants::kScreenPaddingVmH, config.screenPadding);
+        CPPUNIT_ASSERT_EQUAL(static_cast<float>(constants::kDefaultHorizPaddingEmTenths), config.horizontalPaddingEm);
+        CPPUNIT_ASSERT_EQUAL(static_cast<float>(constants::kDefaultVerticalPaddingEmTenths), config.verticalPaddingEm);
+        CPPUNIT_ASSERT_EQUAL(std::string("Cinecav Sans"), config.fontFamily);
+        CPPUNIT_ASSERT_EQUAL(std::string("WHITE"), config.textColour);
+        CPPUNIT_ASSERT_EQUAL(std::string("BLACK"), config.bgColour);
     }
 };
 

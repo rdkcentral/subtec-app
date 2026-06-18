@@ -26,6 +26,18 @@
 
 using namespace ttxdecoder;
 
+namespace
+{
+
+const std::uint8_t kEncodedHamming84Nibbles[16] = {
+    0x28, 0x00, 0x12, 0x3A,
+    0x06, 0x4E, 0x0C, 0x74,
+    0x03, 0x63, 0x11, 0x59,
+    0x05, 0x2D, 0x3F, 0x17
+};
+
+} // namespace
+
 // Mock CollectorListener for testing
 class MockCollectorListener : public CollectorListener
 {
@@ -96,11 +108,10 @@ CPPUNIT_TEST_SUITE( CollectorTest );
     CPPUNIT_TEST(testProcessPacketDataWithInvalidPacketHamming);
     CPPUNIT_TEST(testProcessPacketDataWithValidTeletextPacket);
     CPPUNIT_TEST(testProcessPacketDataWithValidSubtitlePacket);
-    CPPUNIT_TEST(testProcessPacketDataWithStrangeLengthLogsWarning);
+    CPPUNIT_TEST(testProcessPacketDataWithStrangeLengthStillProcessesPacket);
     CPPUNIT_TEST(testProcessPacketDataWithMultipleDataUnits);
-    CPPUNIT_TEST(testProcessPacketDataMagazineZeroMappedToEight);
+    CPPUNIT_TEST(testProcessPacketDataMagazineZeroPreservedInContext);
     CPPUNIT_TEST(testProcessPacketDataAllMagazineNumbers);
-    CPPUNIT_TEST(testProcessPacketDataAllPacketAddresses);
     CPPUNIT_TEST(testProcessPacketDataWithDesignationCodeForPacket26);
     CPPUNIT_TEST(testProcessPacketDataWithDesignationCodeForPacket31);
     CPPUNIT_TEST(testProcessPacketDataWithNoDesignationCodeForPacket0);
@@ -296,11 +307,13 @@ public:
 
         // Listener should be called once
         CPPUNIT_ASSERT_EQUAL(1, m_listener->getCallCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), m_listener->getLastMagazineNumber());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0), m_listener->getLastPacketAddress());
     }
 
-    void testProcessPacketDataWithStrangeLengthLogsWarning()
+    void testProcessPacketDataWithStrangeLengthStillProcessesPacket()
     {
-        // Create packet with non-standard length (should log warning but continue)
+        // Create packet with non-standard length; processing should continue.
         std::uint8_t data[] = {
             0x10,       // data identifier
             0x02,       // TELETEXT_UNIT_ID
@@ -342,8 +355,8 @@ public:
         data.push_back(0x2C); // length (44)
         data.push_back(0xFF); // control
         data.push_back(0xE4); // framing
-        data.push_back(0x18); // mag 2 (0x18 decodes to 0x02)
-        data.push_back(0x00); // packet 1 (0x00 decodes to 0x01, packet address will have bit 0 set)
+        data.push_back(kEncodedHamming84Nibbles[10]); // mag 2 with packet bit 0 set
+        data.push_back(kEncodedHamming84Nibbles[0]);  // packet address bits 1-4 cleared
         for (int i = 0; i < 40; i++) data.push_back(0x00); // 40 more bytes (total 44)
 
         PesPacketReader reader(data.data(), data.size(), nullptr, 0);
@@ -356,12 +369,15 @@ public:
         // Verify both contexts were processed
         const auto& contexts = m_listener->getContexts();
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), contexts.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), contexts[0].magazineNumber);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0), contexts[0].packetAddress);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(2), contexts[1].magazineNumber);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), contexts[1].packetAddress);
     }
 
-    void testProcessPacketDataMagazineZeroMappedToEight()
+    void testProcessPacketDataMagazineZeroPreservedInContext()
     {
-        // Magazine 0 should be treated as magazine 8 internally
-        // mpByte1 should decode to value with bits 0-2 = 000 (magazine 0)
+        // Magazine 0 is forwarded as 0 in the collector context.
         std::uint8_t data[] = {
             0x10,       // data identifier
             0x02,       // TELETEXT_UNIT_ID
@@ -399,7 +415,7 @@ public:
                 0x2C,       // length
                 0xFF,       // control
                 0xE4,       // framing
-                0x00,       // hamming (will use 0x00 for all, decodes to 1)
+                kEncodedHamming84Nibbles[mag],
                 0x28,       // packet address (0x28 decodes to 0)
                 // Remaining 40 bytes (total 44 for data unit)
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -414,39 +430,18 @@ public:
             m_collector->processPacketData(reader);
 
             CPPUNIT_ASSERT_EQUAL(1, m_listener->getCallCount());
+            CPPUNIT_ASSERT_EQUAL(mag, m_listener->getLastMagazineNumber());
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0), m_listener->getLastPacketAddress());
         }
-    }
-
-    void testProcessPacketDataAllPacketAddresses()
-    {
-        // Test that processing completes for standard packet address encoding
-        // Note: Actual packet address encoding is complex (hamming 8/4)
-        // This test verifies basic processing works
-        std::uint8_t data[] = {
-            0x10, 0x02, 0x2C, 0xFF, 0xE4, 0x00, 0x28,
-            // Remaining 40 bytes (total 44 for data unit)
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-        };
-
-        PesPacketReader reader(data, sizeof(data), nullptr, 0);
-        m_collector->processPacketData(reader);
-
-        // Should process successfully
-        CPPUNIT_ASSERT_EQUAL(1, m_listener->getCallCount());
     }
 
     void testProcessPacketDataWithDesignationCodeForPacket26()
     {
-        // Packet 26 should have designation code extracted
-        // Using valid hamming codes
+        // Packet 26 should extract a designation code from the first payload byte.
         std::uint8_t data[] = {
             0x10, 0x02, 0x2C, 0xFF, 0xE4,
-            0x00, // magazine 1
-            0x28, // packet address 0 (simplified test - packet 26 would need different encoding)
+            kEncodedHamming84Nibbles[1],  // magazine 1, packet bit 0 cleared
+            kEncodedHamming84Nibbles[13], // packet address bits 1-4 => packet 26
             // Remaining 40 bytes (total 44 for data unit)
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -458,15 +453,19 @@ public:
         PesPacketReader reader(data, sizeof(data), nullptr, 0);
         m_collector->processPacketData(reader);
 
-        // Verify listener was called
-        CPPUNIT_ASSERT(m_listener->getCallCount() > 0);
+        CPPUNIT_ASSERT_EQUAL(1, m_listener->getCallCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), m_listener->getLastMagazineNumber());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(26), m_listener->getLastPacketAddress());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(1), m_listener->getLastDesignationCode());
     }
 
     void testProcessPacketDataWithDesignationCodeForPacket31()
     {
-        // Similar to packet 26, packet 31 should extract designation code
+        // Packet 31 should also extract a designation code from the first payload byte.
         std::uint8_t data[] = {
-            0x10, 0x02, 0x2C, 0xFF, 0xE4, 0x00, 0x28,
+            0x10, 0x02, 0x2C, 0xFF, 0xE4,
+            kEncodedHamming84Nibbles[9],  // magazine 1, packet bit 0 set
+            kEncodedHamming84Nibbles[15], // packet address bits 1-4 => packet 31
             // Remaining 40 bytes (total 44 for data unit)
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -478,7 +477,10 @@ public:
         PesPacketReader reader(data, sizeof(data), nullptr, 0);
         m_collector->processPacketData(reader);
 
-        CPPUNIT_ASSERT(m_listener->getCallCount() > 0);
+        CPPUNIT_ASSERT_EQUAL(1, m_listener->getCallCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), m_listener->getLastMagazineNumber());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(31), m_listener->getLastPacketAddress());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(1), m_listener->getLastDesignationCode());
     }
 
     void testProcessPacketDataWithNoDesignationCodeForPacket0()

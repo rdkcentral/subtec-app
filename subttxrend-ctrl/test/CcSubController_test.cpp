@@ -274,12 +274,16 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(100, static_cast<uint32_t>(subttxrend::cc::CeaType::CEA_608), 1);
         std::shared_ptr<subttxrend::gfx::PrerenderedFontCache> nullCache;
 
-        // Controller can be created with null font cache
-        CcSubController controller(*packet, m_mockWindow, nullCache);
+        // Controller can be created with null font cache and used without throwing
+        CPPUNIT_ASSERT_NO_THROW({
+            CcSubController controller(*packet, m_mockWindow, nullCache);
+            controller.process();
 
-        // Verify controller can be used safely
-        controller.process();
-        CPPUNIT_ASSERT(true);
+            // Verify controller can be used safely and is functional by checking wantsData
+            auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+            CPPUNIT_ASSERT_MESSAGE("Controller should still want data after processing with null font cache",
+                                   controller.wantsData(*testPacket));
+        });
     }
 
     void testConstructorSetsChannelIdCorrectly()
@@ -414,9 +418,11 @@ protected:
         std::vector<uint8_t> minimalData = {0x00}; // Minimal 1-byte payload
         auto dataPacket = PacketDataBuilder::build(100, minimalData);
 
-        // Should handle minimal data gracefully
-        controller.addData(*dataPacket);
-        CPPUNIT_ASSERT(true);
+        // Should handle minimal data gracefully (no throw) and remain functional
+        CPPUNIT_ASSERT_NO_THROW(controller.addData(*dataPacket));
+        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after minimal addData",
+                               controller.wantsData(*testPacket));
     }
 
     void testAddDataMultipleTimes()
@@ -430,7 +436,10 @@ protected:
             auto dataPacket = PacketDataBuilder::build(100, testData);
             controller.addData(*dataPacket);
         }
-        CPPUNIT_ASSERT(true);
+        // Ensure repeated adds do not throw and controller remains functional
+        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after multiple addData calls",
+                               controller.wantsData(*testPacket));
     }
 
     void testAddDataWhenStopped()
@@ -443,9 +452,11 @@ protected:
         std::vector<uint8_t> testData = {0x01, 0x02};
         auto dataPacket = PacketDataBuilder::build(100, testData);
 
-        // Should still accept data even when stopped
-        controller.addData(*dataPacket);
-        CPPUNIT_ASSERT(true);
+        // Should still accept data even when stopped (no throw) but not want data
+        CPPUNIT_ASSERT_NO_THROW(controller.addData(*dataPacket));
+        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should not want data when stopped",
+                               !controller.wantsData(*testPacket));
     }
 
     void testActivateWhenStopped()
@@ -468,9 +479,10 @@ protected:
         CcSubController controller(*packet, m_mockWindow, m_fontCache);
 
         // Already started from constructor
-        controller.activate(); // Should be idempotent
-
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(controller.activate()); // Should be idempotent
+        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should still want data after redundant activate",
+                               controller.wantsData(*testPacket));
     }
 
     void testActivateMultipleTimes()
@@ -639,8 +651,13 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(100, static_cast<uint32_t>(subttxrend::cc::CeaType::CEA_608), 1);
         CcSubController controller(*packet, m_mockWindow, m_fontCache);
 
-        controller.setTextForPreview("");
-        CPPUNIT_ASSERT(true);
+        // Exercise API and ensure it doesn't throw
+        CPPUNIT_ASSERT_NO_THROW(controller.setTextForPreview(""));
+
+        // Verify controller's state is unchanged and it still wants data
+        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after empty preview text",
+                               controller.wantsData(*testPacket));
     }
 
     void testSetTextForPreviewWithLongString()
@@ -649,8 +666,10 @@ protected:
         CcSubController controller(*packet, m_mockWindow, m_fontCache);
 
         std::string longText(900, 'A');
-        controller.setTextForPreview(longText);
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(controller.setTextForPreview(longText));
+        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after long preview text",
+                               controller.wantsData(*testPacket));
     }
 
     void testSetTextForPreviewWithSpecialCharacters()
@@ -658,8 +677,10 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(100, static_cast<uint32_t>(subttxrend::cc::CeaType::CEA_608), 1);
         CcSubController controller(*packet, m_mockWindow, m_fontCache);
 
-        controller.setTextForPreview("Special: \n\t\r©®™€");
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(controller.setTextForPreview("Special: \n\t\r©®™€"));
+        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after special-character preview text",
+                               controller.wantsData(*testPacket));
     }
 
     void testCompleteWorkflowActivateAddDataProcess()
@@ -672,13 +693,14 @@ protected:
 
         std::vector<uint8_t> testData = {0x01, 0x02, 0x03};
         auto dataPacket = PacketDataBuilder::build(100, testData);
-        controller.addData(*dataPacket);
-
-        controller.process();
+        CPPUNIT_ASSERT_NO_THROW(controller.addData(*dataPacket));
+        CPPUNIT_ASSERT_NO_THROW(controller.process());
 
         controller.deactivate();
 
-        CPPUNIT_ASSERT(true);
+        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should not want data after deactivation in workflow",
+                               !controller.wantsData(*testPacket));
     }
 
     void testCompleteWorkflowWithMute()
@@ -701,10 +723,10 @@ protected:
         // Add data while muted
         std::vector<uint8_t> testData = {0x01, 0x02};
         auto dataPacket = PacketDataBuilder::build(100, testData);
-        controller.addData(*dataPacket);
+        CPPUNIT_ASSERT_NO_THROW(controller.addData(*dataPacket));
 
         // Process while muted (data should be processed, just not rendered/audible)
-        controller.process();
+        CPPUNIT_ASSERT_NO_THROW(controller.process());
 
         // Unmute
         controller.mute(false);
@@ -714,7 +736,7 @@ protected:
                                controller.wantsData(*testPacket));
 
         // Process after unmute
-        controller.process();
+        CPPUNIT_ASSERT_NO_THROW(controller.process());
 
         // Test idempotency and stability
         controller.mute(true);
@@ -723,8 +745,9 @@ protected:
         controller.mute(false);
 
         // Verify still functional after mute operations
-        controller.process();
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(controller.process());
+        CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after mute/unmute operations",
+                               controller.wantsData(*testPacket));
     }
 
     void testActivateDeactivateCycle()
@@ -745,7 +768,6 @@ protected:
             CPPUNIT_ASSERT_MESSAGE("Should want data when activated",
                                    controller.wantsData(*testPacket));
         }
-        CPPUNIT_ASSERT(true);
     }
 
     void testDataProcessingAfterReactivation()
@@ -771,7 +793,9 @@ protected:
         controller.addData(*dataPacket2);
         controller.process();
 
-        CPPUNIT_ASSERT(true);
+        auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should accept data again after reactivation",
+                               controller.wantsData(*testPacket));
     }
 
 private:

@@ -19,6 +19,7 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <memory>
+
 #include "BrowserRendererImpl.hpp"
 #include <ttxdecoder/PageId.hpp>
 
@@ -50,10 +51,8 @@ private:
 class BrowserRendererImplTest : public CppUnit::TestFixture
 {
     CPPUNIT_TEST_SUITE(BrowserRendererImplTest);
-    CPPUNIT_TEST(testConstructor);
-    CPPUNIT_TEST(testDestructor);
     CPPUNIT_TEST(testResetStartPage_SetsDefaultPage);
-    CPPUNIT_TEST(testResetStartPage_MultipleCallsIdempotent);
+    CPPUNIT_TEST(testResetStartPage_RepeatedCallsKeepDefaultPage);
     CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -68,33 +67,22 @@ public:
     }
 
 protected:
-    void testConstructor()
-    {
-        std::unique_ptr<TestBrowserRendererImpl> renderer(new TestBrowserRendererImpl());
-        CPPUNIT_ASSERT(renderer.get() != nullptr);
-    }
-
-    void testDestructor()
-    {
-        std::unique_ptr<TestBrowserRendererImpl> renderer(new TestBrowserRendererImpl());
-        renderer.reset();
-        CPPUNIT_ASSERT(true);
-    }
-
     void testResetStartPage_SetsDefaultPage()
     {
-        m_renderer->resetStartPage();
+        CPPUNIT_ASSERT_NO_THROW(m_renderer->resetStartPage());
         ttxdecoder::PageId page = m_renderer->getLastPageId();
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0100), page.getMagazinePage());
+        CPPUNIT_ASSERT(page.isAnySubpage());
         CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
     }
 
-    void testResetStartPage_MultipleCallsIdempotent()
+    void testResetStartPage_RepeatedCallsKeepDefaultPage()
     {
         m_renderer->resetStartPage();
         m_renderer->resetStartPage();
         ttxdecoder::PageId page = m_renderer->getLastPageId();
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0100), page.getMagazinePage());
+        CPPUNIT_ASSERT(page.isAnySubpage());
         CPPUNIT_ASSERT_EQUAL(2, m_renderer->getSetCurrentPageCalls());
     }
 

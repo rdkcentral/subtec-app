@@ -20,6 +20,8 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include <cppunit/TestFixture.h>
 
+#include <initializer_list>
+
 #include "Parser.hpp"
 #include "Database.hpp"
 #include "CharsetConfig.hpp"
@@ -84,37 +86,21 @@ private:
 class ParserX26Test : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE(ParserX26Test);
-    CPPUNIT_TEST(testPacketTripletsDefaultConstruction);
     CPPUNIT_TEST(testPacketTripletsSetAndGetDesignationCode);
     CPPUNIT_TEST(testPacketTripletsSetAndGetTripletValue);
     CPPUNIT_TEST(testPacketTripletsInvalidIndexReturnsMax);
     CPPUNIT_TEST(testPacketTripletsAllThirteenTriplets);
-    CPPUNIT_TEST(testTerminationMarkerEncoding);
-    CPPUNIT_TEST(testTerminationMarkerDetection);
-    CPPUNIT_TEST(testNonTerminationMarkerValues);
-    CPPUNIT_TEST(testTripletEncodingSetActivePosition);
-    CPPUNIT_TEST(testTripletEncodingAddressDisplayRow0);
-    CPPUNIT_TEST(testTripletEncodingSmoothMosaic);
-    CPPUNIT_TEST(testTripletEncodingCharacterFromG2);
-    CPPUNIT_TEST(testTripletEncodingDiacriticMode);
-    CPPUNIT_TEST(testExtractAddressFieldMinMax);
-    CPPUNIT_TEST(testExtractModeFieldValues);
-    CPPUNIT_TEST(testExtractDataFieldValues);
-    CPPUNIT_TEST(testAddressConversionValidRows);
-    CPPUNIT_TEST(testAddressConversionInvalidAddresses);
-    CPPUNIT_TEST(testColumnConversionBoundaries);
-    CPPUNIT_TEST(testDiacriticPropertyCalculationMinMode);
-    CPPUNIT_TEST(testDiacriticPropertyCalculationMaxMode);
-    CPPUNIT_TEST(testDiacriticPropertyBitShift);
-    CPPUNIT_TEST(testCharacterIndexFromDataField);
-    CPPUNIT_TEST(testCharacterIndexBoundaries);
     CPPUNIT_TEST(testParsePageWithEmptyDisplayable);
     CPPUNIT_TEST(testParsePageFullModeLevel1);
     CPPUNIT_TEST(testParsePageFullModeLevel1_5);
-    CPPUNIT_TEST(testDecodedPageRowAccess);
-    CPPUNIT_TEST(testDecodedPageCharArrayManipulation);
-    CPPUNIT_TEST(testDecodedPagePropertiesArrayManipulation);
-    CPPUNIT_TEST(testDecodedPageBoundaryPositions);
+    CPPUNIT_TEST(testParsePageX26MapsAddress40ToRow24);
+    CPPUNIT_TEST(testParsePageX26AddressDisplayRow0TargetsHeaderRow);
+    CPPUNIT_TEST(testParsePageX26SmoothMosaicWritesCharacter);
+    CPPUNIT_TEST(testParsePageX26CharacterFromG2WritesMappedCharacter);
+    CPPUNIT_TEST(testParsePageX26AppliesDiacriticProperty);
+    CPPUNIT_TEST(testParsePageX26TerminationMarkerStopsProcessing);
+    CPPUNIT_TEST(testParsePageX26TerminationMarkerWithHighBitsStopsProcessing);
+    CPPUNIT_TEST(testParsePageX26IgnoresNonPrintableData);
 
 CPPUNIT_TEST_SUITE_END();
 
@@ -150,12 +136,36 @@ private:
         header.setPageInfo(pid, controlInfo, 0);
     }
 
-    void testPacketTripletsDefaultConstruction()
+    std::uint32_t makeTriplet(std::uint8_t address,
+                              std::uint8_t mode,
+                              std::uint8_t data) const
     {
-        PacketTriplets packet;
+        return address | (mode << 6) | (data << 11);
+    }
 
-        // Default should allow getting designation code
-        CPPUNIT_ASSERT_NO_THROW(packet.getDesignationCode());
+    PacketTriplets& configureX26Packet(PageDisplayable& page,
+                                       std::int8_t designationCode,
+                                       std::initializer_list<std::uint32_t> triplets)
+    {
+        auto* packet = static_cast<PacketTriplets*>(page.takePacket(26, designationCode));
+        CPPUNIT_ASSERT(packet != nullptr);
+
+        packet->setDesignationCode(designationCode);
+
+        for (std::size_t i = 0; i < PacketTriplets::TRIPLET_COUNT; ++i)
+        {
+            packet->setTripletValue(i, 0x7FF);
+        }
+
+        std::size_t index = 0;
+        for (auto triplet : triplets)
+        {
+            CPPUNIT_ASSERT(index < PacketTriplets::TRIPLET_COUNT);
+            packet->setTripletValue(index++, triplet);
+        }
+
+        page.setLastPacketValid(packet);
+        return *packet;
     }
 
     void testPacketTripletsSetAndGetDesignationCode()
@@ -208,285 +218,6 @@ private:
         }
     }
 
-    void testTerminationMarkerEncoding()
-    {
-        PacketTriplets packet;
-
-        // Termination marker is 0x7FF (all lower 11 bits set)
-        packet.setTripletValue(0, 0x7FF);
-
-        std::uint32_t value = packet.getTripletValue(0);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x7FF), value);
-        CPPUNIT_ASSERT((value & 0x7FF) == 0x7FF);
-    }
-
-    void testTerminationMarkerDetection()
-    {
-        PacketTriplets packet;
-
-        // Test various termination marker values
-        std::uint32_t terminationMarkers[] = {0x7FF, 0xF7FF, 0x1F7FF, 0xFFFFFFFF};
-
-        for (std::size_t i = 0; i < 4; i++)
-        {
-            packet.setTripletValue(i, terminationMarkers[i]);
-            std::uint32_t value = packet.getTripletValue(i);
-            // All should have lower 11 bits set to 0x7FF
-            CPPUNIT_ASSERT((value & 0x7FF) == 0x7FF);
-        }
-    }
-
-    void testNonTerminationMarkerValues()
-    {
-        PacketTriplets packet;
-
-        // These should NOT be termination markers
-        std::uint32_t nonTerminationValues[] = {0x400, 0x200, 0x7FE, 0x0};
-
-        for (std::size_t i = 0; i < 4; i++)
-        {
-            packet.setTripletValue(i, nonTerminationValues[i]);
-            std::uint32_t value = packet.getTripletValue(i);
-            CPPUNIT_ASSERT((value & 0x7FF) != 0x7FF);
-        }
-    }
-
-    void testTripletEncodingSetActivePosition()
-    {
-        PacketTriplets packet;
-
-        // Encode: address=40, mode=0x4 (SET_ACTIVE_POSITION), data=10
-        std::uint32_t triplet = 40 | (0x4 << 6) | (10 << 11);
-        packet.setTripletValue(0, triplet);
-
-        std::uint32_t value = packet.getTripletValue(0);
-        std::uint8_t address = value & 0x3F;
-        std::uint8_t mode = (value >> 6) & 0x1F;
-        std::uint8_t data = (value >> 11) & 0x7F;
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(40), address);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x4), mode);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(10), data);
-    }
-
-    void testTripletEncodingAddressDisplayRow0()
-    {
-        PacketTriplets packet;
-
-        // Encode: address=0x1F, mode=0x7 (ADDRESS_DISPLAY_ROW0), data=0
-        std::uint32_t triplet = 0x1F | (0x7 << 6) | (0 << 11);
-        packet.setTripletValue(0, triplet);
-
-        std::uint32_t value = packet.getTripletValue(0);
-        std::uint8_t address = value & 0x3F;
-        std::uint8_t mode = (value >> 6) & 0x1F;
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x1F), address);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x7), mode);
-    }
-
-    void testTripletEncodingSmoothMosaic()
-    {
-        PacketTriplets packet;
-
-        // Encode: address=10, mode=0x2 (LINE_DRAWING_OR_SMOOTH_MOSAIC), data=0x25
-        std::uint32_t triplet = 10 | (0x2 << 6) | (0x25 << 11);
-        packet.setTripletValue(0, triplet);
-
-        std::uint32_t value = packet.getTripletValue(0);
-        std::uint8_t mode = (value >> 6) & 0x1F;
-        std::uint8_t data = (value >> 11) & 0x7F;
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x2), mode);
-        CPPUNIT_ASSERT(data >= 0x20);  // Valid data threshold
-    }
-
-    void testTripletEncodingCharacterFromG2()
-    {
-        PacketTriplets packet;
-
-        // Encode: address=15, mode=0xF (CHARACTER_FROM_G2), data=0x30
-        std::uint32_t triplet = 15 | (0xF << 6) | (0x30 << 11);
-        packet.setTripletValue(0, triplet);
-
-        std::uint32_t value = packet.getTripletValue(0);
-        std::uint8_t mode = (value >> 6) & 0x1F;
-        std::uint8_t data = (value >> 11) & 0x7F;
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xF), mode);
-        CPPUNIT_ASSERT(data >= 0x20);
-    }
-
-    void testTripletEncodingDiacriticMode()
-    {
-        PacketTriplets packet;
-
-        // Test diacritic mode range 0x10-0x1F
-        for (std::uint8_t mode = 0x10; mode <= 0x1F; mode++)
-        {
-            std::uint32_t triplet = 20 | (mode << 6) | (0x30 << 11);
-            packet.setTripletValue(0, triplet);
-
-            std::uint32_t value = packet.getTripletValue(0);
-            std::uint8_t extractedMode = (value >> 6) & 0x1F;
-
-            CPPUNIT_ASSERT_EQUAL(mode, extractedMode);
-            CPPUNIT_ASSERT(extractedMode >= 0x10 && extractedMode <= 0x1F);
-        }
-    }
-
-    void testExtractAddressFieldMinMax()
-    {
-        PacketTriplets packet;
-
-        // Test minimum address (0)
-        packet.setTripletValue(0, 0);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0),
-                            static_cast<std::uint8_t>(packet.getTripletValue(0) & 0x3F));
-
-        // Test maximum address (63)
-        packet.setTripletValue(1, 63);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(63),
-                            static_cast<std::uint8_t>(packet.getTripletValue(1) & 0x3F));
-    }
-
-    void testExtractModeFieldValues()
-    {
-        PacketTriplets packet;
-
-        // Test all mode values 0-31 (5 bits)
-        for (std::uint8_t mode = 0; mode <= 0x1F; mode++)
-        {
-            std::uint32_t triplet = (mode << 6);
-            packet.setTripletValue(0, triplet);
-
-            std::uint8_t extractedMode = (packet.getTripletValue(0) >> 6) & 0x1F;
-            CPPUNIT_ASSERT_EQUAL(mode, extractedMode);
-        }
-    }
-
-    void testExtractDataFieldValues()
-    {
-        PacketTriplets packet;
-
-        // Test minimum data (0)
-        packet.setTripletValue(0, 0 << 11);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0),
-                            static_cast<std::uint8_t>((packet.getTripletValue(0) >> 11) & 0x7F));
-
-        // Test maximum data (127)
-        packet.setTripletValue(1, 0x7F << 11);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x7F),
-                            static_cast<std::uint8_t>((packet.getTripletValue(1) >> 11) & 0x7F));
-
-        // Test data threshold (0x20 = 32)
-        packet.setTripletValue(2, 0x20 << 11);
-        std::uint8_t data = (packet.getTripletValue(2) >> 11) & 0x7F;
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x20), data);
-    }
-
-    void testAddressConversionValidRows()
-    {
-        // Addresses 41-63 map to rows 1-23 (addr - 40)
-        for (std::uint8_t addr = 41; addr <= 63; addr++)
-        {
-            std::uint8_t expectedRow = addr - 40;
-            CPPUNIT_ASSERT(expectedRow >= 1 && expectedRow <= 23);
-        }
-    }
-
-    void testAddressConversionInvalidAddresses()
-    {
-        // Addresses < 40 should return row 0
-        for (std::uint8_t addr = 0; addr < 40; addr++)
-        {
-            // addressToRow would return 0 for these
-            CPPUNIT_ASSERT(addr < 40);
-        }
-    }
-
-    void testColumnConversionBoundaries()
-    {
-        // addressToColumn: address < 40 returns address, else 0
-
-        // Valid column addresses (0-39)
-        for (std::uint8_t addr = 0; addr < 40; addr++)
-        {
-            std::uint8_t column = (addr < 40) ? addr : 0;
-            CPPUNIT_ASSERT_EQUAL(addr, column);
-        }
-
-        // Invalid column addresses (40-63) should return 0
-        for (std::uint8_t addr = 40; addr <= 63; addr++)
-        {
-            std::uint8_t column = (addr < 40) ? addr : 0;
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0), column);
-        }
-    }
-
-    void testDiacriticPropertyCalculationMinMode()
-    {
-        // Mode 0x10: (0x10 & 0xF) << 9 = 0x0 << 9 = 0x0000
-        std::uint8_t mode = 0x10;
-        std::uint16_t diacritic = ((mode & 0xF) << 9);
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0000), diacritic);
-    }
-
-    void testDiacriticPropertyCalculationMaxMode()
-    {
-        // Mode 0x1F: (0x1F & 0xF) << 9 = 0xF << 9 = 0x1E00
-        std::uint8_t mode = 0x1F;
-        std::uint16_t diacritic = ((mode & 0xF) << 9);
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x1E00), diacritic);
-    }
-
-    void testDiacriticPropertyBitShift()
-    {
-        // Test various diacritic modes
-        std::uint8_t modes[] = {0x10, 0x11, 0x15, 0x1A, 0x1F};
-        std::uint16_t expected[] = {0x0000, 0x0200, 0x0A00, 0x1400, 0x1E00};
-
-        for (std::size_t i = 0; i < 5; i++)
-        {
-            std::uint16_t diacritic = ((modes[i] & 0xF) << 9);
-            CPPUNIT_ASSERT_EQUAL(expected[i], diacritic);
-        }
-    }
-
-    void testCharacterIndexFromDataField()
-    {
-        // dataToCharacterIndex: data >= 0x20 ? (data - 0x20) : 0
-
-        // Data = 0x20 -> index 0
-        std::uint16_t data = 0x20;
-        std::uint16_t index = (data >= 0x20) ? (data - 0x20) : 0;
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0), index);
-
-        // Data = 0x7F -> index 95
-        data = 0x7F;
-        index = (data >= 0x20) ? (data - 0x20) : 0;
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(95), index);
-    }
-
-    void testCharacterIndexBoundaries()
-    {
-        // Data < 0x20 should return 0
-        for (std::uint16_t data = 0; data < 0x20; data++)
-        {
-            std::uint16_t index = (data >= 0x20) ? (data - 0x20) : 0;
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0), index);
-        }
-
-        // Data >= 0x20 should return (data - 0x20)
-        for (std::uint16_t data = 0x20; data <= 0x7F; data++)
-        {
-            std::uint16_t index = (data >= 0x20) ? (data - 0x20) : 0;
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(data - 0x20), index);
-        }
-    }
-
     void testParsePageWithEmptyDisplayable()
     {
         PacketHeader header;
@@ -499,8 +230,10 @@ private:
         bool changed = m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
                                           NavigationMode::DEFAULT, decodedPage);
 
-        // Should complete without error
+        CPPUNIT_ASSERT_EQUAL(true, changed);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(100), decodedPage.getPageId().getDecimalMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(ControlInfo::ERASE_PAGE),
+                             decodedPage.getPageControlInfo());
     }
 
     void testParsePageFullModeLevel1()
@@ -518,7 +251,10 @@ private:
         bool changed = parser.parsePage(page, header, Parser::Mode::FULL_PAGE,
                                        NavigationMode::DEFAULT, decodedPage);
 
-        CPPUNIT_ASSERT(true);  // Should complete without error
+        CPPUNIT_ASSERT_EQUAL(true, changed);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(200), decodedPage.getPageId().getDecimalMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(ControlInfo::ERASE_PAGE),
+                             decodedPage.getPageControlInfo());
     }
 
     void testParsePageFullModeLevel1_5()
@@ -536,74 +272,184 @@ private:
         bool changed = parser.parsePage(page, header, Parser::Mode::FULL_PAGE,
                                        NavigationMode::DEFAULT, decodedPage);
 
-        CPPUNIT_ASSERT(true);  // Should complete without error
+        CPPUNIT_ASSERT_EQUAL(true, changed);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(300), decodedPage.getPageId().getDecimalMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(ControlInfo::ERASE_PAGE),
+                             decodedPage.getPageControlInfo());
     }
 
-    void testDecodedPageRowAccess()
+    void testParsePageX26MapsAddress40ToRow24()
     {
-        DecodedPage page;
+        PacketHeader header;
+        createHeaderPacket(header, 400, ControlInfo::ERASE_PAGE);
 
-        // Should be able to access all rows (0-24)
-        for (std::size_t row = 0; row <= 24; row++)
-        {
-            CPPUNIT_ASSERT_NO_THROW(page.getRow(row));
-        }
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(40, 0x4, 39),
+                    makeTriplet(39, 0x10, 0x2A),
+                });
+
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('`'),
+                             decodedPage.getRow(24).m_levelOnePageSegment.m_charArray[39]);
     }
 
-    void testDecodedPageCharArrayManipulation()
+    void testParsePageX26AddressDisplayRow0TargetsHeaderRow()
     {
-        DecodedPage page;
+        PacketHeader header;
+        createHeaderPacket(header, 401, ControlInfo::ERASE_PAGE);
 
-        // Set character at row 10, column 15
-        DecodedPageRow& row = page.getRow(10);
-        row.m_levelOnePageSegment.m_charArray[15] = 'A';
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(0x1F, 0x7, 0),
+                    makeTriplet(5, 0x10, 0x2A),
+                });
 
-        // Verify it was set correctly
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('`'),
+                             decodedPage.getRow(0).m_levelOnePageSegment.m_charArray[5]);
+    }
+
+    void testParsePageX26SmoothMosaicWritesCharacter()
+    {
+        PacketHeader header;
+        createHeaderPacket(header, 402, ControlInfo::ERASE_PAGE);
+
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(42, 0x4, 0),
+                    makeTriplet(3, 0x2, 0x25),
+                });
+
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x25),
+                             decodedPage.getRow(2).m_levelOnePageSegment.m_charArray[3]);
+    }
+
+    void testParsePageX26CharacterFromG2WritesMappedCharacter()
+    {
+        PacketHeader header;
+        createHeaderPacket(header, 403, ControlInfo::ERASE_PAGE);
+
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(43, 0x4, 0),
+                    makeTriplet(4, 0xF, 0x21),
+                });
+
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x00A1),
+                             decodedPage.getRow(3).m_levelOnePageSegment.m_charArray[4]);
+    }
+
+    void testParsePageX26AppliesDiacriticProperty()
+    {
+        PacketHeader header;
+        createHeaderPacket(header, 404, ControlInfo::ERASE_PAGE);
+
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(44, 0x4, 0),
+                    makeTriplet(6, 0x1A, 0x41),
+                });
+
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('A'),
-                            page.getRow(10).m_levelOnePageSegment.m_charArray[15]);
-
-        // Overwrite with different character
-        row.m_levelOnePageSegment.m_charArray[15] = 'B';
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('B'),
-                            page.getRow(10).m_levelOnePageSegment.m_charArray[15]);
+                             decodedPage.getRow(4).m_levelOnePageSegment.m_charArray[6]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x1400),
+                             decodedPage.getRow(4).m_levelOnePageSegment.m_propertiesArray[6]);
     }
 
-    void testDecodedPagePropertiesArrayManipulation()
+    void testParsePageX26TerminationMarkerStopsProcessing()
     {
-        DecodedPage page;
+        PacketHeader header;
+        createHeaderPacket(header, 405, ControlInfo::ERASE_PAGE);
 
-        // Test setting properties at different positions
-        DecodedPageRow& row5 = page.getRow(5);
-        row5.m_levelOnePageSegment.m_propertiesArray[20] = 0x0A00;
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(41, 0x4, 0),
+                    makeTriplet(1, 0x10, 0x2A),
+                    0x7FF,
+                    makeTriplet(42, 0x4, 0),
+                    makeTriplet(2, 0x10, 0x2A),
+                });
 
-        // Verify property was set
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0A00),
-                            row5.m_levelOnePageSegment.m_propertiesArray[20]);
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
 
-        // Test setting different property value at different position
-        DecodedPageRow& row10 = page.getRow(10);
-        row10.m_levelOnePageSegment.m_propertiesArray[15] = 0x1E00;
-
-        // Verify second property was set
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x1E00),
-                            row10.m_levelOnePageSegment.m_propertiesArray[15]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('`'),
+                             decodedPage.getRow(1).m_levelOnePageSegment.m_charArray[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(' '),
+                             decodedPage.getRow(2).m_levelOnePageSegment.m_charArray[2]);
     }
 
-    void testDecodedPageBoundaryPositions()
+    void testParsePageX26TerminationMarkerWithHighBitsStopsProcessing()
     {
-        DecodedPage page;
+        PacketHeader header;
+        createHeaderPacket(header, 406, ControlInfo::ERASE_PAGE);
 
-        // Test minimum position (0, 0)
-        DecodedPageRow& row0 = page.getRow(0);
-        row0.m_levelOnePageSegment.m_charArray[0] = 'X';
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('X'),
-                            page.getRow(0).m_levelOnePageSegment.m_charArray[0]);
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(41, 0x4, 0),
+                    makeTriplet(1, 0x10, 0x2A),
+                    0xF7FF,
+                    makeTriplet(42, 0x4, 0),
+                    makeTriplet(2, 0x10, 0x2A),
+                });
 
-        // Test maximum position (24, 39)
-        DecodedPageRow& row24 = page.getRow(24);
-        row24.m_levelOnePageSegment.m_charArray[39] = 'Y';
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('Y'),
-                            page.getRow(24).m_levelOnePageSegment.m_charArray[39]);
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('`'),
+                             decodedPage.getRow(1).m_levelOnePageSegment.m_charArray[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(' '),
+                             decodedPage.getRow(2).m_levelOnePageSegment.m_charArray[2]);
+    }
+
+    void testParsePageX26IgnoresNonPrintableData()
+    {
+        PacketHeader header;
+        createHeaderPacket(header, 407, ControlInfo::ERASE_PAGE);
+
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(43, 0x4, 0),
+                    makeTriplet(4, 0xF, 0x1F),
+                });
+
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(' '),
+                             decodedPage.getRow(3).m_levelOnePageSegment.m_charArray[4]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0),
+                             decodedPage.getRow(3).m_levelOnePageSegment.m_propertiesArray[4]);
     }
 };
 

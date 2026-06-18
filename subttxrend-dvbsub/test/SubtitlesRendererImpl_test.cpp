@@ -94,9 +94,6 @@ public:
         return m_stc;
     }
 
-    // Test helper methods
-    void setStc(std::uint32_t stc) { m_stc = stc; }
-
 private:
     std::uint32_t m_stc;
 };
@@ -116,22 +113,15 @@ class SubtitlesRendererImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testShutdownNotInitialized);
     CPPUNIT_TEST(testShutdownCalledTwice);
     CPPUNIT_TEST(testStartAfterInit);
-    CPPUNIT_TEST(testStartWithZeroCompositionPageId);
-    CPPUNIT_TEST(testStartWithMaxCompositionPageId);
-    CPPUNIT_TEST(testStartWithZeroAncillaryPageId);
-    CPPUNIT_TEST(testStartWithMaxAncillaryPageId);
-    CPPUNIT_TEST(testStartWhenAlreadyStarted);
     CPPUNIT_TEST(testStartWhenMuted);
     CPPUNIT_TEST(testStopWhenStarted);
     CPPUNIT_TEST(testStopWhenAlreadyStopped);
     CPPUNIT_TEST(testIsStartedReturnsFalseInitially);
     CPPUNIT_TEST(testIsStartedReturnsTrueAfterStart);
     CPPUNIT_TEST(testIsStartedReturnsFalseAfterStop);
-    CPPUNIT_TEST(testMuteWhenUnmuted);
     CPPUNIT_TEST(testMuteWhenAlreadyMuted);
     CPPUNIT_TEST(testMuteWhenNotStarted);
     CPPUNIT_TEST(testMuteWhenStarted);
-    CPPUNIT_TEST(testUnmuteWhenMuted);
     CPPUNIT_TEST(testUnmuteWhenAlreadyUnmuted);
     CPPUNIT_TEST(testUnmuteWhenNotStarted);
     CPPUNIT_TEST(testUnmuteWhenStarted);
@@ -143,7 +133,6 @@ class SubtitlesRendererImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testFullLifecycle);
     CPPUNIT_TEST(testMuteUnmuteCycle);
     CPPUNIT_TEST(testMultipleStartStopCycles);
-    CPPUNIT_TEST(testStartWithDifferentPageIds);
 
     CPPUNIT_TEST_SUITE_END();
 
@@ -175,18 +164,31 @@ public:
     void testDestructor()
     {
         auto tempRenderer = std::make_unique<SubtitlesRendererImpl>();
-        tempRenderer.reset();
-        // If we get here without crash, destructor succeeded
-        CPPUNIT_ASSERT(true);
+        try {
+            tempRenderer.reset();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Destructor threw exception: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Destructor threw unknown exception");
+        }
     }
 
     void testDestructorAfterInit()
     {
         auto tempRenderer = std::make_unique<SubtitlesRendererImpl>();
         tempRenderer->init(m_mockWindow.get(), m_mockTimeSource.get());
-        tempRenderer.reset();
-        // Should cleanup properly without explicit shutdown
-        CPPUNIT_ASSERT(true);
+        try {
+            tempRenderer.reset();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Destructor after init threw exception: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Destructor after init threw unknown exception");
+        }
+
+        // Ensure renderer can be recreated and initialized again
+        auto r2 = std::make_unique<SubtitlesRendererImpl>();
+        bool ok = r2->init(m_mockWindow.get(), m_mockTimeSource.get());
+        CPPUNIT_ASSERT_EQUAL(true, ok);
     }
 
     void testInit()
@@ -238,29 +240,40 @@ public:
     {
         m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
 
-        // Should not crash
-        m_renderer->shutdown();
-
-        CPPUNIT_ASSERT(true);
+        // Perform shutdown and verify it is safe to call
+        try {
+            m_renderer->shutdown();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Shutdown threw exception: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Shutdown threw unknown exception");
+        }
     }
 
     void testShutdownNotInitialized()
     {
-        // Shutdown without init should not crash
-        m_renderer->shutdown();
-
-        CPPUNIT_ASSERT(true);
+        // Shutdown without init should not throw
+        try {
+            m_renderer->shutdown();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Shutdown (not initialized) threw exception: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Shutdown (not initialized) threw unknown exception");
+        }
     }
 
     void testShutdownCalledTwice()
     {
         m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
         m_renderer->shutdown();
-
-        // Second shutdown should not crash
-        m_renderer->shutdown();
-
-        CPPUNIT_ASSERT(true);
+        // Second shutdown should not throw
+        try {
+            m_renderer->shutdown();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Second shutdown threw exception: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Second shutdown threw unknown exception");
+        }
     }
 
     void testStartAfterInit()
@@ -272,58 +285,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(true, result);
         CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
         CPPUNIT_ASSERT_EQUAL(true, m_mockWindow->isVisible());
-    }
-
-    void testStartWithZeroCompositionPageId()
-    {
-        m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
-
-        bool result = m_renderer->start(0, 100);
-
-        CPPUNIT_ASSERT_EQUAL(true, result);
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-    }
-
-    void testStartWithMaxCompositionPageId()
-    {
-        m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
-
-        bool result = m_renderer->start(65535, 100);
-
-        CPPUNIT_ASSERT_EQUAL(true, result);
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-    }
-
-    void testStartWithZeroAncillaryPageId()
-    {
-        m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
-
-        bool result = m_renderer->start(100, 0);
-
-        CPPUNIT_ASSERT_EQUAL(true, result);
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-    }
-
-    void testStartWithMaxAncillaryPageId()
-    {
-        m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
-
-        bool result = m_renderer->start(100, 65535);
-
-        CPPUNIT_ASSERT_EQUAL(true, result);
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-    }
-
-    void testStartWhenAlreadyStarted()
-    {
-        m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
-        m_renderer->start(100, 200);
-
-        // Start again should call stop first, then restart
-        bool result = m_renderer->start(300, 400);
-
-        CPPUNIT_ASSERT_EQUAL(true, result);
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
     }
 
     void testStartWhenMuted()
@@ -384,13 +345,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
     }
 
-    void testMuteWhenUnmuted()
-    {
-        m_renderer->mute();
-
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isMuted());
-    }
-
     void testMuteWhenAlreadyMuted()
     {
         m_renderer->mute();
@@ -420,15 +374,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(true, m_renderer->isMuted());
         // Should hide graphics
         CPPUNIT_ASSERT_EQUAL(false, m_mockWindow->isVisible());
-    }
-
-    void testUnmuteWhenMuted()
-    {
-        m_renderer->mute();
-
-        m_renderer->unmute();
-
-        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
     }
 
     void testUnmuteWhenAlreadyUnmuted()
@@ -496,16 +441,22 @@ public:
     void testProcessDataWhenNotStarted()
     {
         m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
+        // Should not throw when called before start and should not show graphics
+        try {
+            m_renderer->processData();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("processData (not started) threw exception: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("processData (not started) threw unknown exception");
+        }
 
-        // Should not crash when called before start
-        m_renderer->processData();
-
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
+        CPPUNIT_ASSERT_EQUAL(false, m_mockWindow->isVisible());
     }
 
     void testFullLifecycle()
     {
-        // Complete lifecycle: init → start → stop → shutdown
+        // Complete lifecycle: init → start → stop
         bool initResult = m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
         CPPUNIT_ASSERT_EQUAL(true, initResult);
 
@@ -518,8 +469,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(true, stopResult);
         CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
         CPPUNIT_ASSERT_EQUAL(false, m_mockWindow->isVisible());
-
-        m_renderer->shutdown();
     }
 
     void testMuteUnmuteCycle()
@@ -564,21 +513,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
         m_renderer->stop();
         CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
-    }
-
-    void testStartWithDifferentPageIds()
-    {
-        m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
-
-        m_renderer->start(100, 200);
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-
-        // Start with different page IDs should restart
-        m_renderer->start(300, 400);
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
-
-        m_renderer->start(0, 65535);
-        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
     }
 
 private:

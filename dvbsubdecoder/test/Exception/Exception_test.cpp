@@ -19,6 +19,7 @@
 
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <cstring> // for strlen
 #include <utility> // for std::declval used in static_assert noexcept checks
 
 #include "ParserException.hpp"
@@ -45,6 +46,9 @@ CPPUNIT_TEST_SUITE( ExceptionTest );
     CPPUNIT_TEST(testExceptionInheritanceHierarchy);
     CPPUNIT_TEST(testMessagePointerStability);
     CPPUNIT_TEST(testExceptionConstCorrectness);
+    CPPUNIT_TEST(testMessageSourceImmutability);
+    CPPUNIT_TEST(testPolymorphicCatchOrder);
+    CPPUNIT_TEST(testNullptrHandlingContract);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -173,18 +177,18 @@ public:
     void testExceptionCopySemantics()
     {
         const std::string originalMessage = "original exception message";
-        
+
         // Test ParserException copy behavior
         ParserException originalParser(originalMessage.c_str());
         ParserException copiedParser = originalParser;
-        
+
         CPPUNIT_ASSERT_EQUAL(std::string(originalParser.what()), std::string(copiedParser.what()));
         CPPUNIT_ASSERT_EQUAL(originalMessage, std::string(copiedParser.what()));
 
         // Test PesPacketReader::Exception copy behavior
         PesPacketReader::Exception originalPes(originalMessage.c_str());
         PesPacketReader::Exception copiedPes = originalPes;
-        
+
         CPPUNIT_ASSERT_EQUAL(std::string(originalPes.what()), std::string(copiedPes.what()));
         CPPUNIT_ASSERT_EQUAL(originalMessage, std::string(copiedPes.what()));
 
@@ -193,7 +197,7 @@ public:
         ParserException newException(newMessage.c_str());
         ParserException anotherCopy = newException;
         CPPUNIT_ASSERT_EQUAL(newMessage, std::string(anotherCopy.what()));
-        
+
         // Verify original and copy are independent objects
         CPPUNIT_ASSERT_EQUAL(originalMessage, std::string(originalParser.what()));
         CPPUNIT_ASSERT_EQUAL(originalMessage, std::string(copiedParser.what()));
@@ -204,7 +208,7 @@ public:
     void testExceptionPropagation()
     {
         const std::string message = "propagated exception";
-        
+
         // Test exception propagation through helper function
         auto throwParserException = [&message]() {
             throw ParserException(message.c_str());
@@ -238,36 +242,38 @@ public:
 
     void testMessageLifetimeSafety()
     {
-        ParserException* exception = nullptr;
-        PesPacketReader::Exception* pesException = nullptr;
-
-        // Test with string that goes out of scope
-        {
-            std::string localMessage = "local scope message";
-            exception = new ParserException(localMessage.c_str());
-            pesException = new PesPacketReader::Exception(localMessage.c_str());
-            
-            // Verify messages are accessible while string is in scope
-            CPPUNIT_ASSERT_EQUAL(localMessage, std::string(exception->what()));
-            CPPUNIT_ASSERT_EQUAL(localMessage, std::string(pesException->what()));
-        }
-        
-        // After scope: only assert non-null; implementation may or may not deep-copy message.
-        CPPUNIT_ASSERT(exception->what() != nullptr);
-        CPPUNIT_ASSERT(pesException->what() != nullptr);
-
-        delete exception;
-        delete pesException;
-
-        // Test with string literal (guaranteed lifetime)
+        // Test with string literal (guaranteed static lifetime)
+        // String literals have static storage duration, so pointer remains valid
         ParserException literalException("string literal message");
         CPPUNIT_ASSERT_EQUAL(std::string("string literal message"), std::string(literalException.what()));
+
+        PesPacketReader::Exception literalPesException("pes literal message");
+        CPPUNIT_ASSERT_EQUAL(std::string("pes literal message"), std::string(literalPesException.what()));
+
+        // Test with std::string c_str() that remains in scope
+        std::string persistentMessage = "persistent message";
+        ParserException persistentException(persistentMessage.c_str());
+        CPPUNIT_ASSERT_EQUAL(persistentMessage, std::string(persistentException.what()));
+
+        PesPacketReader::Exception persistentPesException(persistentMessage.c_str());
+        CPPUNIT_ASSERT_EQUAL(persistentMessage, std::string(persistentPesException.what()));
+
+        // Test that what() returns correct content, not just non-null
+        // Using stack allocation to avoid memory leaks
+        const char* expected = "stack lifetime message";
+        ParserException stackException(expected);
+        CPPUNIT_ASSERT_EQUAL(std::string(expected), std::string(stackException.what()));
+        CPPUNIT_ASSERT(stackException.what() != nullptr);
+
+        PesPacketReader::Exception stackPesException(expected);
+        CPPUNIT_ASSERT_EQUAL(std::string(expected), std::string(stackPesException.what()));
+        CPPUNIT_ASSERT(stackPesException.what() != nullptr);
     }
 
     void testExceptionConsistency()
     {
         const std::string testMessage = "consistency test message";
-        
+
         // Create both exception types with same message
         ParserException parserEx(testMessage.c_str());
         PesPacketReader::Exception pesEx(testMessage.c_str());
@@ -299,7 +305,7 @@ public:
         // Compile-time guarantees (will fail to compile if not noexcept)
         static_assert(noexcept(std::declval<ParserException>().what()), "ParserException::what() must be noexcept");
         static_assert(noexcept(std::declval<PesPacketReader::Exception>().what()), "PesPacketReader::Exception::what() must be noexcept");
-        
+
         // Runtime sanity (should not throw)
         ParserException parserEx(message.c_str());
         CPPUNIT_ASSERT(parserEx.what() != nullptr);
@@ -312,7 +318,7 @@ public:
     void testMultipleWhatCalls()
     {
         const std::string message = "multiple calls test";
-        
+
         // Test ParserException consistency across multiple what() calls
         ParserException parserEx(message.c_str());
         const char* result1 = parserEx.what();
@@ -364,7 +370,7 @@ public:
     void testExceptionRethrowing()
     {
         const std::string originalMessage = "rethrow test message";
-        
+
         // Test ParserException rethrowing
         try
         {
@@ -405,7 +411,7 @@ public:
     void testExceptionInheritanceHierarchy()
     {
         const std::string message = "inheritance test";
-        
+
         // Test catching ParserException as std::exception
         bool caughtAsStdException = false;
         try
@@ -461,7 +467,7 @@ public:
     void testMessagePointerStability()
     {
         const std::string message = "pointer stability test";
-        
+
         // Test ParserException pointer stability
         ParserException parserEx(message.c_str());
         const char* ptr1 = parserEx.what();
@@ -474,7 +480,7 @@ public:
         PesPacketReader::Exception pesEx(message.c_str());
         const char* pesPtr1 = pesEx.what();
         const char* pesPtr2 = pesEx.what();
-        
+
         CPPUNIT_ASSERT_EQUAL(message, std::string(pesPtr1));
         CPPUNIT_ASSERT_EQUAL(std::string(pesPtr1), std::string(pesPtr2));
 
@@ -482,14 +488,14 @@ public:
         ParserException tempEx(message.c_str());
         const char* tempPtr = tempEx.what();
         ParserException copiedEx = tempEx;
-        
+
         CPPUNIT_ASSERT_EQUAL(std::string(tempPtr), std::string(copiedEx.what()));
     }
 
     void testExceptionConstCorrectness()
     {
         const std::string message = "const correctness test";
-        
+
         // Test const ParserException
         const ParserException constParserEx(message.c_str());
         const char* result = constParserEx.what();
@@ -510,6 +516,127 @@ public:
         // Test const exception through std::exception interface
         const std::exception& stdRef = constParserEx;
         CPPUNIT_ASSERT_EQUAL(message, std::string(stdRef.what()));
+    }
+
+    void testMessageSourceImmutability()
+    {
+        // Test that exceptions work correctly when created from immutable sources
+        // String literals have static storage duration - safe to use
+        const char* literalMessage = "immutable literal";
+        ParserException literalEx(literalMessage);
+        CPPUNIT_ASSERT_EQUAL(std::string(literalMessage), std::string(literalEx.what()));
+
+        PesPacketReader::Exception literalPesEx(literalMessage);
+        CPPUNIT_ASSERT_EQUAL(std::string(literalMessage), std::string(literalPesEx.what()));
+
+        // Test with const std::string that persists
+        const std::string constMessage = "const string message";
+        ParserException constEx(constMessage.c_str());
+        PesPacketReader::Exception constPesEx(constMessage.c_str());
+
+        // Verify content is correct
+        CPPUNIT_ASSERT_EQUAL(constMessage, std::string(constEx.what()));
+        CPPUNIT_ASSERT_EQUAL(constMessage, std::string(constPesEx.what()));
+
+        // Multiple what() calls should remain consistent
+        const char* what1 = constEx.what();
+        const char* what2 = constEx.what();
+        CPPUNIT_ASSERT_EQUAL(std::string(what1), std::string(what2));
+        CPPUNIT_ASSERT_EQUAL(constMessage, std::string(what1));
+    }
+
+    void testPolymorphicCatchOrder()
+    {
+        const std::string parserMessage = "parser exception message";
+        const std::string pesMessage = "pes exception message";
+
+        // Negative test: ensure ParserException is NOT caught by wrong handler
+        // (catch order matters - most specific first)
+        bool caughtCorrectly = false;
+        try
+        {
+            throw ParserException(parserMessage.c_str());
+        }
+        catch (const ParserException& e)
+        {
+            caughtCorrectly = true;
+            CPPUNIT_ASSERT_EQUAL(parserMessage, std::string(e.what()));
+        }
+        catch (const std::exception& e)
+        {
+            CPPUNIT_FAIL("ParserException should be caught by specific handler first");
+        }
+        CPPUNIT_ASSERT(caughtCorrectly);
+
+        // Negative test for PesPacketReader::Exception
+        caughtCorrectly = false;
+        try
+        {
+            throw PesPacketReader::Exception(pesMessage.c_str());
+        }
+        catch (const PesPacketReader::Exception& e)
+        {
+            caughtCorrectly = true;
+            CPPUNIT_ASSERT_EQUAL(pesMessage, std::string(e.what()));
+        }
+        catch (const std::exception& e)
+        {
+            CPPUNIT_FAIL("PesPacketReader::Exception should be caught by specific handler first");
+        }
+        CPPUNIT_ASSERT(caughtCorrectly);
+
+        // Test that ParserException is NOT mistakenly caught as PesPacketReader::Exception
+        bool notCaughtByWrongType = false;
+        try
+        {
+            try
+            {
+                throw ParserException(parserMessage.c_str());
+            }
+            catch (const PesPacketReader::Exception& e)
+            {
+                CPPUNIT_FAIL("ParserException should not be caught as PesPacketReader::Exception");
+            }
+        }
+        catch (const std::exception& e)
+        {
+            // Should reach here instead
+            notCaughtByWrongType = true;
+            CPPUNIT_ASSERT_EQUAL(parserMessage, std::string(e.what()));
+        }
+        CPPUNIT_ASSERT(notCaughtByWrongType);
+    }
+
+    void testNullptrHandlingContract()
+    {
+        // nullptr is accepted and returns empty string
+        // This is intentional behavior, not a bug
+
+        // Test ParserException with nullptr
+        ParserException parserNullEx(nullptr);
+        CPPUNIT_ASSERT(parserNullEx.what() != nullptr); // what() should never return nullptr
+        CPPUNIT_ASSERT_EQUAL(std::string(""), std::string(parserNullEx.what()));
+        CPPUNIT_ASSERT_EQUAL(0, static_cast<int>(strlen(parserNullEx.what())));
+
+        // Test PesPacketReader::Exception with nullptr
+        PesPacketReader::Exception pesNullEx(nullptr);
+        CPPUNIT_ASSERT(pesNullEx.what() != nullptr); // what() should never return nullptr
+        CPPUNIT_ASSERT_EQUAL(std::string(""), std::string(pesNullEx.what()));
+        CPPUNIT_ASSERT_EQUAL(0, static_cast<int>(strlen(pesNullEx.what())));
+
+        // Test consistency: both exception types handle nullptr identically
+        CPPUNIT_ASSERT_EQUAL(std::string(parserNullEx.what()), std::string(pesNullEx.what()));
+
+        // Test polymorphic behavior with nullptr
+        try
+        {
+            throw ParserException(nullptr);
+        }
+        catch (const std::exception& e)
+        {
+            CPPUNIT_ASSERT_EQUAL(std::string(""), std::string(e.what()));
+            CPPUNIT_ASSERT(e.what() != nullptr);
+        }
     }
 }
 ;

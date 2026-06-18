@@ -19,6 +19,7 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include "GfxTtxClut.hpp"
+#include <array>
 #include <cstddef>
 #include <climits>
 
@@ -28,7 +29,6 @@ class GfxTtxClutTest : public CppUnit::TestFixture
 {
     CPPUNIT_TEST_SUITE(GfxTtxClutTest);
     CPPUNIT_TEST(testConstructor_InitializesAllColorsToZero);
-    CPPUNIT_TEST(testConstructor_InitializesCorrectArraySize);
     CPPUNIT_TEST(testResetColors_SetsAllThirtyTwoColors);
     CPPUNIT_TEST(testResetColors_IsIdempotent);
     CPPUNIT_TEST(testResetColors_OverwritesCustomColors);
@@ -43,27 +43,13 @@ class GfxTtxClutTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testSetColor_WithMinimumColorValue);
     CPPUNIT_TEST(testSetColor_ReturnsTrueWhenColorChanges);
     CPPUNIT_TEST(testSetColor_ReturnsFalseWhenColorUnchanged);
-    CPPUNIT_TEST(testSetColor_MultipleSequentialUpdates);
     CPPUNIT_TEST(testSetColor_InvalidIndex_EqualToSize);
-    CPPUNIT_TEST(testSetColor_InvalidIndex_LargeValue);
     CPPUNIT_TEST(testSetColor_InvalidIndex_VeryLargeValue);
     CPPUNIT_TEST(testSetColor_InvalidIndex_DoesNotModifyArray);
     CPPUNIT_TEST(testGetArray_ReturnsNonNullPointer);
-    CPPUNIT_TEST(testGetArray_ReturnsCorrectDataAfterConstruction);
-    CPPUNIT_TEST(testGetArray_ReturnsCorrectDataAfterResetColors);
-    CPPUNIT_TEST(testGetArray_ReturnsCorrectDataAfterSetColor);
     CPPUNIT_TEST(testGetArray_ReturnsConsistentPointer);
-    CPPUNIT_TEST(testGetArray_ReflectsMultipleColorChanges);
     CPPUNIT_TEST(testGetSize_ReturnsThirtyTwo);
-    CPPUNIT_TEST(testGetSize_UnchangedAfterResetColors);
-    CPPUNIT_TEST(testGetSize_UnchangedAfterSetColor);
-    CPPUNIT_TEST(testPublicConstant_ColorIndexBlack);
-    CPPUNIT_TEST(testPublicConstant_ColorIndexRed);
-    CPPUNIT_TEST(testPublicConstant_ColorIndexGreen);
-    CPPUNIT_TEST(testPublicConstant_ColorIndexYellow);
-    CPPUNIT_TEST(testPublicConstant_ColorIndexCyan);
-    CPPUNIT_TEST(testPublicConstant_ColorIndexWhite);
-    CPPUNIT_TEST(testPublicConstant_ColorIndexTransparent);
+    CPPUNIT_TEST(testPublicConstants_HaveExpectedMappings);
     CPPUNIT_TEST(testPublicConstant_UsableWithSetColor);
     CPPUNIT_TEST(testIntegration_FullLifecycle);
     CPPUNIT_TEST(testIntegration_MultipleInstances);
@@ -86,13 +72,6 @@ protected:
             CPPUNIT_ASSERT_EQUAL_MESSAGE("Color at index should be initialized to 0",
                                          static_cast<std::uint32_t>(0), array[i]);
         }
-    }
-
-    void testConstructor_InitializesCorrectArraySize()
-    {
-        GfxTtxClut clut;
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("CLUT size should be 32",
-                                     static_cast<std::size_t>(32), clut.getSize());
     }
 
     void testResetColors_SetsAllThirtyTwoColors()
@@ -293,34 +272,12 @@ protected:
         CPPUNIT_ASSERT_MESSAGE("setColor should return false when color is unchanged", !result);
     }
 
-    void testSetColor_MultipleSequentialUpdates()
-    {
-        GfxTtxClut clut;
-        const std::uint32_t* array = clut.getArray();
-
-        clut.setColor(0, 0x11111111);
-        clut.setColor(1, 0x22222222);
-        clut.setColor(2, 0x33333333);
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x11111111), array[0]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x22222222), array[1]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x33333333), array[2]);
-    }
-
     void testSetColor_InvalidIndex_EqualToSize()
     {
         GfxTtxClut clut;
         bool result = clut.setColor(32, 0xAABBCCDD);
 
         CPPUNIT_ASSERT_MESSAGE("setColor should return false for index equal to size", !result);
-    }
-
-    void testSetColor_InvalidIndex_LargeValue()
-    {
-        GfxTtxClut clut;
-        bool result = clut.setColor(100, 0xAABBCCDD);
-
-        CPPUNIT_ASSERT_MESSAGE("setColor should return false for large invalid index", !result);
     }
 
     void testSetColor_InvalidIndex_VeryLargeValue()
@@ -364,35 +321,6 @@ protected:
         CPPUNIT_ASSERT_MESSAGE("getArray should return non-null pointer", array != nullptr);
     }
 
-    void testGetArray_ReturnsCorrectDataAfterConstruction()
-    {
-        GfxTtxClut clut;
-        const std::uint32_t* array = clut.getArray();
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("First element should be 0 after construction",
-                                     static_cast<std::uint32_t>(0), array[0]);
-    }
-
-    void testGetArray_ReturnsCorrectDataAfterResetColors()
-    {
-        GfxTtxClut clut;
-        clut.resetColors();
-        const std::uint32_t* array = clut.getArray();
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("First element should be BLACK after reset",
-                                     static_cast<std::uint32_t>(0xFF000000), array[0]);
-    }
-
-    void testGetArray_ReturnsCorrectDataAfterSetColor()
-    {
-        GfxTtxClut clut;
-        clut.setColor(10, 0xDEADBEEF);
-        const std::uint32_t* array = clut.getArray();
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("Element 10 should reflect setColor change",
-                                     static_cast<std::uint32_t>(0xDEADBEEF), array[10]);
-    }
-
     void testGetArray_ReturnsConsistentPointer()
     {
         GfxTtxClut clut;
@@ -402,20 +330,6 @@ protected:
         CPPUNIT_ASSERT_MESSAGE("getArray should return same pointer", array1 == array2);
     }
 
-    void testGetArray_ReflectsMultipleColorChanges()
-    {
-        GfxTtxClut clut;
-        clut.setColor(0, 0x11111111);
-        clut.setColor(15, 0x22222222);
-        clut.setColor(31, 0x33333333);
-
-        const std::uint32_t* array = clut.getArray();
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x11111111), array[0]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x22222222), array[15]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x33333333), array[31]);
-    }
-
     void testGetSize_ReturnsThirtyTwo()
     {
         GfxTtxClut clut;
@@ -423,82 +337,39 @@ protected:
                                      static_cast<std::size_t>(32), clut.getSize());
     }
 
-    void testGetSize_UnchangedAfterResetColors()
+    void testPublicConstants_HaveExpectedMappings()
     {
-        GfxTtxClut clut;
-        clut.resetColors();
+        struct ConstantExpectation
+        {
+            std::uint8_t actual;
+            std::uint8_t expected;
+        };
 
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("getSize should still return 32 after reset",
-                                     static_cast<std::size_t>(32), clut.getSize());
-    }
+        const std::array<ConstantExpectation, 7> expectations = {{
+            {GfxTtxClut::COLOR_INDEX_BLACK, 0},
+            {GfxTtxClut::COLOR_INDEX_RED, 1},
+            {GfxTtxClut::COLOR_INDEX_GREEN, 2},
+            {GfxTtxClut::COLOR_INDEX_YELLOW, 3},
+            {GfxTtxClut::COLOR_INDEX_CYAN, 5},
+            {GfxTtxClut::COLOR_INDEX_WHITE, 7},
+            {GfxTtxClut::COLOR_INDEX_TRANSPARENT, 8}
+        }};
 
-    void testGetSize_UnchangedAfterSetColor()
-    {
-        GfxTtxClut clut;
-        clut.setColor(10, 0xFFFFFFFF);
-
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("getSize should still return 32 after setColor",
-                                     static_cast<std::size_t>(32), clut.getSize());
-    }
-
-    void testPublicConstant_ColorIndexBlack()
-    {
-        std::uint8_t value = GfxTtxClut::COLOR_INDEX_BLACK;
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("COLOR_INDEX_BLACK should be 0",
-                                     static_cast<std::uint8_t>(0), value);
-    }
-
-    void testPublicConstant_ColorIndexRed()
-    {
-        std::uint8_t value = GfxTtxClut::COLOR_INDEX_RED;
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("COLOR_INDEX_RED should be 1",
-                                     static_cast<std::uint8_t>(1), value);
-    }
-
-    void testPublicConstant_ColorIndexGreen()
-    {
-        std::uint8_t value = GfxTtxClut::COLOR_INDEX_GREEN;
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("COLOR_INDEX_GREEN should be 2",
-                                     static_cast<std::uint8_t>(2), value);
-    }
-
-    void testPublicConstant_ColorIndexYellow()
-    {
-        std::uint8_t value = GfxTtxClut::COLOR_INDEX_YELLOW;
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("COLOR_INDEX_YELLOW should be 3",
-                                     static_cast<std::uint8_t>(3), value);
-    }
-
-    void testPublicConstant_ColorIndexCyan()
-    {
-        std::uint8_t value = GfxTtxClut::COLOR_INDEX_CYAN;
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("COLOR_INDEX_CYAN should be 5",
-                                     static_cast<std::uint8_t>(5), value);
-    }
-
-    void testPublicConstant_ColorIndexWhite()
-    {
-        std::uint8_t value = GfxTtxClut::COLOR_INDEX_WHITE;
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("COLOR_INDEX_WHITE should be 7",
-                                     static_cast<std::uint8_t>(7), value);
-    }
-
-    void testPublicConstant_ColorIndexTransparent()
-    {
-        std::uint8_t value = GfxTtxClut::COLOR_INDEX_TRANSPARENT;
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("COLOR_INDEX_TRANSPARENT should be 8",
-                                     static_cast<std::uint8_t>(8), value);
+        for (const ConstantExpectation& expectation : expectations)
+        {
+            CPPUNIT_ASSERT_EQUAL(expectation.expected, expectation.actual);
+        }
     }
 
     void testPublicConstant_UsableWithSetColor()
     {
         GfxTtxClut clut;
 
-        bool result = clut.setColor(1, 0xFFAABBCC);
+        bool result = clut.setColor(GfxTtxClut::COLOR_INDEX_RED, 0xFFAABBCC);
 
         CPPUNIT_ASSERT_MESSAGE("Public constants should work with setColor", result);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xFFAABBCC),
-                             clut.getArray()[1]);
+                             clut.getArray()[GfxTtxClut::COLOR_INDEX_RED]);
     }
 
     void testIntegration_FullLifecycle()

@@ -30,6 +30,7 @@
 #include <memory>
 #include <vector>
 #include <chrono>
+#include <algorithm>
 
 using namespace subttxrend::ctrl;
 using namespace subttxrend::protocol;
@@ -148,6 +149,7 @@ public:
     std::int64_t getLastDisplayOffset() const { return m_lastDisplayOffset; }
     const std::vector<std::uint8_t>& getLastData() const { return m_lastData; }
     bool wasAttributesSet() const { return m_attributesSet; }
+    bool lastAttributeIsSet(WebVTTAttributes::AttributeType attributeType) const { return m_lastAttributes.isSet(attributeType); }
 
     void setWaitTime(std::chrono::milliseconds waitTime) { m_waitTime = waitTime; }
     void resetCounters() { m_dataCount = 0; m_processCount = 0; }
@@ -316,12 +318,29 @@ public:
         // Build attribute type bitmask
         uint32_t attribTypeMask = 0;
         std::vector<uint32_t> attribValues(14, 0x11223344); // Default values
+        const std::vector<PacketSetCCAttributes::CcAttribType> attributeOrder = {
+            PacketSetCCAttributes::CcAttribType::FONT_COLOR,
+            PacketSetCCAttributes::CcAttribType::BACKGROUND_COLOR,
+            PacketSetCCAttributes::CcAttribType::FONT_OPACITY,
+            PacketSetCCAttributes::CcAttribType::BACKGROUND_OPACITY,
+            PacketSetCCAttributes::CcAttribType::FONT_STYLE,
+            PacketSetCCAttributes::CcAttribType::FONT_SIZE,
+            PacketSetCCAttributes::CcAttribType::FONT_ITALIC,
+            PacketSetCCAttributes::CcAttribType::FONT_UNDERLINE,
+            PacketSetCCAttributes::CcAttribType::BORDER_TYPE,
+            PacketSetCCAttributes::CcAttribType::BORDER_COLOR,
+            PacketSetCCAttributes::CcAttribType::WIN_COLOR,
+            PacketSetCCAttributes::CcAttribType::WIN_OPACITY,
+            PacketSetCCAttributes::CcAttribType::EDGE_TYPE,
+            PacketSetCCAttributes::CcAttribType::EDGE_COLOR
+        };
 
         for (const auto& attr : attributes) {
-            uint32_t bitIndex = static_cast<uint32_t>(attr.first);
-            if (bitIndex < 14) {
-                attribTypeMask |= (1 << bitIndex);
-                attribValues[bitIndex] = attr.second;
+            const auto it = std::find(attributeOrder.begin(), attributeOrder.end(), attr.first);
+            if (it != attributeOrder.end()) {
+                const std::size_t attributeIndex = std::distance(attributeOrder.begin(), it);
+                attribTypeMask |= static_cast<uint32_t>(attr.first);
+                attribValues[attributeIndex] = attr.second;
             }
         }
 
@@ -1172,19 +1191,21 @@ protected:
         auto packet = PacketWebvttSelectionBuilder::build(1, 1920, 1080);
         auto controller = std::make_unique<WebvttController>(*packet, *m_mockConfig, m_mockWindow);
 
-        // Use an attribute type that's in the enum but might not be fully supported
-        // Cast to CcAttribType to simulate unsupported type
         std::vector<std::pair<PacketSetCCAttributes::CcAttribType, uint32_t>> attributes = {
-            {static_cast<PacketSetCCAttributes::CcAttribType>(999), 12345}
+            {PacketSetCCAttributes::CcAttribType::FONT_ITALIC, 1}
         };
 
         auto ccPacket = PacketSetCCAttributesBuilder::build(1, attributes);
         CPPUNIT_ASSERT(ccPacket != nullptr);
+        CPPUNIT_ASSERT(ccPacket->containsAttribute(PacketSetCCAttributes::CcAttribType::FONT_ITALIC));
 
-        // Should not crash with unsupported attribute
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_STYLE));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_SIZE));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_COLOR));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::BACKGROUND_COLOR));
     }
 
     void testProcessCCAttributesWithInvalidValues()

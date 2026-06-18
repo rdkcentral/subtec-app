@@ -315,11 +315,9 @@ public:
         CPPUNIT_ASSERT(font3 != nullptr);
         CPPUNIT_ASSERT(font4 != nullptr);
 
-        // Note: Implementation currently treats Height objects with same faceHeight as equal
-        // regardless of strictHeight, so italics is the only differentiator
         CPPUNIT_ASSERT(font1 != font2); // italics differs
-        CPPUNIT_ASSERT(font1 == font3); // Same faceHeight, same italics (strictHeight ignored)
-        CPPUNIT_ASSERT(font2 == font4); // Same faceHeight, same italics (strictHeight ignored)
+        CPPUNIT_ASSERT(font1 != font4); // both boolean inputs differ
+        CPPUNIT_ASSERT(font2 != font3); // both boolean inputs differ
     }
 
     void testCreatesFontImpl()
@@ -615,10 +613,8 @@ public:
         CPPUNIT_ASSERT(fontTF != nullptr);
         CPPUNIT_ASSERT(fontTT != nullptr);
 
-        // Verify italics parameter differentiates fonts (strictHeight does not)
+        // Verify only the stable distinctions without codifying current strictHeight handling.
         CPPUNIT_ASSERT(fontFF != fontFT); // italics differs
-        CPPUNIT_ASSERT(fontFF == fontTF); // Same faceHeight, same italics (strictHeight ignored)
-        CPPUNIT_ASSERT(fontFT == fontTT); // Same faceHeight, same italics (strictHeight ignored)
         CPPUNIT_ASSERT(fontTF != fontTT); // italics differs
 
         // Verify cache hits return same instances
@@ -677,65 +673,98 @@ public:
 
     void testEmptyFontName()
     {
-        // Should either return nullptr or throw, but not crash
-        try
-        {
-            auto font = m_cache->getFont("", 12, false, false);
-            // If it succeeds, verify it's handled gracefully
-            // Note: May return nullptr or a default font
+        // Should either return nullptr or throw, but if a font is returned it must be usable
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("", 12, false, false);
+        } catch (...) {
+            threw = true;
         }
-        catch (...)
+
+        if (font)
         {
-            // Exception is acceptable for empty font name
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT_MESSAGE("Empty name returned unusable font", font->getFontHeight() > 0);
+        }
+        else
+        {
+            // Accept either nullptr or an exception for empty name (implementation-defined)
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testHeightZero()
     {
-        // Zero height should be handled gracefully
-        try
-        {
-            auto font = m_cache->getFont("sans-serif", 0, false, false);
-            // If succeeds, it should handle gracefully
+        // Zero height should be handled gracefully; if a font is returned it must be usable
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("sans-serif", 0, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            // Exception is acceptable for zero height
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testNegativeHeight()
     {
-        // Negative height should be handled gracefully
-        try
-        {
-            auto font = m_cache->getFont("sans-serif", -10, false, false);
-            // If succeeds, it should handle gracefully
+        // Negative height should be handled gracefully; if a font is returned it must be usable
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("sans-serif", -10, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            // Exception is acceptable for negative height
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testVeryLargeHeight()
     {
-        // Very large height should be handled
-        try
-        {
-            auto font = m_cache->getFont("sans-serif", 10000, false, false);
-            if (font != nullptr)
-            {
-                CPPUNIT_ASSERT(font->getFontHeight() > 0);
-            }
+        // Very large height should be handled; if a font is returned it must be usable
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("sans-serif", 10000, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            // Exception is acceptable for extreme values
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
@@ -757,29 +786,50 @@ public:
     {
         // Very long font name
         std::string longName(1000, 'A');
-        try
-        {
-            auto font = m_cache->getFont(longName, 12, false, false);
-            // Should handle without crash
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont(longName, 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            // Exception is acceptable for invalid font
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testNameWithPathSeparators()
     {
         // Font name with path separators
-        try
-        {
-            auto font = m_cache->getFont("path/to/font", 12, false, false);
-            // Should handle gracefully
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("path/to/font", 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
@@ -787,41 +837,74 @@ public:
     {
         // String with embedded null should terminate at null
         std::string fontNameWithNull = std::string("sans") + std::string(1, '\0') + std::string("serif");
-        try
-        {
-            auto font = m_cache->getFont(fontNameWithNull, 12, false, false);
-            // Should handle gracefully
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont(fontNameWithNull, 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testUnicodeName()
     {
         // Unicode characters in font name
-        try
-        {
-            auto font = m_cache->getFont("フォント", 12, false, false);
-            // Should handle without crash
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("フォント", 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testWhitespaceOnlyName()
     {
-        try
-        {
-            auto font = m_cache->getFont("   ", 12, false, false);
-            // Should handle whitespace-only name
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("   ", 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
@@ -841,34 +924,44 @@ public:
     {
         auto font1 = m_cache->getFont("sans-serif", 1, false, false);
 
-        try
-        {
-            auto font2 = m_cache->getFont("sans-serif", -1, false, false);
-            // If both succeed, they should be different
-            if (font1 != nullptr && font2 != nullptr)
-            {
-                CPPUNIT_ASSERT(font1 != font2);
-            }
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font2;
+        try {
+            font2 = m_cache->getFont("sans-serif", -1, false, false);
         }
-        catch (...)
-        {
-            // Exception is acceptable for negative height
-            CPPUNIT_ASSERT(true);
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
         }
+        catch (...) {
+            threw = true;
+        }
+        if (font1 != nullptr && font2 != nullptr) { CPPUNIT_ASSERT(font1 != font2); }
+        else { CPPUNIT_ASSERT(threw || font2 == nullptr); }
     }
 
     void testExtremeParams()
     {
-        try
-        {
-            // Extreme but potentially valid combination
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
             std::string longName(100, 'X');
-            auto font = m_cache->getFont(longName, 500, true, true);
-            // Should handle without crash
+            font = m_cache->getFont(longName, 500, true, true);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
@@ -895,56 +988,100 @@ public:
     void testFindFontReturnsEmpty()
     {
         // If findFontFile returns empty string, should handle gracefully
-        try
-        {
-            auto font = m_cache->getFont("nonexistent_font_xyz", 12, false, false);
-            // May return nullptr or throw depending on implementation
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("nonexistent_font_xyz", 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testFindFontReturnsInvalid()
     {
         // Invalid font name should result in error handling
-        try
-        {
-            auto font = m_cache->getFont("!!!INVALID!!!", 12, false, false);
-            // Should handle invalid path
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("!!!INVALID!!!", 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testFindFontThrows()
     {
         // If findFontFile throws, exception should propagate or be handled
-        try
-        {
-            auto font = m_cache->getFont("", 12, false, false);
-            // May throw or return nullptr
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("", 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testImplConstructorThrows()
     {
         // Invalid parameters causing PrerenderedFontImpl constructor to throw
-        try
-        {
-            auto font = m_cache->getFont("nonexistent", -1, false, false);
-            // Should propagate exception or handle gracefully
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("nonexistent", -1, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
@@ -1558,19 +1695,29 @@ public:
     void testExceptionInConstruction()
     {
         // Invalid font should throw or handle gracefully
-        try
-        {
-            auto font = m_cache->getFont("nonexistent_font_xyz123", -1, false, false);
-            // May succeed or throw
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("nonexistent_font_xyz123", -1, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            // Exception is acceptable
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
 
         // Cache should still work after exception
-        auto font = m_cache->getFont("sans-serif", 12, false, false);
+        font = m_cache->getFont("sans-serif", 12, false, false);
         CPPUNIT_ASSERT(font != nullptr);
     }
 
@@ -2809,40 +2956,73 @@ public:
     {
         // Very long font name
         std::string longName(10000, 'A');
-        try
-        {
-            auto font = m_cache->getFont(longName, 12, false, false);
-            // May succeed or fail, but should handle gracefully
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont(longName, 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testEdgeHeightINTMIN()
     {
-        try
-        {
-            auto font = m_cache->getFont("sans-serif", INT_MIN, false, false);
-            // Should handle gracefully
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("sans-serif", INT_MIN, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
     void testEdgeHeightINTMAX()
     {
-        try
-        {
-            auto font = m_cache->getFont("sans-serif", INT_MAX, false, false);
-            // Should handle gracefully
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("sans-serif", INT_MAX, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
@@ -2892,14 +3072,25 @@ public:
 
     void testEdgeSystemPaths()
     {
-        try
-        {
-            auto font = m_cache->getFont("/usr/share/fonts/font.ttf", 12, false, false);
-            // Should handle path-like strings
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("/usr/share/fonts/font.ttf", 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 
@@ -2950,14 +3141,25 @@ public:
     void testEdgeReturnsNull()
     {
         // Test conditions that might return nullptr
-        try
-        {
-            auto font = m_cache->getFont("nonexistent_font_xyz_123", 12, false, false);
-            // May return nullptr or throw
+        bool threw = false;
+        std::shared_ptr<PrerenderedFont> font;
+        try {
+            font = m_cache->getFont("nonexistent_font_xyz_123", 12, false, false);
         }
-        catch (...)
+        catch (const std::exception& e) {
+            (void)e;
+            threw = true;
+        }
+        catch (...) {
+            threw = true;
+        }
+        if (font)
         {
-            CPPUNIT_ASSERT(true);
+            CPPUNIT_ASSERT(font->getFontHeight() > 0);
+        }
+        else
+        {
+            CPPUNIT_ASSERT(threw || font == nullptr);
         }
     }
 

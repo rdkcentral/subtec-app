@@ -46,6 +46,10 @@ CPPUNIT_TEST_SUITE( PixmapTest );
     CPPUNIT_TEST(testMinimalDimensions);
     CPPUNIT_TEST(testClearAfterReset);
     CPPUNIT_TEST(testGetLineZeroHeight);
+    CPPUNIT_TEST(testOutOfBoundsPixelAccess);
+    CPPUNIT_TEST(testLargePixmap);
+    CPPUNIT_TEST(testSmallPixmap);
+    CPPUNIT_TEST(testPixmapContentAfterClear);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -516,6 +520,52 @@ public:
 
         // Clear should still work (empty operation)
         CPPUNIT_ASSERT_NO_THROW(testPixmap.clear(100));
+    }
+
+    void testOutOfBoundsPixelAccess()
+    {
+        const std::int32_t width = 10;
+        const std::int32_t height = 5;
+        std::uint8_t buffer[width * height] = { 0 };
+        Pixmap testPixmap;
+        testPixmap.init(width, height, buffer);
+        // Access pixel out of bounds
+        CPPUNIT_ASSERT_THROW(testPixmap.getLine(-1), std::invalid_argument);
+        CPPUNIT_ASSERT_THROW(testPixmap.getLine(height), std::invalid_argument);
+    }
+
+    void testLargePixmap()
+    {
+        const std::int32_t width = 10000;
+        const std::int32_t height = 10000;
+        std::vector<std::uint8_t> buffer(width * height, 0);
+        Pixmap testPixmap;
+        CPPUNIT_ASSERT_NO_THROW(testPixmap.init(width, height, buffer.data()));
+        testPixmap.clear(0xAB);
+        // Assert a few pixels
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xAB), buffer[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xAB), buffer[width * height - 1]);
+    }
+
+    void testSmallPixmap()
+    {
+        Pixmap testPixmap;
+        std::uint8_t buffer[1] = { 0 };
+        CPPUNIT_ASSERT_NO_THROW(testPixmap.init(1, 1, buffer));
+        testPixmap.clear(0xCD);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xCD), buffer[0]);
+    }
+
+    void testPixmapContentAfterClear()
+    {
+        const std::int32_t width = 8;
+        const std::int32_t height = 8;
+        std::uint8_t buffer[width * height] = { 0 };
+        Pixmap testPixmap;
+        testPixmap.init(width, height, buffer);
+        testPixmap.clear(0xEF);
+        for (int i = 0; i < width * height; ++i)
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xEF), buffer[i]);
     }
 };
 

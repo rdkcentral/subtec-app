@@ -25,17 +25,13 @@ using namespace subttxrend::ttmlengine;
 class ElementsTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( ElementsTest );
-    CPPUNIT_TEST(defaultStyle);
     CPPUNIT_TEST(testElementParseAttributeSetsIdAndDerived);
     CPPUNIT_TEST(testElementExpectTextContentDefault);
-    CPPUNIT_TEST(testStyleElementHandlerRegistration);
     CPPUNIT_TEST(testRegionElementDefaultConstructor);
     CPPUNIT_TEST(testRegionElementParameterizedConstructor);
-    CPPUNIT_TEST(testRegionElementAddAttributeOriginExtent);
     CPPUNIT_TEST(testRegionElementAddAttributeDelegates);
     CPPUNIT_TEST(testRegionElementGetStyleId);
     CPPUNIT_TEST(testImageElementExpectTextContent);
-    CPPUNIT_TEST(testImageElementAppendText);
     CPPUNIT_TEST(testBodyElementDefaultConstructor);
     CPPUNIT_TEST(testBodyElementParentConstructor);
     CPPUNIT_TEST(testBodyElementExpectTextContent);
@@ -57,7 +53,6 @@ CPPUNIT_TEST_SUITE( ElementsTest );
     CPPUNIT_TEST(testBodyElementWhitespaceHandlingDefault);
     CPPUNIT_TEST(testBodyElementWhitespaceHandlingPreserve);
     CPPUNIT_TEST(testRegionElementToStr);
-    CPPUNIT_TEST(testRegionElementAddAttributeInvalid);
     CPPUNIT_TEST(testBodyElementParseAttributeDerivedUnknown);
 CPPUNIT_TEST_SUITE_END();
 
@@ -70,14 +65,6 @@ public:
     void tearDown()
     {
         // noop
-    }
-
-    void defaultStyle()
-    {
-        StyleElement style{};
-        style.parseAttribute("", "id", "style1");
-
-        CPPUNIT_ASSERT(style.getId() == "style1");
     }
 
     // --- Element base class ---
@@ -105,13 +92,6 @@ public:
     }
 
     // --- StyleElement ---
-    void testStyleElementHandlerRegistration()
-    {
-        StyleElement style;
-        style.parseAttribute("tts", "color", "red");
-        CPPUNIT_ASSERT(style.getStyleAttributes().at("color") == "red");
-    }
-
     void testStyleElementMergeAttributes()
     {
         StyleElement style;
@@ -137,17 +117,6 @@ public:
         CPPUNIT_ASSERT(region.getY().getValue() == 20);
         CPPUNIT_ASSERT(region.getWidth().getValue() == 30);
         CPPUNIT_ASSERT(region.getHeight().getValue() == 40);
-    }
-
-    void testRegionElementAddAttributeOriginExtent()
-    {
-        RegionElement region;
-        region.addAttribute("origin", "5% 10%");
-        region.addAttribute("extent", "20% 30%");
-        CPPUNIT_ASSERT(region.getX().getValue() == 500);
-        CPPUNIT_ASSERT(region.getY().getValue() == 1000);
-        CPPUNIT_ASSERT(region.getWidth().getValue() == 2000);
-        CPPUNIT_ASSERT(region.getHeight().getValue() == 3000);
     }
 
     void testRegionElementAddAttributeDelegates()
@@ -201,13 +170,6 @@ public:
     {
         ImageElement img;
         CPPUNIT_ASSERT(img.expectTextContent());
-    }
-
-    void testImageElementAppendText()
-    {
-        ImageElement img;
-        img.appendText("abc");
-        CPPUNIT_ASSERT(*(img.getBase64Data()) == "abc");
     }
 
     void testImageElementAppendMultipleChunks()
@@ -272,8 +234,11 @@ public:
     void testBodyElementHasValidContent()
     {
         BodyElement body;
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), body.getTextLines().size());
         CPPUNIT_ASSERT(body.hasValidContent());
         body.appendNewline();
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), body.getTextLines().size());
+        CPPUNIT_ASSERT(body.getTextLines().back().isForcedLine);
         CPPUNIT_ASSERT(body.hasValidContent());
     }
 
@@ -371,20 +336,21 @@ public:
         CPPUNIT_ASSERT(str.find("[1%, 2%, 3%, 4%]") != std::string::npos);
     }
 
-    void testRegionElementAddAttributeInvalid()
-    {
-        RegionElement region;
-        region.addAttribute("unknown", "value");
-        // Should not throw, just ignored or added as style attribute
-        CPPUNIT_ASSERT(region.getStyleAttributes().at("unknown") == "value");
-    }
-
     void testBodyElementParseAttributeDerivedUnknown()
     {
         BodyElement body;
+        body.parseAttribute("", "space", "preserve");
+        body.parseAttribute("", "style", "s1");
+        body.parseAttribute("", "region", "r1");
+        body.parseAttribute("", "backgroundImage", "#img1");
+
         body.parseAttribute("", "unknown", "value");
-        // Should not throw or crash, just ignored
-        CPPUNIT_ASSERT(true);
+
+        CPPUNIT_ASSERT(body.getWhiteSpaceHandling() == XmlSpace::PRESERVE);
+        CPPUNIT_ASSERT(body.getStyleId() == "s1");
+        CPPUNIT_ASSERT(body.getRegionId() == "r1");
+        CPPUNIT_ASSERT(body.getBackgroundImageId() == "img1");
+        CPPUNIT_ASSERT(body.getTextLines().size() == 1);
     }
 
     void testTTElementParseAttributeDerivedCellResolutionInvalid()

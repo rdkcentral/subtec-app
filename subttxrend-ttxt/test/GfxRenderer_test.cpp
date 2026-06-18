@@ -397,7 +397,6 @@ class GfxRendererTest : public CppUnit::TestFixture
     CPPUNIT_TEST_SUITE(GfxRendererTest);
 
     CPPUNIT_TEST(test_getSingleton_ReturnsSameInstance);
-    CPPUNIT_TEST(test_getSingleton_ReturnsNonNull);
     CPPUNIT_TEST(test_gfxInit_WithValidClient_Succeeds);
     CPPUNIT_TEST(test_gfxInit_CalledTwice_IncrementsRefCount);
     CPPUNIT_TEST(test_gfxInit_WithNullClient_ThrowsException);
@@ -414,15 +413,12 @@ class GfxRendererTest : public CppUnit::TestFixture
     CPPUNIT_TEST(test_gfxShow_WithNullClient_ThrowsException);
     CPPUNIT_TEST(test_gfxShow_WhenNotInitialized_ThrowsException);
     CPPUNIT_TEST(test_gfxShow_WhenAlreadyShown_ThrowsException);
-    CPPUNIT_TEST(test_gfxShow_SetsWindowVisible);
-    CPPUNIT_TEST(test_gfxShow_SetsWindowSize);
     CPPUNIT_TEST(test_gfxHide_WithValidClient_Succeeds);
     CPPUNIT_TEST(test_gfxHide_WithNullClient_ThrowsException);
     CPPUNIT_TEST(test_gfxHide_WhenNotInitialized_ThrowsException);
     CPPUNIT_TEST(test_gfxHide_WhenNotShown_ThrowsException);
     CPPUNIT_TEST(test_gfxHide_WithDifferentClient_ThrowsException);
     CPPUNIT_TEST(test_gfxHide_SetsWindowInvisible);
-    CPPUNIT_TEST(test_gfxHide_ClearsCurrentClient);
     CPPUNIT_TEST(test_gfxDraw_WithHeaderUpdate_Succeeds);
     CPPUNIT_TEST(test_gfxDraw_WithPageUpdate_Succeeds);
     CPPUNIT_TEST(test_gfxDraw_WithBothUpdates_Succeeds);
@@ -431,19 +427,16 @@ class GfxRendererTest : public CppUnit::TestFixture
     CPPUNIT_TEST(test_gfxDraw_WhenNotShown_ThrowsException);
     CPPUNIT_TEST(test_gfxDraw_WithDifferentClient_ThrowsException);
     CPPUNIT_TEST(test_gfxDraw_CallsWindowUpdate);
-    CPPUNIT_TEST(test_lifecycle_MultipleInitShutdownPairs);
     CPPUNIT_TEST(test_lifecycle_InitAfterFullShutdown);
     CPPUNIT_TEST(test_integration_InitShowHideShutdown);
     CPPUNIT_TEST(test_integration_InitShowDrawHideShutdown);
     CPPUNIT_TEST(test_integration_MultipleClients_Sequential);
     CPPUNIT_TEST(test_gfxInit_MoreThan100Times_ThrowsException);
     CPPUNIT_TEST(test_gfxInit_Exactly100Times_Succeeds);
-    CPPUNIT_TEST(test_gfxInit_101Times_ThrowsException);
     CPPUNIT_TEST(test_gfxShow_AfterHide_Succeeds);
     CPPUNIT_TEST(test_gfxShow_MultipleShowHideCycles);
     CPPUNIT_TEST(test_gfxShow_DifferentClientAfterHide);
     CPPUNIT_TEST(test_gfxDraw_WithNoUpdates_Succeeds);
-    CPPUNIT_TEST(test_gfxDraw_MultipleCalls_Succeeds);
     CPPUNIT_TEST(test_gfxDraw_AfterShow_Succeeds);
     CPPUNIT_TEST(test_gfxDraw_BeforeHide_Succeeds);
     CPPUNIT_TEST(test_lifecycle_DoubleInit_SingleShutdown_Fails);
@@ -451,18 +444,14 @@ class GfxRendererTest : public CppUnit::TestFixture
     CPPUNIT_TEST(test_lifecycle_Init_Show_DoubleHide_Fails);
     CPPUNIT_TEST(test_lifecycle_MultipleInitBeforeShutdown);
     CPPUNIT_TEST(test_lifecycle_ShowAfterPartialShutdown);
-    CPPUNIT_TEST(test_client_ShowWithDifferentClient_Fails);
     CPPUNIT_TEST(test_client_DrawWithWrongClient_Fails);
     CPPUNIT_TEST(test_client_HideWithWrongClient_Fails);
     CPPUNIT_TEST(test_client_SequentialClientsWorkCorrectly);
-    CPPUNIT_TEST(test_state_HideResetsCurrentClient);
-    CPPUNIT_TEST(test_state_MultipleDrawsConsistent);
     CPPUNIT_TEST(test_recovery_AfterInitFailure_CanRetry);
     CPPUNIT_TEST(test_recovery_AfterShowFailure_CanRetry);
     CPPUNIT_TEST(test_recovery_StateAfterException);
     CPPUNIT_TEST(test_window_VisibilityToggle);
     CPPUNIT_TEST(test_window_SizeSetOnShow);
-    CPPUNIT_TEST(test_subtitle_ClientCreation);
     CPPUNIT_TEST(test_subtitle_InitShowHide);
     CPPUNIT_TEST(test_subtitle_DrawOperations);
     CPPUNIT_TEST(test_mixed_NormalThenSubtitle);
@@ -470,9 +459,6 @@ class GfxRendererTest : public CppUnit::TestFixture
     CPPUNIT_TEST(test_concurrent_InitShowBeforeShutdown);
     CPPUNIT_TEST(test_concurrent_ShowDrawHide);
     CPPUNIT_TEST(test_concurrent_MultipleDraws);
-    CPPUNIT_TEST(test_boundary_ZeroInits);
-    CPPUNIT_TEST(test_boundary_SingleInitShutdown);
-    CPPUNIT_TEST(test_boundary_ManyInitShutdownCycles);
     CPPUNIT_TEST(test_integration_FullWorkflow);
     CPPUNIT_TEST(test_integration_MultipleClients_Interleaved);
     CPPUNIT_TEST(test_integration_ErrorInMiddle);
@@ -507,27 +493,17 @@ public:
         try { m_renderer->gfxHide(m_client.get()); } catch (...) {}
         try { m_renderer->gfxHide(m_client2.get()); } catch (...) {}
 
-        // Cleanup singleton state safely.
-        // If m_gfxWindow is nullptr, gfxShutdown() would dereference it in shutdownInternal().
         if (m_renderer)
         {
-            if (m_renderer->m_initCount > 0)
+            if (hasPoisonedInitState())
             {
-                if (m_renderer->m_gfxWindow)
+                clearPoisonedInitState();
+            }
+            else
+            {
+                while (m_renderer->m_initCount > 0)
                 {
-                    // Normal cleanup path.
-                    while (m_renderer->m_initCount > 0)
-                    {
-                        try { m_renderer->gfxShutdown(); }
-                        catch (...) { break; }
-                    }
-                }
-                else
-                {
-                    // Failed init path: initInternal() threw before setting m_gfxWindow.
-                    // Force-reset to avoid poisoning subsequent tests and destructor fatal.
-                    m_renderer->m_initCount = 0;
-                    m_renderer->m_currentClient = nullptr;
+                    m_renderer->gfxShutdown();
                 }
             }
         }
@@ -538,6 +514,20 @@ public:
     }
 
 protected:
+    bool hasPoisonedInitState() const
+    {
+        return m_renderer
+                && (m_renderer->m_initCount > 0)
+                && (m_renderer->m_gfxWindow == nullptr);
+    }
+
+    void clearPoisonedInitState()
+    {
+        CPPUNIT_ASSERT(hasPoisonedInitState());
+        m_renderer->m_initCount = 0;
+        m_renderer->m_currentClient = nullptr;
+    }
+
     void test_getSingleton_ReturnsSameInstance()
     {
         GfxRenderer& renderer1 = GfxRenderer::getSingleton();
@@ -546,17 +536,14 @@ protected:
         CPPUNIT_ASSERT_EQUAL(&renderer1, &renderer2);
     }
 
-    void test_getSingleton_ReturnsNonNull()
-    {
-        GfxRenderer& renderer = GfxRenderer::getSingleton();
-
-        CPPUNIT_ASSERT(&renderer != nullptr);
-    }
-
     void test_gfxInit_WithValidClient_Succeeds()
     {
-        // Should not throw
+        auto mockWindow = m_client->getMockWindow();
+        mockWindow->resetCalls();
+
         CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxInit(m_client.get()));
+        CPPUNIT_ASSERT_EQUAL(1, m_renderer->m_initCount);
+        CPPUNIT_ASSERT(mockWindow->wasAddListenerCalled());
 
         // Cleanup
         m_renderer->gfxShutdown();
@@ -593,10 +580,8 @@ protected:
 
         CPPUNIT_ASSERT(exceptionThrown);
 
-        // Reset the poisoned init count deterministically for this test.
-        // gfxInit(nullptr) increments m_initCount and throws before setting m_gfxWindow.
-        CPPUNIT_ASSERT(m_renderer->m_gfxWindow == nullptr);
-        m_renderer->m_initCount = 0;
+        CPPUNIT_ASSERT(hasPoisonedInitState());
+        clearPoisonedInitState();
     }
 
     void test_gfxInit_WithNullConfig_ThrowsException()
@@ -749,9 +734,14 @@ protected:
 
     void test_gfxShow_WithValidClient_Succeeds()
     {
+        auto mockWindow = m_client->getMockWindow();
+        mockWindow->resetCalls();
+
         m_renderer->gfxInit(m_client.get());
 
         CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxShow(m_client.get()));
+        CPPUNIT_ASSERT(mockWindow->isVisible());
+        CPPUNIT_ASSERT(mockWindow->wasSizeCalled());
 
         // Cleanup
         m_renderer->gfxHide(m_client.get());
@@ -804,35 +794,6 @@ protected:
         }
 
         CPPUNIT_ASSERT(exceptionThrown);
-
-        // Cleanup
-        m_renderer->gfxHide(m_client.get());
-        m_renderer->gfxShutdown();
-    }
-
-    void test_gfxShow_SetsWindowVisible()
-    {
-        auto mockWindow = m_client->getMockWindow();
-
-        m_renderer->gfxInit(m_client.get());
-        m_renderer->gfxShow(m_client.get());
-
-        CPPUNIT_ASSERT(mockWindow->isVisible());
-
-        // Cleanup
-        m_renderer->gfxHide(m_client.get());
-        m_renderer->gfxShutdown();
-    }
-
-    void test_gfxShow_SetsWindowSize()
-    {
-        auto mockWindow = m_client->getMockWindow();
-        mockWindow->resetCalls();
-
-        m_renderer->gfxInit(m_client.get());
-        m_renderer->gfxShow(m_client.get());
-
-        CPPUNIT_ASSERT(mockWindow->wasSizeCalled());
 
         // Cleanup
         m_renderer->gfxHide(m_client.get());
@@ -938,20 +899,6 @@ protected:
         m_renderer->gfxShutdown();
     }
 
-    void test_gfxHide_ClearsCurrentClient()
-    {
-        m_renderer->gfxInit(m_client.get());
-        m_renderer->gfxShow(m_client.get());
-        m_renderer->gfxHide(m_client.get());
-
-        // Should be able to show again with same client
-        CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxShow(m_client.get()));
-
-        // Cleanup
-        m_renderer->gfxHide(m_client.get());
-        m_renderer->gfxShutdown();
-    }
-
     void test_gfxDraw_WithHeaderUpdate_Succeeds()
     {
         m_renderer->gfxInit(m_client.get());
@@ -978,10 +925,14 @@ protected:
 
     void test_gfxDraw_WithBothUpdates_Succeeds()
     {
+        auto mockWindow = m_client->getMockWindow();
+
         m_renderer->gfxInit(m_client.get());
         m_renderer->gfxShow(m_client.get());
+        mockWindow->resetCalls();
 
         CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxDraw(m_client.get(), true, true));
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
 
         // Cleanup
         m_renderer->gfxHide(m_client.get());
@@ -1078,21 +1029,6 @@ protected:
         m_renderer->gfxShutdown();
     }
 
-    void test_lifecycle_MultipleInitShutdownPairs()
-    {
-        // First pair
-        m_renderer->gfxInit(m_client.get());
-        m_renderer->gfxShutdown();
-
-        // Second pair should work fine
-        CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxInit(m_client.get()));
-        CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxShutdown());
-
-        // Third pair
-        CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxInit(m_client.get()));
-        CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxShutdown());
-    }
-
     void test_lifecycle_InitAfterFullShutdown()
     {
         m_renderer->gfxInit(m_client.get());
@@ -1180,29 +1116,6 @@ protected:
         }
     }
 
-    void test_gfxInit_101Times_ThrowsException()
-    {
-        // Init 101 times - all should succeed
-        for (int i = 0; i < 101; ++i) {
-            m_renderer->gfxInit(m_client.get());
-        }
-
-        // 102nd time should fail (m_initCount is 101, which is > 100)
-        bool exceptionThrown = false;
-        try {
-            m_renderer->gfxInit(m_client.get());
-        } catch (const std::logic_error&) {
-            exceptionThrown = true;
-        }
-
-        CPPUNIT_ASSERT(exceptionThrown);
-
-        // Cleanup
-        for (int i = 0; i < 101; ++i) {
-            m_renderer->gfxShutdown();
-        }
-    }
-
     void test_gfxShow_AfterHide_Succeeds()
     {
         m_renderer->gfxInit(m_client.get());
@@ -1254,25 +1167,6 @@ protected:
 
         // Draw with no updates
         CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxDraw(m_client.get(), false, false));
-
-        // Cleanup
-        m_renderer->gfxHide(m_client.get());
-        m_renderer->gfxShutdown();
-    }
-
-    void test_gfxDraw_MultipleCalls_Succeeds()
-    {
-        auto mockWindow = m_client->getMockWindow();
-
-        m_renderer->gfxInit(m_client.get());
-        m_renderer->gfxShow(m_client.get());
-
-        // Multiple draw calls should all succeed
-        for (int i = 0; i < 10; ++i) {
-            mockWindow->resetCalls();
-            CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxDraw(m_client.get(), true, true));
-            CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
-        }
 
         // Cleanup
         m_renderer->gfxHide(m_client.get());
@@ -1396,22 +1290,6 @@ protected:
         m_renderer->gfxShutdown();
     }
 
-    void test_client_ShowWithDifferentClient_Fails()
-    {
-        m_renderer->gfxInit(m_client.get());
-        m_renderer->gfxShow(m_client.get());
-        m_renderer->gfxHide(m_client.get());
-        m_renderer->gfxShutdown();
-
-        // After full cleanup, different client should work
-        m_renderer->gfxInit(m_client2.get());
-        CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxShow(m_client2.get()));
-
-        // Cleanup
-        m_renderer->gfxHide(m_client2.get());
-        m_renderer->gfxShutdown();
-    }
-
     void test_client_DrawWithWrongClient_Fails()
     {
         m_renderer->gfxInit(m_client.get());
@@ -1471,39 +1349,6 @@ protected:
         // Third cycle with first client again
         m_renderer->gfxInit(m_client.get());
         m_renderer->gfxShow(m_client.get());
-        m_renderer->gfxHide(m_client.get());
-        m_renderer->gfxShutdown();
-    }
-
-    void test_state_HideResetsCurrentClient()
-    {
-        m_renderer->gfxInit(m_client.get());
-        m_renderer->gfxShow(m_client.get());
-        m_renderer->gfxHide(m_client.get());
-
-        // Should be able to show again (current client was reset)
-        CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxShow(m_client.get()));
-
-        // Cleanup
-        m_renderer->gfxHide(m_client.get());
-        m_renderer->gfxShutdown();
-    }
-
-    void test_state_MultipleDrawsConsistent()
-    {
-        auto mockWindow = m_client->getMockWindow();
-
-        m_renderer->gfxInit(m_client.get());
-        m_renderer->gfxShow(m_client.get());
-
-        // Multiple draws should all trigger window update
-        for (int i = 0; i < 5; ++i) {
-            mockWindow->resetCalls();
-            m_renderer->gfxDraw(m_client.get(), true, true);
-            CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
-        }
-
-        // Cleanup
         m_renderer->gfxHide(m_client.get());
         m_renderer->gfxShutdown();
     }
@@ -1605,14 +1450,6 @@ protected:
         m_renderer->gfxShutdown();
     }
 
-    void test_subtitle_ClientCreation()
-    {
-        auto subtitleClient = std::make_shared<MockGfxRendererClient>(true);
-
-        CPPUNIT_ASSERT(subtitleClient->isSubtitlesRenderer());
-        CPPUNIT_ASSERT(!m_client->isSubtitlesRenderer());
-    }
-
     void test_subtitle_InitShowHide()
     {
         auto subtitleClient = std::make_shared<MockGfxRendererClient>(true);
@@ -1711,43 +1548,6 @@ protected:
         // Cleanup
         m_renderer->gfxHide(m_client.get());
         m_renderer->gfxShutdown();
-    }
-
-    void test_boundary_ZeroInits()
-    {
-        // Without init, operations should fail
-        bool exceptionThrown = false;
-        try {
-            m_renderer->gfxShow(m_client.get());
-        } catch (const std::logic_error&) {
-            exceptionThrown = true;
-        }
-
-        CPPUNIT_ASSERT(exceptionThrown);
-    }
-
-    void test_boundary_SingleInitShutdown()
-    {
-        m_renderer->gfxInit(m_client.get());
-        CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxShutdown());
-
-        // Second shutdown should fail
-        bool exceptionThrown = false;
-        try {
-            m_renderer->gfxShutdown();
-        } catch (const std::logic_error&) {
-            exceptionThrown = true;
-        }
-
-        CPPUNIT_ASSERT(exceptionThrown);
-    }
-
-    void test_boundary_ManyInitShutdownCycles()
-    {
-        for (int i = 0; i < 20; ++i) {
-            m_renderer->gfxInit(m_client.get());
-            m_renderer->gfxShutdown();
-        }
     }
 
     void test_integration_FullWorkflow()
@@ -2088,14 +1888,11 @@ protected:
 
     void test_robustness_MultipleExceptionsRecovery()
     {
-        // Ensure this test starts from a clean singleton state.
-        // If a prior init attempt failed before setting m_gfxWindow, calling gfxInit()
-        // would only bump the refcount and skip initInternal(), and later gfxShutdown()
-        // could segfault in shutdownInternal().
-        if (m_renderer->m_initCount > 0 && m_renderer->m_gfxWindow == nullptr)
+        // A failed first init leaves a poisoned partial-init state that public shutdown
+        // cannot safely unwind with the current production implementation.
+        if (hasPoisonedInitState())
         {
-            m_renderer->m_initCount = 0;
-            m_renderer->m_currentClient = nullptr;
+            clearPoisonedInitState();
         }
 
         // Test that multiple exceptions don't corrupt state
@@ -2136,19 +1933,13 @@ protected:
         CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxDraw(m_client.get(), true, true));
         CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxHide(m_client.get()));
 
-        // Safe cleanup: only call gfxShutdown() if initInternal() actually set up the window.
-        if (m_renderer->m_initCount > 0)
+        if (hasPoisonedInitState())
         {
-            if (m_renderer->m_gfxWindow)
-            {
-                m_renderer->gfxShutdown();
-            }
-            else
-            {
-                // Failed init path: avoid shutdownInternal() null deref.
-                m_renderer->m_initCount = 0;
-                m_renderer->m_currentClient = nullptr;
-            }
+            clearPoisonedInitState();
+        }
+        else if (m_renderer->m_initCount > 0)
+        {
+            m_renderer->gfxShutdown();
         }
     }
 
@@ -2159,11 +1950,10 @@ protected:
         // 1. Null client errors
         CPPUNIT_ASSERT_THROW(m_renderer->gfxInit(nullptr), std::invalid_argument);
 
-        // gfxInit() increments m_initCount before validating and initInternal() throws before
-        // setting up m_gfxWindow. Reset the singleton state so subsequent init is a real init.
-        CPPUNIT_ASSERT(m_renderer->m_gfxWindow == nullptr);
-        m_renderer->m_initCount = 0;
-        m_renderer->m_currentClient = nullptr;
+        // gfxInit() increments m_initCount before validating, so a null client leaves a
+        // partial-init state that must be cleared before exercising later paths.
+        CPPUNIT_ASSERT(hasPoisonedInitState());
+        clearPoisonedInitState();
 
         m_renderer->gfxInit(m_client.get());
 

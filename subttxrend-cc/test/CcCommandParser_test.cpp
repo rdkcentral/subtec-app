@@ -940,11 +940,9 @@ public:
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("setPenColor"));
         auto call = mock->getLastCall("setPenColor");
-        // Verify all three color fields (fg, bg, edge) are decoded
-        // Color is typedef unsigned int, so just verify they're set (non-zero or zero is valid)
-        CPPUNIT_ASSERT_MESSAGE("Foreground color should be decoded", true);
-        CPPUNIT_ASSERT_MESSAGE("Background color should be decoded", true);
-        CPPUNIT_ASSERT_MESSAGE("Edge color should be decoded", true);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(COLOR_WHITE), call.penColor.fg_color);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(COLOR_WHITE), call.penColor.bg_color);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(COLOR_WHITE), call.penColor.edge_color);
     }
 
     void testDecoding_WindowAttributesAllFields()
@@ -983,10 +981,36 @@ public:
             CPPUNIT_ASSERT(mock->wasMethodCalled("defineWindow"));
             auto call = mock->getLastCall("defineWindow");
 
-            // Verify pen style was decoded from bits [2:0] of byte 6
-            // Different styles should produce different pen attributes
-            CPPUNIT_ASSERT_MESSAGE("Window definition should have pen style applied",
-                                   call.windowDef.id >= 0);
+            PenAttributes expected;
+            switch (style)
+            {
+                case 2:
+                    expected.font_tag = PenFontStyle::MONOSPACED_WITH_SERIFS;
+                    break;
+                case 3:
+                    expected.font_tag = PenFontStyle::PROPORTIONALLY_SPACED_WITH_SERIFS;
+                    break;
+                case 4:
+                    expected.font_tag = PenFontStyle::MONOSPACED_WITHOUT_SERIFS;
+                    break;
+                case 5:
+                    expected.font_tag = PenFontStyle::PROPORTIONALLY_SPACED_WITHOUT_SERIFS;
+                    break;
+                case 6:
+                    expected.font_tag = PenFontStyle::MONOSPACED_WITHOUT_SERIFS;
+                    expected.edge_type = PenEdge::UNIFORM;
+                    expected.pen_color.bg_color = decodeColor(COLOR_BLACK, 0x03);
+                    break;
+                case 7:
+                    expected.font_tag = PenFontStyle::PROPORTIONALLY_SPACED_WITHOUT_SERIFS;
+                    expected.edge_type = PenEdge::UNIFORM;
+                    expected.pen_color.bg_color = decodeColor(COLOR_BLACK, 0x03);
+                    break;
+                default:
+                    break;
+            }
+
+            CPPUNIT_ASSERT(expected == call.windowDef.pen_style);
         }
     }
 
@@ -1002,11 +1026,35 @@ public:
             CPPUNIT_ASSERT(mock->wasMethodCalled("defineWindow"));
             auto call = mock->getLastCall("defineWindow");
 
-            // Verify window style was decoded from bits [5:3] of byte 6
-            // Style 2: fill opacity=solid, Style 3: justify=center,
-            // Style 4: word_wrap=true, etc.
-            CPPUNIT_ASSERT_MESSAGE("Window definition should be created",
-                                   call.windowDef.id >= 0);
+            WindowAttributes expected;
+            switch (style)
+            {
+                case 2:
+                    expected.fill_color = decodeColor(COLOR_BLACK, 0x03);
+                    break;
+                case 3:
+                    expected.justify = WindowJustify::CENTER;
+                    break;
+                case 4:
+                    expected.word_wrap = true;
+                    break;
+                case 5:
+                    expected.word_wrap = true;
+                    expected.fill_color = decodeColor(COLOR_BLACK, 0x03);
+                    break;
+                case 6:
+                    expected.justify = WindowJustify::CENTER;
+                    expected.word_wrap = true;
+                    break;
+                case 7:
+                    expected.print_direction = WindowPd::TOP_BOTTOM;
+                    expected.scroll_direction = WindowSd::RIGHT_LEFT;
+                    break;
+                default:
+                    break;
+            }
+
+            CPPUNIT_ASSERT(expected == call.windowDef.win_style);
         }
     }
 };

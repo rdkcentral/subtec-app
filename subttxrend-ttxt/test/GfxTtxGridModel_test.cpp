@@ -27,15 +27,12 @@
 #include <ttxdecoder/ControlInfo.hpp>
 
 using subttxrend::ttxt::GfxTtxGridModel;
+using subttxrend::ttxt::GfxTtxGridCell;
 using subttxrend::ttxt::Size;
 
 // Local constants to avoid linker issues with static class members
 namespace {
     const std::uint8_t COLOR_INDEX_BLACK = 0;
-    const std::uint8_t COLOR_INDEX_RED = 1;
-    const std::uint8_t COLOR_INDEX_GREEN = 2;
-    const std::uint8_t COLOR_INDEX_YELLOW = 3;
-    const std::uint8_t COLOR_INDEX_CYAN = 5;
     const std::uint8_t COLOR_INDEX_WHITE = 7;
     const std::uint8_t COLOR_INDEX_TRANSPARENT = 8;
 }
@@ -109,14 +106,11 @@ private:
 class GfxTtxGridModelTest : public CppUnit::TestFixture
 {
     CPPUNIT_TEST_SUITE(GfxTtxGridModelTest);
-    CPPUNIT_TEST(testConstructorWithValidSize);
     CPPUNIT_TEST(testConstructorWithZeroWidth);
     CPPUNIT_TEST(testConstructorWithZeroHeight);
     CPPUNIT_TEST(testConstructorWithBothZero);
     CPPUNIT_TEST(testConstructorLargeSize);
     CPPUNIT_TEST(testGetSizeReturnsCorrectDimensions);
-    CPPUNIT_TEST(testInitWithValidEngine);
-    CPPUNIT_TEST(testInitWithNullptr);
     CPPUNIT_TEST(testInitCalledMultipleTimes);
     CPPUNIT_TEST(testGetConstCellWithValidCoordinates);
     CPPUNIT_TEST(testGetConstCellAtOrigin);
@@ -125,8 +119,6 @@ class GfxTtxGridModelTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testGetConstCellWithNegativeRow);
     CPPUNIT_TEST(testGetConstCellWithColumnOutOfBounds);
     CPPUNIT_TEST(testGetConstCellWithRowOutOfBounds);
-    CPPUNIT_TEST(testGetConstCellWithBothNegative);
-    CPPUNIT_TEST(testGetConstCellWithBothOutOfBounds);
     CPPUNIT_TEST(testSetFlashEnabledTrueWhenFalse);
     CPPUNIT_TEST(testSetFlashEnabledFalseWhenTrue);
     CPPUNIT_TEST(testSetFlashEnabledTrueWhenTrue);
@@ -138,11 +130,10 @@ class GfxTtxGridModelTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testSetRevealEnabledTrueWhenTrue);
     CPPUNIT_TEST(testSetRevealEnabledFalseWhenFalse);
     CPPUNIT_TEST(testClearAllInSubtitlesMode);
-    CPPUNIT_TEST(testClearAllInNormalMode);
     CPPUNIT_TEST(testClearAllOnStandardGrid);
     CPPUNIT_TEST(testClearAllOnZeroSizeGrid);
     CPPUNIT_TEST(testMarkAllAsChangedOnPopulatedGrid);
-    CPPUNIT_TEST(testMarkChangedByColorWithValidColor);
+    CPPUNIT_TEST(testMarkChangedByColorWithSelectionForeground);
     CPPUNIT_TEST(testMarkChangedByColorWithColorZero);
     CPPUNIT_TEST(testMarkChangedByColorWithColorMax);
     CPPUNIT_TEST(testRefreshSelectionNormalWithZeroPage);
@@ -165,16 +156,6 @@ public:
     }
 
 protected:
-    void testConstructorWithValidSize()
-    {
-        Size size(40, 25);
-        m_model.reset(new GfxTtxGridModel(size));
-
-        CPPUNIT_ASSERT(m_model.get() != nullptr);
-        CPPUNIT_ASSERT_EQUAL(40, m_model->getSize().m_w);
-        CPPUNIT_ASSERT_EQUAL(25, m_model->getSize().m_h);
-    }
-
     void testConstructorWithZeroWidth()
     {
         Size size(0, 25);
@@ -225,32 +206,19 @@ protected:
         CPPUNIT_ASSERT_EQUAL(20, returnedSize.m_h);
     }
 
-    void testInitWithValidEngine()
-    {
-        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
-        m_model->init(m_mockEngine.get());
-
-        // Verify init doesn't crash and object is still valid
-        CPPUNIT_ASSERT(m_model.get() != nullptr);
-    }
-
-    void testInitWithNullptr()
-    {
-        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
-        m_model->init(nullptr);
-
-        // Should not crash
-        CPPUNIT_ASSERT(m_model.get() != nullptr);
-    }
-
     void testInitCalledMultipleTimes()
     {
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
-        m_model->init(m_mockEngine.get());
-        m_model->init(m_mockEngine.get());
 
-        // Multiple init calls should be safe
-        CPPUNIT_ASSERT(m_model.get() != nullptr);
+        MockTtxEngine secondEngine;
+        secondEngine.setCurrentPageId(ttxdecoder::PageId(0x222, 0));
+
+        m_model->init(m_mockEngine.get());
+        m_model->init(&secondEngine);
+
+        m_model->refreshSelection(false, 0);
+
+        assertSelectionText("P222");
     }
 
     void testGetConstCellWithValidCoordinates()
@@ -309,22 +277,6 @@ protected:
         CPPUNIT_ASSERT(cell == nullptr);
     }
 
-    void testGetConstCellWithBothNegative()
-    {
-        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
-
-        const auto* cell = m_model->getConstCell(-5, -10);
-        CPPUNIT_ASSERT(cell == nullptr);
-    }
-
-    void testGetConstCellWithBothOutOfBounds()
-    {
-        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
-
-        const auto* cell = m_model->getConstCell(100, 100);
-        CPPUNIT_ASSERT(cell == nullptr);
-    }
-
     void testSetFlashEnabledTrueWhenFalse()
     {
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
@@ -363,8 +315,7 @@ protected:
     {
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
 
-        // Initial state is false, after toggle should be true
-        // We verify by toggling twice and checking setRevealEnabled behavior
+        // Initial state is false, so after one toggle setting true again should report no change.
         m_model->toggleRevealEnabled();
         bool changed = m_model->setRevealEnabled(true);
         CPPUNIT_ASSERT_EQUAL(false, changed); // Already true, so no change
@@ -427,18 +378,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(COLOR_INDEX_TRANSPARENT, cell->getBgColor());
     }
 
-    void testClearAllInNormalMode()
-    {
-        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
-
-        m_model->clearAll(false);
-
-        // Verify cells are cleared with black background
-        const auto* cell = m_model->getConstCell(0, 0);
-        CPPUNIT_ASSERT(cell != nullptr);
-        CPPUNIT_ASSERT_EQUAL(COLOR_INDEX_BLACK, cell->getBgColor());
-    }
-
     void testClearAllOnStandardGrid()
     {
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
@@ -463,45 +402,75 @@ protected:
     {
         m_model.reset(new GfxTtxGridModel(Size(0, 0)));
 
-        // Should not crash on empty grid
         m_model->clearAll(false);
-        CPPUNIT_ASSERT(m_model.get() != nullptr);
+        CPPUNIT_ASSERT(m_model->getConstCell(0, 0) == nullptr);
     }
 
     void testMarkAllAsChangedOnPopulatedGrid()
     {
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
 
-        // Should not crash
+        m_model->refreshSelection(true, 0);
+
+        const auto* cell0 = requireCell(0, 0);
+        const auto* cell1 = requireCell(1, 0);
+
+        drainDirty(*cell0);
+        drainDirty(*cell1);
+
         m_model->markAllAsChanged();
-        CPPUNIT_ASSERT(m_model.get() != nullptr);
+
+        CPPUNIT_ASSERT_EQUAL(true, cell0->startRedraw());
+        CPPUNIT_ASSERT_EQUAL(true, cell1->startRedraw());
+        CPPUNIT_ASSERT_EQUAL(false, cell0->startRedraw());
+        CPPUNIT_ASSERT_EQUAL(false, cell1->startRedraw());
     }
 
-    void testMarkChangedByColorWithValidColor()
+    void testMarkChangedByColorWithSelectionForeground()
     {
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
 
-        // Should not crash
-        m_model->markChangedByColor(COLOR_INDEX_RED);
-        CPPUNIT_ASSERT(m_model.get() != nullptr);
+        m_model->refreshSelection(true, 0);
+
+        const auto* matchingCell = requireCell(0, 0);
+        const auto* nonMatchingCell = requireCell(4, 0);
+
+        drainDirty(*matchingCell);
+        drainDirty(*nonMatchingCell);
+
+        m_model->markChangedByColor(COLOR_INDEX_WHITE);
+
+        CPPUNIT_ASSERT_EQUAL(true, matchingCell->startRedraw());
+        CPPUNIT_ASSERT_EQUAL(false, nonMatchingCell->startRedraw());
     }
 
     void testMarkChangedByColorWithColorZero()
     {
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
 
-        // Should not crash with boundary value
+        m_model->refreshSelection(true, 0);
+
+        const auto* cell = requireCell(0, 0);
+        drainDirty(*cell);
+
         m_model->markChangedByColor(0);
-        CPPUNIT_ASSERT(m_model.get() != nullptr);
+
+        CPPUNIT_ASSERT_EQUAL(true, cell->startRedraw());
+        CPPUNIT_ASSERT_EQUAL(false, cell->startRedraw());
     }
 
     void testMarkChangedByColorWithColorMax()
     {
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
 
-        // Should not crash with maximum value
+        m_model->clearAll(false);
+
+        const auto* cell = requireCell(20, 12);
+        drainDirty(*cell);
+
         m_model->markChangedByColor(255);
-        CPPUNIT_ASSERT(m_model.get() != nullptr);
+
+        CPPUNIT_ASSERT_EQUAL(false, cell->startRedraw());
     }
 
     void testRefreshSelectionNormalWithZeroPage()
@@ -509,21 +478,13 @@ protected:
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
         m_model->init(m_mockEngine.get());
 
-        m_mockEngine->setCurrentPageId(ttxdecoder::PageId(1, 0x100));
+        m_mockEngine->setCurrentPageId(ttxdecoder::PageId(0x100, 0));
 
-        // Should not crash
         m_model->refreshSelection(false, 0);
 
-        // Verify first 4 cells have been updated (page number display)
-        const auto* cell0 = m_model->getConstCell(0, 0);
-        const auto* cell1 = m_model->getConstCell(1, 0);
-        const auto* cell2 = m_model->getConstCell(2, 0);
-        const auto* cell3 = m_model->getConstCell(3, 0);
+        assertSelectionText("P100");
 
-        CPPUNIT_ASSERT(cell0 != nullptr);
-        CPPUNIT_ASSERT(cell1 != nullptr);
-        CPPUNIT_ASSERT(cell2 != nullptr);
-        CPPUNIT_ASSERT(cell3 != nullptr);
+        const auto* cell0 = requireCell(0, 0);
 
         // Verify colors are set correctly for page number
         CPPUNIT_ASSERT_EQUAL(COLOR_INDEX_WHITE, cell0->getFgColor());
@@ -538,11 +499,7 @@ protected:
         // Should display "PAUS" when paused
         m_model->refreshSelection(true, 0);
 
-        const auto* cell0 = m_model->getConstCell(0, 0);
-        CPPUNIT_ASSERT(cell0 != nullptr);
-
-        // Verify character is 'P' (ASCII 80)
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('P'), cell0->getChar());
+        assertSelectionText("PAUS");
     }
 
     void testRefreshSelectionWithNewPageId()
@@ -553,11 +510,7 @@ protected:
         // Should display new page ID when provided
         m_model->refreshSelection(false, 0x123);
 
-        const auto* cell0 = m_model->getConstCell(0, 0);
-        CPPUNIT_ASSERT(cell0 != nullptr);
-
-        // Should have 'P' as first character
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('P'), cell0->getChar());
+        assertSelectionText("P123");
     }
 
     void testRefreshSelectionWithMaxPageId()
@@ -568,13 +521,36 @@ protected:
         // Should handle maximum valid page ID
         m_model->refreshSelection(false, 0xFFF);
 
-        const auto* cell0 = m_model->getConstCell(0, 0);
-        CPPUNIT_ASSERT(cell0 != nullptr);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('P'), cell0->getChar());
+        assertSelectionText("PFFF");
     }
 
 
 private:
+    const GfxTtxGridCell* requireCell(std::int32_t col,
+                                      std::int32_t row) const
+    {
+        const auto* cell = m_model->getConstCell(col, row);
+        CPPUNIT_ASSERT(cell != nullptr);
+        return cell;
+    }
+
+    void drainDirty(const GfxTtxGridCell& cell) const
+    {
+        while (cell.startRedraw())
+        {
+        }
+    }
+
+    void assertSelectionText(const char* expected)
+    {
+        for (std::int32_t col = 0; col < 4; ++col)
+        {
+            const auto* cell = requireCell(col, 0);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(expected[col]), cell->getChar());
+        }
+    }
+
+
     std::unique_ptr<GfxTtxGridModel> m_model;
     std::unique_ptr<MockTtxEngine> m_mockEngine;
 };

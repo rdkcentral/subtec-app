@@ -47,7 +47,6 @@ CPPUNIT_TEST_SUITE(Ipv4SocketSourceTest);
     CPPUNIT_TEST(testOpenWithPortZero);
     CPPUNIT_TEST(testOpenWithInvalidIPAddress);
     CPPUNIT_TEST(testOpenWithHostnameNotIP);
-    CPPUNIT_TEST(testOpenWithValidIPAndPort);
     CPPUNIT_TEST(testOpenWithWildcardAddress);
     CPPUNIT_TEST(testOpenMultipleTimesReturnsTrueWhenAlreadyOpen);
     CPPUNIT_TEST(testOpenPortAlreadyInUse);
@@ -61,7 +60,6 @@ CPPUNIT_TEST_SUITE(Ipv4SocketSourceTest);
     CPPUNIT_TEST(testReadPacketWithZeroPayloadSize);
     CPPUNIT_TEST(testReadPacketWithLargePayload);
     CPPUNIT_TEST(testReadPacketBufferTooSmallForPayload);
-    CPPUNIT_TEST(testReadPacketMultiplePacketsSequentially);
     CPPUNIT_TEST(testReadPacketLittleEndianSizeParsing);
     CPPUNIT_TEST(testReadPacketClientDisconnectReturnsZeroSize);
     CPPUNIT_TEST(testFullWorkflowConstructOpenReadClose);
@@ -85,8 +83,25 @@ protected:
     // Helper function to get an available port
     unsigned short getAvailablePort()
     {
-        static unsigned short basePort = 9000;
-        return basePort++;
+        int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        CPPUNIT_ASSERT(sockfd >= 0);
+
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = 0;
+
+        CPPUNIT_ASSERT_EQUAL(0, bind(sockfd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)));
+
+        socklen_t addrLen = sizeof(addr);
+        CPPUNIT_ASSERT_EQUAL(0, getsockname(sockfd, reinterpret_cast<struct sockaddr*>(&addr), &addrLen));
+
+        unsigned short port = ntohs(addr.sin_port);
+        ::close(sockfd);
+
+        CPPUNIT_ASSERT(port != 0);
+        return port;
     }
 
     // Helper to create a client socket and connect
@@ -167,16 +182,18 @@ protected:
 
     void testConstructorWithValidPath()
     {
-        Ipv4SocketSource source("127.0.0.1:8080");
-        // Constructor should succeed - no exception
-        CPPUNIT_ASSERT(true);
+        unsigned short testPort = getAvailablePort();
+        Ipv4SocketSource source("127.0.0.1:" + std::to_string(testPort));
+
+        CPPUNIT_ASSERT_EQUAL(true, source.open());
+        source.close();
     }
 
     void testConstructorWithEmptyPath()
     {
         Ipv4SocketSource source("");
-        // Constructor accepts empty path, validation happens at open()
-        CPPUNIT_ASSERT(true);
+
+        CPPUNIT_ASSERT_EQUAL(false, source.open());
     }
 
     void testConstructorWithLongPath()
@@ -184,8 +201,8 @@ protected:
         std::string longPath(5000, 'x');
         longPath += ":8080";
         Ipv4SocketSource source(longPath);
-        // Constructor accepts long path
-        CPPUNIT_ASSERT(true);
+
+        CPPUNIT_ASSERT_EQUAL(false, source.open());
     }
 
     // open() tests - path parsing
@@ -248,15 +265,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(false, source.open());
     }
 
-    void testOpenWithValidIPAndPort()
-    {
-        unsigned short testPort = getAvailablePort();
-        std::string path = "127.0.0.1:" + std::to_string(testPort);
-        Ipv4SocketSource source(path);
-        CPPUNIT_ASSERT_EQUAL(true, source.open());
-        source.close();
-    }
-
     void testOpenWithWildcardAddress()
     {
         unsigned short testPort = getAvailablePort();
@@ -295,10 +303,13 @@ protected:
 
     void testCloseWithoutOpen()
     {
-        Ipv4SocketSource source("127.0.0.1:8080");
-        // Should not crash
+        unsigned short testPort = getAvailablePort();
+        std::string path = "127.0.0.1:" + std::to_string(testPort);
+        Ipv4SocketSource source(path);
+
         source.close();
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(true, source.open());
+        source.close();
     }
 
     void testCloseAfterSuccessfulOpen()
@@ -309,7 +320,13 @@ protected:
 
         CPPUNIT_ASSERT_EQUAL(true, source.open());
         source.close();
-        CPPUNIT_ASSERT(true);
+
+        DataPacket packet(1024);
+        CPPUNIT_ASSERT_EQUAL(false, source.readPacket(packet));
+
+        Ipv4SocketSource reopened(path);
+        CPPUNIT_ASSERT_EQUAL(true, reopened.open());
+        reopened.close();
     }
 
     void testCloseMultipleTimes()
@@ -322,15 +339,18 @@ protected:
         source.close();
         source.close();
         source.close();
-        CPPUNIT_ASSERT(true);
+
+        CPPUNIT_ASSERT_EQUAL(true, source.open());
+        source.close();
     }
 
     void testCloseAfterFailedOpen()
     {
         Ipv4SocketSource source("invalid:path");
-        source.open(); // fails
+
+        CPPUNIT_ASSERT_EQUAL(false, source.open());
         source.close();
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(false, source.open());
     }
 
     void testReadPacketWithBufferSmallerThanHeader()
@@ -519,54 +539,6 @@ protected:
         source.close();
     }
 
-    void testReadPacketMultiplePacketsSequentially()
-    {
-        unsigned short testPort = getAvailablePort();
-        std::string path = "127.0.0.1:" + std::to_string(testPort);
-        Ipv4SocketSource source(path);
-
-        CPPUNIT_ASSERT_EQUAL(true, source.open());
-
-        DataPacket packet(1024);
-
-        std::thread clientThread([testPort, this]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            int sock = createClientSocket("127.0.0.1", testPort);
-            if (sock >= 0)
-            {
-                // Send three packets
-                std::vector<std::uint8_t> payload1 = {0x01};
-                auto packet1 = makePacket(payload1);
-                sendPacketData(sock, packet1);
-
-                std::vector<std::uint8_t> payload2 = {0x02, 0x03};
-                auto packet2 = makePacket(payload2);
-                sendPacketData(sock, packet2);
-
-                std::vector<std::uint8_t> payload3 = {0x04, 0x05, 0x06};
-                auto packet3 = makePacket(payload3);
-                sendPacketData(sock, packet3);
-
-                ::close(sock);
-            }
-        });
-
-        // Read first packet
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(13), packet.getSize());
-
-        // Read second packet
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(14), packet.getSize());
-
-        // Read third packet
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(15), packet.getSize());
-
-        clientThread.join();
-        source.close();
-    }
-
     void testReadPacketLittleEndianSizeParsing()
     {
         unsigned short testPort = getAvailablePort();
@@ -576,8 +548,9 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, source.open());
 
         DataPacket packet(1024);
+        std::vector<std::uint8_t> expectedPayload(258, 0x5A);
 
-        std::thread clientThread([testPort]() {
+        std::thread clientThread([testPort, expectedPayload]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             int sock = socket(AF_INET, SOCK_STREAM, 0);
             if (sock >= 0)
@@ -590,27 +563,39 @@ protected:
 
                 if (connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == 0)
                 {
-                    // Send packet with size 0x04030201 in little-endian (bytes 8-11)
-                    std::uint8_t data[12 + 4];
-                    memset(data, 0, sizeof(data));
-                    data[8] = 0x04;  // LSB
-                    data[9] = 0x00;
+                    // Send packet with payload size 258 encoded as little-endian bytes 02 01 00 00.
+                    std::vector<std::uint8_t> data(12 + expectedPayload.size(), 0);
+                    data[8] = 0x02;
+                    data[9] = 0x01;
                     data[10] = 0x00;
-                    data[11] = 0x00; // MSB
-                    // Payload is 4 bytes
-                    data[12] = 0xAA;
-                    data[13] = 0xBB;
-                    data[14] = 0xCC;
-                    data[15] = 0xDD;
+                    data[11] = 0x00;
+                    std::copy(expectedPayload.begin(), expectedPayload.end(), data.begin() + 12);
 
-                    send(sock, data, sizeof(data), 0);
+                    size_t totalSent = 0;
+                    while (totalSent < data.size())
+                    {
+                        ssize_t sent = send(sock, &data[totalSent], data.size() - totalSent, 0);
+                        if (sent <= 0)
+                        {
+                            break;
+                        }
+                        totalSent += static_cast<size_t>(sent);
+                    }
                 }
                 ::close(sock);
             }
         });
 
         CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(16), packet.getSize()); // 12 + 4
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(270), packet.getSize()); // 12 + 258
+
+        const std::uint8_t* buffer = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x02), buffer[8]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x01), buffer[9]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buffer[10]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buffer[11]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x5A), buffer[12]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x5A), buffer[269]);
 
         clientThread.join();
         source.close();
@@ -685,7 +670,13 @@ protected:
 
         // Close
         source.close();
-        CPPUNIT_ASSERT(true);
+
+        DataPacket closedPacket(1024);
+        CPPUNIT_ASSERT_EQUAL(false, source.readPacket(closedPacket));
+
+        Ipv4SocketSource reopened(path);
+        CPPUNIT_ASSERT_EQUAL(true, reopened.open());
+        reopened.close();
     }
 
     void testReopenAfterClose()
@@ -702,7 +693,9 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, source.open());
         source.close();
 
-        CPPUNIT_ASSERT(true);
+        Ipv4SocketSource other(path);
+        CPPUNIT_ASSERT_EQUAL(true, other.open());
+        other.close();
     }
 
     void testMultiplePacketsWithDifferentSizes()

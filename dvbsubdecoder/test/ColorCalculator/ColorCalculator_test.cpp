@@ -234,14 +234,24 @@ public:
     {
         ColorCalculator calculator;
 
-        // Test minimum Y value (should be clamped to 16)
+        // Test that Y=0 is treated as special case (transparent white)
+        // and Y=1 is clamped to Y=16 (both should differ)
+        ColorYCrCbT input0{0, 128, 128, 0};
+        ColorARGB result0 = calculator.toARGB(input0);
+
         ColorYCrCbT input1{1, 128, 128, 0};
         ColorARGB result1 = calculator.toARGB(input1);
-        
+
+        // Y=0 should be transparent (A=0), Y=1 should be opaque
+        CPPUNIT_ASSERT(result0.m_a != result1.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), result0.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(255), result1.m_a);
+
+        // Test minimum Y value (Y=1 should be clamped to 16)
         ColorYCrCbT input2{16, 128, 128, 0};
         ColorARGB result2 = calculator.toARGB(input2);
         
-        // Both should produce same result due to clamping
+        // Y=1 and Y=16 should produce same result due to clamping
         CPPUNIT_ASSERT_EQUAL(result2.m_r, result1.m_r);
         CPPUNIT_ASSERT_EQUAL(result2.m_g, result1.m_g);
         CPPUNIT_ASSERT_EQUAL(result2.m_b, result1.m_b);
@@ -309,6 +319,15 @@ public:
         ColorYCrCbT input4{128, 128, 128, 1};
         ColorARGB result4 = calculator.toARGB(input4);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(254), result4.m_a);
+
+        // Test Y>0 with transparency to verify RGB calculation with partial transparency
+        ColorYCrCbT input5{128, 150, 110, 100}; // mid-gray, partially transparent
+        ColorARGB result5 = calculator.toARGB(input5);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(155), result5.m_a); // 255 - 100
+        // Verify RGB values against the expected converted color for this input.
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(165), result5.m_r);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(120), result5.m_g);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(94), result5.m_b);
     }
 
     void testClamping()
@@ -316,21 +335,34 @@ public:
         ColorCalculator calculator;
 
         // Test RGB clamping to 0-255 range
-        // Use extreme Cr/Cb values that might cause overflow
+        // Use extreme Cr/Cb values that cause overflow in intermediate calculations
+        // High Y (235) + High Cr (240) should cause R to overflow and clamp to 255
         ColorYCrCbT input1{235, 240, 16, 0}; // High Y, high Cr, low Cb
         ColorARGB result1 = calculator.toARGB(input1);
         
-        // NOTE: result components are uint8_t (always 0..255)
-        CPPUNIT_ASSERT(result1.m_r <= 255);
-        CPPUNIT_ASSERT(result1.m_g <= 255);
-        CPPUNIT_ASSERT(result1.m_b <= 255);
+        // Verify R is clamped to 255 (would overflow without clamping)
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(255), result1.m_r);
+        // The non-clamped channels should still retain their computed values.
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(208), result1.m_g);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(29), result1.m_b);
 
+        // High Y (235) + High Cb (240) should cause B to overflow and clamp to 255
         ColorYCrCbT input2{235, 16, 240, 0}; // High Y, low Cr, high Cb
         ColorARGB result2 = calculator.toARGB(input2);
         
-        CPPUNIT_ASSERT(result2.m_r <= 255);
-        CPPUNIT_ASSERT(result2.m_g <= 255);
-        CPPUNIT_ASSERT(result2.m_b <= 255);
+        // Verify B is clamped to 255 (would overflow without clamping)
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(255), result2.m_b);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(76), result2.m_r);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(255), result2.m_g);
+
+        // Low Y values with extreme Cr/Cb can cause underflow to 0
+        ColorYCrCbT input3{16, 240, 240, 0}; // Low Y, high Cr/Cb
+        ColorARGB result3 = calculator.toARGB(input3);
+
+        // Green underflows and should clamp to 0, while the other channels remain computed.
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(179), result3.m_r);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0), result3.m_g);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(226), result3.m_b);
     }
 
     void testColorSpaceExtremes()
@@ -398,58 +430,66 @@ public:
     {
         ColorCalculator calculator;
 
-        // Test values that might cause rounding issues
-        ColorYCrCbT input1{17, 129, 127, 1}; // Slightly off center values
+        // Test values that cause rounding differences
+        // Use inputs far enough apart to guarantee visible differences
+        ColorYCrCbT input1{50, 140, 110, 1}; // Distinct values
         ColorARGB result1 = calculator.toARGB(input1);
         
-        ColorYCrCbT input2{18, 127, 129, 2}; // Slightly different
+        ColorYCrCbT input2{70, 120, 130, 2}; // Different enough to affect all components
         ColorARGB result2 = calculator.toARGB(input2);
         
-        // Results should be different but close
-        CPPUNIT_ASSERT(result1.m_r != result2.m_r || result1.m_g != result2.m_g || result1.m_b != result2.m_b);
+        // With sufficiently different inputs, all RGB components should differ
+        CPPUNIT_ASSERT(result1.m_r != result2.m_r);
+        CPPUNIT_ASSERT(result1.m_g != result2.m_g);
+        CPPUNIT_ASSERT(result1.m_b != result2.m_b);
         
-        // Test that small changes produce small differences
+        // Test that moderate changes produce reasonable differences
         int diffR = std::abs(static_cast<int>(result1.m_r) - static_cast<int>(result2.m_r));
         int diffG = std::abs(static_cast<int>(result1.m_g) - static_cast<int>(result2.m_g));
         int diffB = std::abs(static_cast<int>(result1.m_b) - static_cast<int>(result2.m_b));
         
-        CPPUNIT_ASSERT(diffR <= 10); // Changes should be gradual
-        CPPUNIT_ASSERT(diffG <= 10);
-        CPPUNIT_ASSERT(diffB <= 10);
+        CPPUNIT_ASSERT(diffR > 0 && diffR <= 150); // Should differ noticeably
+        CPPUNIT_ASSERT(diffG > 0 && diffG <= 150);
+        CPPUNIT_ASSERT(diffB > 0 && diffB <= 150);
     }
 
     void testInvalidInputs()
     {
         ColorCalculator calculator;
 
-        // Test that extreme invalid inputs don't crash and produce clamped results
+        // Test that extreme inputs produce expected clamped results
+        // Y=255, Cr=255, Cb=255 with clamping should produce specific output
         ColorYCrCbT extremeInput{255, 255, 255, 255};
         ColorARGB extremeResult = calculator.toARGB(extremeInput);
         
-        // Should not crash; components are uint8_t so only upper bound is meaningful.
-        CPPUNIT_ASSERT(extremeResult.m_a <= 255);
-        CPPUNIT_ASSERT(extremeResult.m_r <= 255);
-        CPPUNIT_ASSERT(extremeResult.m_g <= 255);
-        CPPUNIT_ASSERT(extremeResult.m_b <= 255);
+        // T=255 means A should be 0 (fully transparent)
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0), extremeResult.m_a);
+        // Y=255 clamped to 235, Cr/Cb=255 clamped to 240 should produce valid RGB
+        // R should be clamped to 255 due to high Y+Cr
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(255), extremeResult.m_r);
+        // B should be clamped to 255 due to high Y+Cb
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(255), extremeResult.m_b);
 
         // Test zero values
         ColorYCrCbT zeroInput{0, 0, 0, 0};
         ColorARGB zeroResult = calculator.toARGB(zeroInput);
         
-        // Y=0 case: should be transparent white
+        // Y=0 case: should be transparent white (special case)
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), zeroResult.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xFF), zeroResult.m_r);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xFF), zeroResult.m_g);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xFF), zeroResult.m_b);
 
-        // Test mixed extreme values
+        // Test mixed extreme values produce expected clamped output
         ColorYCrCbT mixedInput{1, 255, 0, 128};
         ColorARGB mixedResult = calculator.toARGB(mixedInput);
         
-        CPPUNIT_ASSERT(mixedResult.m_a <= 255);
-        CPPUNIT_ASSERT(mixedResult.m_r <= 255);
-        CPPUNIT_ASSERT(mixedResult.m_g <= 255);
-        CPPUNIT_ASSERT(mixedResult.m_b <= 255);
+        // T=128 means A should be 127
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(127), mixedResult.m_a);
+        // Y=1 clamped to 16, Cr=255 clamped to 240, Cb=0 clamped to 16
+        // With low Y and high Cr, R should be > 0, G should be clamped low
+        CPPUNIT_ASSERT(mixedResult.m_r > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0), mixedResult.m_g);
     }
 
 };

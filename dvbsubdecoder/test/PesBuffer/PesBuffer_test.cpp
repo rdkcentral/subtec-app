@@ -61,6 +61,10 @@ CPPUNIT_TEST_SUITE( PesBufferTest );
     CPPUNIT_TEST(testErrorRecovery);
     CPPUNIT_TEST(testPacketWithoutPts);
     CPPUNIT_TEST(testInvalidPtsDtsFlags);
+    CPPUNIT_TEST(testBufferOverflow);
+    CPPUNIT_TEST(testTruncatedPesPacket);
+    CPPUNIT_TEST(testCorruptPesPacket);
+    CPPUNIT_TEST(testBufferReset);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -714,6 +718,75 @@ public:
         CPPUNIT_ASSERT(!header.m_hasPts); // Should not extract PTS for invalid flags
     }
 
+    void testBufferReset()
+    {
+        DynamicAllocator allocator;
+        PesBuffer buffer(allocator);
+        buildPacket(PES_PACKET_LENGTH);
+        CPPUNIT_ASSERT(buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
+        buffer.clear();
+
+        PesPacketHeader header;
+        PesPacketReader dataReader;
+        CPPUNIT_ASSERT(!buffer.getNextPacket(StcTimeType::LOW_32, header, dataReader)); // Should be empty
+    }
+
+    void testBufferContentOrder()
+    {
+        DynamicAllocator allocator;
+        PesBuffer buffer(allocator);
+        const int NUM_PACKETS = 5;
+        for (int i = 0; i < NUM_PACKETS; ++i)
+        {
+            buildPacket(PES_PACKET_LENGTH);
+            if (m_pesPacket.size() > 10) m_pesPacket[10] = i;
+            CPPUNIT_ASSERT(buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
+        }
+        for (int i = 0; i < NUM_PACKETS; ++i)
+        {
+            PesPacketHeader header;
+            PesPacketReader dataReader;
+            CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::LOW_32, header, dataReader));
+            CPPUNIT_ASSERT(header.m_pesPacketLength == PES_PACKET_LENGTH);
+            // Only check the 10th byte, do not over-read
+            size_t bytesRead = 0;
+            while (bytesRead < header.m_pesPacketLength)
+            {
+                uint8_t val = dataReader.readUint8();
+                if (bytesRead == 10)
+                    CPPUNIT_ASSERT(val == i);
+                bytesRead++;
+            }
+            buffer.markPacketConsumed(header);
+        }
+    }
+
+    void testBufferOverflow()
+    {
+        DynamicAllocator allocator;
+        PesBuffer buffer(allocator);
+        std::vector<std::uint8_t> largePacket(PES_PACKET_LENGTH * 10, 0xFF); // Exceed buffer size
+        bool result = buffer.addPesPacket(largePacket.data(), largePacket.size());
+        CPPUNIT_ASSERT(!result); // Should fail to add
+    }
+
+    void testTruncatedPesPacket()
+    {
+        DynamicAllocator allocator;
+        PesBuffer buffer(allocator);
+        std::vector<std::uint8_t> truncatedPacket(5, 0x00); // Too short for valid PES
+        bool result = buffer.addPesPacket(truncatedPacket.data(), truncatedPacket.size());
+        CPPUNIT_ASSERT(!result); // Should fail to add
+    }
+
+    void testCorruptPesPacket()
+    {
+        DynamicAllocator allocator;
+        PesBuffer buffer(allocator);
+        std::vector<std::uint8_t> corruptPacket(PES_PACKET_LENGTH, 0xFF); // Invalid header/data
+        bool result = buffer.addPesPacket(corruptPacket.data(), corruptPacket.size());
+        CPPUNIT_ASSERT(!result); // Should fail to add
+    }
 private:
     void buildPacket(std::uint16_t size)
     {

@@ -23,6 +23,13 @@
 #include <fstream>
 #include <memory>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <vector>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 using namespace subttxrend::ctrl;
 
@@ -30,13 +37,47 @@ using namespace subttxrend::ctrl;
 class TempConfigFile
 {
 public:
-    TempConfigFile(const std::string& content) : m_filename("/tmp/test_config_" + std::to_string(rand()) + ".ini")
+    TempConfigFile(const std::string& content)
     {
-        std::ofstream file(m_filename);
-        if (file.is_open())
+        // Use mkstemp to create a unique temp file on Linux (Ubuntu)
+        std::string tmpl = "/tmp/test_config_XXXXXX";
+        std::vector<char> buf(tmpl.begin(), tmpl.end());
+        buf.push_back('\0');
+        int fd = mkstemp(buf.data());
+        if (fd != -1)
         {
-            file << content;
-            file.close();
+            if (!content.empty())
+            {
+                ssize_t written = write(fd, content.data(), content.size());
+                (void)written;
+            }
+            close(fd);
+            m_filename = std::string(buf.data());
+        }
+        else
+        {
+            // Fallback: use tmpnam
+            char tmp[L_tmpnam];
+            if (std::tmpnam(tmp))
+            {
+                m_filename = std::string(tmp);
+                std::ofstream file(m_filename);
+                if (file.is_open())
+                {
+                    file << content;
+                    file.close();
+                }
+            }
+            else
+            {
+                m_filename = "/tmp/test_config_fallback.ini";
+                std::ofstream file(m_filename);
+                if (file.is_open())
+                {
+                    file << content;
+                    file.close();
+                }
+            }
         }
     }
 
@@ -138,8 +179,7 @@ class ConfigurationTest : public CppUnit::TestFixture
 public:
     void setUp() override
     {
-        // Seed random for temp file names
-        srand(time(nullptr));
+        // no global RNG seeding
     }
 
     void tearDown() override
@@ -154,8 +194,8 @@ protected:
         CPPUNIT_ASSERT(options->isValid());
 
         Configuration config(*options);
-        // If we reach here, constructor succeeded
-        CPPUNIT_ASSERT(true);
+        // Ensure basic accessor works without throwing
+        CPPUNIT_ASSERT_NO_THROW(config.getMainContextSocketPath());
     }
 
     void testConstructorWithValidConfigFile()
@@ -196,7 +236,7 @@ protected:
     void testConstructorWithNonExistentFile()
     {
         // Create a path that definitely doesn't exist
-        std::string nonExistentPath = "/tmp/nonexistent_config_" + std::to_string(rand()) + "_" + std::to_string(time(nullptr)) + ".ini";
+        std::string nonExistentPath = "/tmp/nonexistent_config_" + std::to_string(time(nullptr)) + "_" + std::to_string(getpid()) + ".ini";
 
         // Verify the file actually doesn't exist
         std::ifstream checkFile(nonExistentPath);
@@ -247,9 +287,10 @@ protected:
         CPPUNIT_ASSERT_EQUAL(std::string("/partial/socket"), config.getMainContextSocketPath());
 
         // Config providers should be accessible (returns valid reference)
-        const auto& rdkConfig = config.getRdkEnvConfig();
-        // We can verify the reference is valid (doesn't crash)
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(config.getRdkEnvConfig());
+        const auto& r1 = config.getRdkEnvConfig();
+        const auto& r2 = config.getRdkEnvConfig();
+        CPPUNIT_ASSERT_EQUAL(&r1, &r2);
     }
 
     void testSocketPathFromOptionsOnly()
@@ -324,7 +365,11 @@ protected:
 
         // Should use default when option is empty
         std::string socketPath = config.getMainContextSocketPath();
-        CPPUNIT_ASSERT(socketPath.size() > 0);
+        #ifdef PC_BUILD
+        CPPUNIT_ASSERT_EQUAL(std::string("/tmp/subttx-socket"), socketPath);
+        #else
+        CPPUNIT_ASSERT_EQUAL(std::string("/var/run/subttx/pes_data_main"), socketPath);
+        #endif
     }
 
     void testSocketPathWithSpecialCharacters()
@@ -354,10 +399,11 @@ protected:
         auto options = OptionsBuilder::createEmpty();
         Configuration config(*options);
 
-        // Verify we can get the provider reference without crashing
-        const auto& provider = config.getTeletextConfig();
-        // Reference is always valid if we reach here
-        CPPUNIT_ASSERT(true);
+        // Verify we can get the provider reference without crashing and it's stable
+        CPPUNIT_ASSERT_NO_THROW(config.getTeletextConfig());
+        const auto& t1 = config.getTeletextConfig();
+        const auto& t2 = config.getTeletextConfig();
+        CPPUNIT_ASSERT_EQUAL(&t1, &t2);
     }
 
     void testGetTeletextConfigCalledMultipleTimes()
@@ -377,9 +423,11 @@ protected:
         auto options = OptionsBuilder::createEmpty();
         Configuration config(*options);
 
-        // Verify we can get the provider reference without crashing
-        const auto& provider = config.getRdkEnvConfig();
-        CPPUNIT_ASSERT(true);
+        // Verify we can get the provider reference without crashing and it's stable
+        CPPUNIT_ASSERT_NO_THROW(config.getRdkEnvConfig());
+        const auto& r_a = config.getRdkEnvConfig();
+        const auto& r_b = config.getRdkEnvConfig();
+        CPPUNIT_ASSERT_EQUAL(&r_a, &r_b);
     }
 
     void testGetRdkEnvConfigWithCustomFile()
@@ -392,10 +440,11 @@ protected:
         auto options = OptionsBuilder::createWithConfigFile(tempFile.getFilename());
         Configuration config(*options);
 
-        // Verify we can get the provider reference
-        const auto& rdkConfig = config.getRdkEnvConfig();
-        // Config loaded successfully if we reach here
-        CPPUNIT_ASSERT(true);
+        // Verify we can get the provider reference and it's stable
+        CPPUNIT_ASSERT_NO_THROW(config.getRdkEnvConfig());
+        const auto& r_c = config.getRdkEnvConfig();
+        const auto& r_d = config.getRdkEnvConfig();
+        CPPUNIT_ASSERT_EQUAL(&r_c, &r_d);
     }
 
     void testGetRdkEnvConfigCalledMultipleTimes()
@@ -414,9 +463,11 @@ protected:
         auto options = OptionsBuilder::createEmpty();
         Configuration config(*options);
 
-        // Verify we can get the provider reference without crashing
-        const auto& provider = config.getLoggerConfig();
-        CPPUNIT_ASSERT(true);
+        // Verify we can get the provider reference without crashing and it's stable
+        CPPUNIT_ASSERT_NO_THROW(config.getLoggerConfig());
+        const auto& l1 = config.getLoggerConfig();
+        const auto& l2 = config.getLoggerConfig();
+        CPPUNIT_ASSERT_EQUAL(&l1, &l2);
     }
 
     void testGetLoggerConfigWithCustomFile()
@@ -426,9 +477,11 @@ protected:
         auto options = OptionsBuilder::createWithConfigFile(tempFile.getFilename());
         Configuration config(*options);
 
-        // Verify we can get the provider reference
-        const auto& loggerConfig = config.getLoggerConfig();
-        CPPUNIT_ASSERT(true);
+        // Verify we can get the provider reference and it's stable
+        CPPUNIT_ASSERT_NO_THROW(config.getLoggerConfig());
+        const auto& l3 = config.getLoggerConfig();
+        const auto& l4 = config.getLoggerConfig();
+        CPPUNIT_ASSERT_EQUAL(&l3, &l4);
     }
 
     void testGetLoggerConfigCalledMultipleTimes()
@@ -447,9 +500,11 @@ protected:
         auto options = OptionsBuilder::createEmpty();
         Configuration config(*options);
 
-        // Verify we can get the provider reference without crashing
-        const auto& provider = config.getTtmlConfig();
-        CPPUNIT_ASSERT(true);
+        // Verify we can get the provider reference without crashing and it's stable
+        CPPUNIT_ASSERT_NO_THROW(config.getTtmlConfig());
+        const auto& tt1 = config.getTtmlConfig();
+        const auto& tt2 = config.getTtmlConfig();
+        CPPUNIT_ASSERT_EQUAL(&tt1, &tt2);
     }
 
     void testGetTtmlConfigCalledMultipleTimes()
@@ -468,9 +523,11 @@ protected:
         auto options = OptionsBuilder::createEmpty();
         Configuration config(*options);
 
-        // Verify we can get the provider reference without crashing
-        const auto& provider = config.getWebvttConfig();
-        CPPUNIT_ASSERT(true);
+        // Verify we can get the provider reference without crashing and it's stable
+        CPPUNIT_ASSERT_NO_THROW(config.getWebvttConfig());
+        const auto& w1 = config.getWebvttConfig();
+        const auto& w2 = config.getWebvttConfig();
+        CPPUNIT_ASSERT_EQUAL(&w1, &w2);
     }
 
     void testGetWebvttConfigCalledMultipleTimes()
@@ -498,10 +555,13 @@ protected:
         // Custom socket path from config file (not default)
         CPPUNIT_ASSERT_EQUAL(std::string("/custom/path"), config.getMainContextSocketPath());
 
-        // Config providers loaded successfully
-        const auto& rdkConfig = config.getRdkEnvConfig();
-        const auto& loggerConfig = config.getLoggerConfig();
-        CPPUNIT_ASSERT(true);
+        // Config providers loaded successfully (check stability)
+        const auto& r_e = config.getRdkEnvConfig();
+        const auto& r_f = config.getRdkEnvConfig();
+        CPPUNIT_ASSERT_EQUAL(&r_e, &r_f);
+        const auto& l_e = config.getLoggerConfig();
+        const auto& l_f = config.getLoggerConfig();
+        CPPUNIT_ASSERT_EQUAL(&l_e, &l_f);
     }
 
     void testAllProvidersWorkTogether()
@@ -528,8 +588,22 @@ protected:
         const auto& ttmlConfig = config.getTtmlConfig();
         const auto& webvttConfig = config.getWebvttConfig();
 
-        // If we reach here, all providers work together
-        CPPUNIT_ASSERT(true);
+        // Verify stability of each provider
+        const auto& r_g = config.getRdkEnvConfig();
+        const auto& r_h = config.getRdkEnvConfig();
+        CPPUNIT_ASSERT_EQUAL(&r_g, &r_h);
+        const auto& l_g = config.getLoggerConfig();
+        const auto& l_h = config.getLoggerConfig();
+        CPPUNIT_ASSERT_EQUAL(&l_g, &l_h);
+        const auto& tt_g = config.getTeletextConfig();
+        const auto& tt_h = config.getTeletextConfig();
+        CPPUNIT_ASSERT_EQUAL(&tt_g, &tt_h);
+        const auto& ttml_g = config.getTtmlConfig();
+        const auto& ttml_h = config.getTtmlConfig();
+        CPPUNIT_ASSERT_EQUAL(&ttml_g, &ttml_h);
+        const auto& w_g = config.getWebvttConfig();
+        const auto& w_h = config.getWebvttConfig();
+        CPPUNIT_ASSERT_EQUAL(&w_g, &w_h);
     }
 
     void testConfigWithCustomValues()
@@ -546,9 +620,10 @@ protected:
         // Verify custom socket path loaded
         CPPUNIT_ASSERT_EQUAL(std::string("/custom/values/socket"), config.getMainContextSocketPath());
 
-        // Config provider accessible
-        const auto& rdkConfig = config.getRdkEnvConfig();
-        CPPUNIT_ASSERT(true);
+        // Config provider accessible and stable
+        const auto& r_i = config.getRdkEnvConfig();
+        const auto& r_j = config.getRdkEnvConfig();
+        CPPUNIT_ASSERT_EQUAL(&r_i, &r_j);
     }
 
     void testConfigWithEmptyFile()
@@ -565,10 +640,13 @@ protected:
         CPPUNIT_ASSERT_EQUAL(std::string("/var/run/subttx/pes_data_main"), config.getMainContextSocketPath());
         #endif
 
-        // Config providers should still be accessible
-        const auto& rdkConfig = config.getRdkEnvConfig();
-        const auto& loggerConfig = config.getLoggerConfig();
-        CPPUNIT_ASSERT(true);
+        // Config providers should still be accessible and stable
+        const auto& r_k = config.getRdkEnvConfig();
+        const auto& r_l = config.getRdkEnvConfig();
+        CPPUNIT_ASSERT_EQUAL(&r_k, &r_l);
+        const auto& l_k = config.getLoggerConfig();
+        const auto& l_l = config.getLoggerConfig();
+        CPPUNIT_ASSERT_EQUAL(&l_k, &l_l);
     }
 };
 

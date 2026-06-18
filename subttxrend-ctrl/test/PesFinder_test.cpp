@@ -94,8 +94,13 @@ protected:
     {
         std::vector<std::uint8_t> buffer = {0x00, 0x01, 0x02, 0x03};
         PesFinder finder(buffer.data(), buffer.size());
-        // Constructor should not throw, object is created successfully
-        CPPUNIT_ASSERT(true);
+
+        // With this small arbitrary buffer there should be no PES packet to find.
+        const std::uint8_t* pesStart = nullptr;
+        std::uint16_t pesSize = 0;
+        bool result = finder.findNextPes(pesStart, pesSize);
+
+        CPPUNIT_ASSERT_EQUAL(false, result);
     }
 
     void testConstructorWithZeroSizeBuffer()
@@ -194,7 +199,8 @@ protected:
 
     void testFindPesWithMaximumLength()
     {
-        std::vector<std::uint8_t> pes = createValidPes(0xFFFF);
+        const std::uint16_t maxPayloadLength = 0xFFF9;
+        std::vector<std::uint8_t> pes = createValidPes(maxPayloadLength);
         PesFinder finder(pes.data(), pes.size());
 
         const std::uint8_t* pesStart = nullptr;
@@ -203,7 +209,7 @@ protected:
         bool result = finder.findNextPes(pesStart, pesSize);
 
         CPPUNIT_ASSERT_EQUAL(true, result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(6 + 0xFFFF), pesSize);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0xFFFF), pesSize);
     }
 
     void testFindPesExactlyFittingBuffer()

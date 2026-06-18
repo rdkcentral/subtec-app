@@ -59,6 +59,7 @@ CPPUNIT_TEST_SUITE( ParserDDSTest );
     CPPUNIT_TEST(testWindowEqualCoordinates);
     CPPUNIT_TEST(testVersionSkipping);
     CPPUNIT_TEST(testDisplayBoundsCalculation);
+    CPPUNIT_TEST(testDatabaseStateAfterParse);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -174,6 +175,15 @@ public:
             CPPUNIT_ASSERT_THROW(
                     parser.parseDisplayDefinitionSegment(*m_database, reader),
                     PesPacketReader::Exception);
+        }
+
+        // corrupted buffer (random data)
+        {
+            std::vector<uint8_t> corruptData = {0xFF, 0x00, 0xAA};
+            PesPacketReader reader(corruptData.data(), corruptData.size(), nullptr, 0);
+            CPPUNIT_ASSERT_THROW(
+                parser.parseDisplayDefinitionSegment(*m_database, reader),
+                PesPacketReader::Exception);
         }
     }
 
@@ -556,6 +566,37 @@ public:
         CPPUNIT_ASSERT(display.getWindowBounds().m_y2 == 576);
     }
 
+    void testDatabaseStateAfterParse()
+    {
+        // Valid parse should update DB
+        BitStreamWriter writer;
+        writer.write((0xC << 4) | (1 << 3), 8); // version and flags
+        writer.write(700 - 1, 16); // width
+        writer.write(400 - 1, 16); // height
+        writer.write(100, 16); // window x1
+        writer.write(500 - 1, 16); // window y1
+        writer.write(80, 16); // window x2
+        writer.write(300 - 1, 16); // window y2
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+        const auto& display = m_database->getParsedDisplay();
+        CPPUNIT_ASSERT(display.getVersion() == 0xC);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 700);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x1 == 100);
+
+        // Negative parse should not update DB
+        std::vector<uint8_t> corruptData = {0xFF, 0x00, 0xAA};
+        PesPacketReader badReader(corruptData.data(), corruptData.size(), nullptr, 0);
+        try {
+            ParserDDS().parseDisplayDefinitionSegment(*m_database, badReader);
+        } catch (...) {}
+        // DB state should remain unchanged
+        CPPUNIT_ASSERT(display.getVersion() == 0xC);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 700);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x1 == 100);
+    }
 private:
     const Specification SPEC_VERSION = Specification::VERSION_1_3_1;
 

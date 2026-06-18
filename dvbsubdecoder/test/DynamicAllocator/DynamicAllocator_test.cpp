@@ -19,6 +19,15 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <new>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "DynamicAllocator.hpp"
 #include "AllocatorTraits.hpp"
 

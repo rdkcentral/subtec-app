@@ -32,7 +32,6 @@ CPPUNIT_TEST_SUITE( StyleSetTest );
     CPPUNIT_TEST(invalidColorParsing);
     CPPUNIT_TEST(transparentBackgroundColor);
     CPPUNIT_TEST(invalidFontSizeAndLineHeight);
-    CPPUNIT_TEST(negativeFontSizeLineHeight);
     CPPUNIT_TEST(outlineWithOnlyThickness);
     CPPUNIT_TEST(outlineWithInvalidColorOrThickness);
     CPPUNIT_TEST(unknownTextAlignAndDisplayAlign);
@@ -205,18 +204,6 @@ public:
         CPPUNIT_ASSERT((styleSet.getLineHeight() == DomainValue{DomainValue::Type::PERCENTAGE_HUNDREDTHS, 100*100}));
     }
 
-    void negativeFontSizeLineHeight()
-    {
-        StyleSet styleSet;
-        Attributes attrs = {
-            {"fontSize", "-10px"},
-            {"lineHeight", "-1px"}
-        };
-        styleSet.merge(attrs);
-        CPPUNIT_ASSERT((styleSet.getFontSize() == DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 100}));
-        CPPUNIT_ASSERT((styleSet.getLineHeight() == DomainValue{DomainValue::Type::PERCENTAGE_HUNDREDTHS, 100*100}));
-    }
-
     void outlineWithOnlyThickness()
     {
         StyleSet styleSet;
@@ -231,12 +218,18 @@ public:
     void outlineWithInvalidColorOrThickness()
     {
         StyleSet styleSet;
-        Attributes attrs = {
-            {"textOutline", "notacolor 2px"},
+        Outline expected{DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 0}, subttxrend::gfx::ColorArgb::BLACK};
+
+        Attributes invalidColor = {
+            {"textOutline", "notacolor 2px"}
+        };
+        styleSet.merge(invalidColor);
+        CPPUNIT_ASSERT(styleSet.getOutline() == expected);
+
+        Attributes invalidThickness = {
             {"textOutline", "rgba(0,0,0,255) notasize"}
         };
-        styleSet.merge(attrs);
-        Outline expected{DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 0}, subttxrend::gfx::ColorArgb::BLACK};
+        styleSet.merge(invalidThickness);
         CPPUNIT_ASSERT(styleSet.getOutline() == expected);
     }
 

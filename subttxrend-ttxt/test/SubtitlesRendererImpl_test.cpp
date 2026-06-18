@@ -174,27 +174,13 @@ private:
 class SubtitlesRendererImplTest : public CppUnit::TestFixture
 {
     CPPUNIT_TEST_SUITE(SubtitlesRendererImplTest);
-    CPPUNIT_TEST(testConstructor);
-    CPPUNIT_TEST(testDestructor);
     CPPUNIT_TEST(testStartWithMagazine0_ConvertsTo8);
     CPPUNIT_TEST(testStartWithMagazine1_NoConversion);
-    CPPUNIT_TEST(testStartWithMagazine2_NoConversion);
-    CPPUNIT_TEST(testStartWithMagazine3_NoConversion);
-    CPPUNIT_TEST(testStartWithMagazine4_NoConversion);
-    CPPUNIT_TEST(testStartWithMagazine5_NoConversion);
-    CPPUNIT_TEST(testStartWithMagazine6_NoConversion);
-    CPPUNIT_TEST(testStartWithMagazine7_NoConversion);
     CPPUNIT_TEST(testStartWithMagazine8_NoConversion);
-    CPPUNIT_TEST(testStartWithPageNumber0);
-    CPPUNIT_TEST(testStartWithPageNumberMax);
-    CPPUNIT_TEST(testStartWithMagazine0PageNumber0);
-    CPPUNIT_TEST(testStartWithMagazine0PageNumberMax);
-    CPPUNIT_TEST(testStartWithMagazine8PageNumber0);
-    CPPUNIT_TEST(testStartWithMagazine8PageNumberMax);
+    CPPUNIT_TEST(testStartWithPageNumberBounds);
+    CPPUNIT_TEST(testStartWithMagazine0PageNumberBounds);
     CPPUNIT_TEST(testStartPageIdHasAnySubpage);
-    CPPUNIT_TEST(testStartMultipleTimes_Magazine0);
-    CPPUNIT_TEST(testStartMultipleTimes_Magazine8);
-    CPPUNIT_TEST(testStartMultipleTimes_DifferentPages);
+    CPPUNIT_TEST(testStartMultipleTimes_UpdatesSelectedPage);
     CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -219,220 +205,71 @@ public:
     }
 
 protected:
-    void testConstructor()
+    void assertStartSetsPage(std::uint32_t magazineNumber,
+                             std::uint32_t pageNumber,
+                             std::uint16_t expectedMagazinePage,
+                             int expectedSetCurrentPageCalls,
+                             bool verifyStartedState = false)
     {
-        std::unique_ptr<TestableSubtitlesRendererImpl> renderer(new TestableSubtitlesRendererImpl());
-        CPPUNIT_ASSERT(renderer.get() != nullptr);
-    }
+        bool result = m_renderer->start(magazineNumber, pageNumber);
 
-    void testDestructor()
-    {
-        std::unique_ptr<TestableSubtitlesRendererImpl> renderer(new TestableSubtitlesRendererImpl());
-        renderer.reset();
-        CPPUNIT_ASSERT(true);
+        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
+        CPPUNIT_ASSERT_EQUAL(true, result);
+        CPPUNIT_ASSERT_EQUAL(expectedMagazinePage, pageId.getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(expectedSetCurrentPageCalls, m_renderer->getSetCurrentPageCalls());
+
+        if (verifyStartedState)
+        {
+            CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
+        }
     }
 
     void testStartWithMagazine0_ConvertsTo8()
     {
-        m_renderer->start(0, 0x10);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 0 should be converted to 8: 8 * 0x100 + 0x10 = 0x810
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x810), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
+        assertStartSetsPage(0, 0x10, static_cast<std::uint16_t>(0x810), 1, true);
     }
 
     void testStartWithMagazine1_NoConversion()
     {
-        m_renderer->start(1, 0x10);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 1: 1 * 0x100 + 0x10 = 0x110
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x110), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine2_NoConversion()
-    {
-        m_renderer->start(2, 0x20);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 2: 2 * 0x100 + 0x20 = 0x220
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x220), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine3_NoConversion()
-    {
-        m_renderer->start(3, 0x30);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 3: 3 * 0x100 + 0x30 = 0x330
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x330), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine4_NoConversion()
-    {
-        m_renderer->start(4, 0x40);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 4: 4 * 0x100 + 0x40 = 0x440
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x440), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine5_NoConversion()
-    {
-        m_renderer->start(5, 0x50);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 5: 5 * 0x100 + 0x50 = 0x550
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x550), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine6_NoConversion()
-    {
-        m_renderer->start(6, 0x60);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 6: 6 * 0x100 + 0x60 = 0x660
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x660), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine7_NoConversion()
-    {
-        m_renderer->start(7, 0x70);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 7: 7 * 0x100 + 0x70 = 0x770
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x770), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
+        assertStartSetsPage(1, 0x10, static_cast<std::uint16_t>(0x110), 1);
     }
 
     void testStartWithMagazine8_NoConversion()
     {
-        m_renderer->start(8, 0x80);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 8: 8 * 0x100 + 0x80 = 0x880
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x880), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
+        assertStartSetsPage(8, 0x80, static_cast<std::uint16_t>(0x880), 1);
     }
 
-    void testStartWithPageNumber0()
+    void testStartWithPageNumberBounds()
     {
-        m_renderer->start(1, 0x00);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 1, page 0: 1 * 0x100 + 0x00 = 0x100
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x100), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
+        assertStartSetsPage(1, 0x00, static_cast<std::uint16_t>(0x100), 1);
+        assertStartSetsPage(1, 0xFF, static_cast<std::uint16_t>(0x1FF), 2);
     }
 
-    void testStartWithPageNumberMax()
+    void testStartWithMagazine0PageNumberBounds()
     {
-        m_renderer->start(1, 0xFF);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 1, page 0xFF: 1 * 0x100 + 0xFF = 0x1FF
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x1FF), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine0PageNumber0()
-    {
-        m_renderer->start(0, 0x00);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 0 -> 8, page 0: 8 * 0x100 + 0x00 = 0x800
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x800), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine0PageNumberMax()
-    {
-        m_renderer->start(0, 0xFF);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 0 -> 8, page 0xFF: 8 * 0x100 + 0xFF = 0x8FF
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x8FF), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine8PageNumber0()
-    {
-        m_renderer->start(8, 0x00);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 8, page 0: 8 * 0x100 + 0x00 = 0x800
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x800), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartWithMagazine8PageNumberMax()
-    {
-        m_renderer->start(8, 0xFF);
-
-        ttxdecoder::PageId pageId = m_renderer->getLastPageId();
-        // Magazine 8, page 0xFF: 8 * 0x100 + 0xFF = 0x8FF
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x8FF), pageId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
+        assertStartSetsPage(0, 0x00, static_cast<std::uint16_t>(0x800), 1);
+        assertStartSetsPage(0, 0xFF, static_cast<std::uint16_t>(0x8FF), 2);
     }
 
     void testStartPageIdHasAnySubpage()
     {
-        m_renderer->start(1, 0x10);
+        assertStartSetsPage(1, 0x10, static_cast<std::uint16_t>(0x110), 1);
 
         ttxdecoder::PageId pageId = m_renderer->getLastPageId();
         CPPUNIT_ASSERT_EQUAL(true, pageId.isAnySubpage());
     }
 
-    void testStartMultipleTimes_Magazine0()
+    void testStartMultipleTimes_UpdatesSelectedPage()
     {
-        m_renderer->start(0, 0x10);
+        assertStartSetsPage(0, 0x10, static_cast<std::uint16_t>(0x810), 1, true);
         ttxdecoder::PageId pageId1 = m_renderer->getLastPageId();
 
-        m_renderer->start(0, 0x20);
+        assertStartSetsPage(8, 0x20, static_cast<std::uint16_t>(0x820), 2, true);
         ttxdecoder::PageId pageId2 = m_renderer->getLastPageId();
 
-        // Both calls should convert magazine 0 to 8
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x810), pageId1.getMagazinePage());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x820), pageId2.getMagazinePage());
         CPPUNIT_ASSERT_EQUAL(2, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartMultipleTimes_Magazine8()
-    {
-        m_renderer->start(8, 0x10);
-        ttxdecoder::PageId pageId1 = m_renderer->getLastPageId();
-
-        m_renderer->start(8, 0x20);
-        ttxdecoder::PageId pageId2 = m_renderer->getLastPageId();
-
-        // Magazine 8 should remain 8
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x810), pageId1.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x820), pageId2.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(2, m_renderer->getSetCurrentPageCalls());
-    }
-
-    void testStartMultipleTimes_DifferentPages()
-    {
-        m_renderer->start(1, 0x00);
-        ttxdecoder::PageId pageId1 = m_renderer->getLastPageId();
-
-        m_renderer->start(3, 0x55);
-        ttxdecoder::PageId pageId2 = m_renderer->getLastPageId();
-
-        m_renderer->start(7, 0xFF);
-        ttxdecoder::PageId pageId3 = m_renderer->getLastPageId();
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x100), pageId1.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x355), pageId2.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x7FF), pageId3.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(3, m_renderer->getSetCurrentPageCalls());
     }
 
 private:

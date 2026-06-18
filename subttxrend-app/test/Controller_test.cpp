@@ -39,9 +39,6 @@ using namespace subttxrend::gfx;
 using namespace subttxrend::protocol;
 using namespace subttxrend::common;
 
-// Forward declaration for mock
-namespace subttxrend { namespace protocol { class BufferReader; } }
-
 /**
  * Mock Engine for testing
  */
@@ -58,6 +55,30 @@ public:
 };
 
 /**
+ * Mock DrawContext for testing
+ */
+class MockDrawContext : public DrawContext
+{
+public:
+    void fillRectangle(ColorArgb color, const Rectangle& rectangle) override {}
+    void drawUnderline(ColorArgb color, const Rectangle& rectangle) override {}
+    void drawPixmap(const ClutBitmap& bitmap, const Rectangle& srcRect, const Rectangle& dstRect) override {}
+    void drawBitmap(const Bitmap& bitmap, const Rectangle& dstRect) override {}
+    void drawGlyph(const FontStripPtr& fontStrip,
+                   std::int32_t glyphIndex,
+                   const Rectangle& rect,
+                   ColorArgb fgColor,
+                   ColorArgb bgColor) override {}
+    void drawString(PrerenderedFont& font,
+                    const Rectangle& destinationRect,
+                    const std::vector<GlyphData>& glyphs,
+                    const ColorArgb fgColor,
+                    const ColorArgb bgColor,
+                    int outlineSize = 0,
+                    int verticalOffset = 0) override {}
+};
+
+/**
  * Mock Window for testing
  */
 class MockWindow : public Window
@@ -66,7 +87,7 @@ public:
     void addKeyEventListener(KeyEventListener* listener) override {}
     void removeKeyEventListener(KeyEventListener* listener) override {}
     Rectangle getBounds() const override { return Rectangle{0, 0, 1920, 1080}; }
-    DrawContext& getDrawContext() override { static DrawContext* ctx = nullptr; return *ctx; }
+    DrawContext& getDrawContext() override { return m_drawContext; }
     Size getPreferredSize() const override { return Size{1920, 1080}; }
     void setSize(const Size& newSize) override {}
     Size getSize() const override { return Size{1920, 1080}; }
@@ -74,24 +95,9 @@ public:
     void clear() override {}
     void update() override {}
     void setDrawDirection(DrawDirection dir) override {}
-};
-
-/**
- * Mock Packet for testing
- */
-class MockPacket : public Packet
-{
-public:
-    explicit MockPacket(Type type) : m_type(type) {}
-
-    Type getType() const override { return m_type; }
-
-    bool parseDataHeader(BufferReader& bufferReader) override { return true; }
-
-    bool takeBuffer(DataBufferPtr dataBuffer, std::size_t dataOffset) override { return true; }
 
 private:
-    Type m_type;
+    MockDrawContext m_drawContext;
 };
 
 class TestOptionsHelper
@@ -132,267 +138,98 @@ CPPUNIT_TEST_SUITE( ControllerTest );
     CPPUNIT_TEST(testConstructorWithValidParameters);
     CPPUNIT_TEST(testConstructorWithNullGfxEngine);
     CPPUNIT_TEST(testConstructorWithNullGfxWindow);
-    CPPUNIT_TEST(testConstructorCreatesInternalObjects);
     CPPUNIT_TEST(testStopWithoutStartAsync);
     CPPUNIT_TEST(testOnStreamBrokenNotification);
-    CPPUNIT_TEST(testOnStreamBrokenMultipleTimes);
     CPPUNIT_TEST(testAddBufferWhenNotRendering);
-    CPPUNIT_TEST(testAddBufferWithEmptyBuffer);
-    CPPUNIT_TEST(testAddBufferMultipleTimes);
     CPPUNIT_TEST(testOnPacketReceivedBeforeStart);
 CPPUNIT_TEST_SUITE_END();
 
 public:
     void setUp()
     {
-        // Create mock objects for tests
         m_mockEngine = std::make_shared<MockEngine>();
         m_mockWindow = std::make_shared<MockWindow>();
     }
 
     void tearDown()
     {
-        // Cleanup
         m_mockEngine.reset();
         m_mockWindow.reset();
     }
 
     void testConstructorWithValidParameters()
     {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-
-            Controller controller(config, m_mockEngine, m_mockWindow);
-
-            // If we reach here, constructor succeeded
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            CPPUNIT_FAIL(std::string("Constructor failed with exception: ") + e.what());
-        }
+        Options opts = TestOptionsHelper::createValidOptions();
+        Configuration config(opts);
+        CPPUNIT_ASSERT_NO_THROW(Controller controller(config, m_mockEngine, m_mockWindow));
     }
 
     void testConstructorWithNullGfxEngine()
     {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-
-            // Pass null for gfxEngine
-            EnginePtr nullEngine;
+        Options opts = TestOptionsHelper::createValidOptions();
+        Configuration config(opts);
+        EnginePtr nullEngine;
+        auto constructWithNullEngine = [&]() {
             Controller controller(config, nullEngine, m_mockWindow);
-
-            // Constructor should handle null or throw
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            // Exception is acceptable for null parameter
-            CPPUNIT_ASSERT(true);
-        }
+        };
+        CPPUNIT_ASSERT_NO_THROW(constructWithNullEngine());
     }
 
     void testConstructorWithNullGfxWindow()
     {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-
-            // Pass null for gfxWindow
-            WindowPtr nullWindow;
+        Options opts = TestOptionsHelper::createValidOptions();
+        Configuration config(opts);
+        WindowPtr nullWindow;
+        auto constructWithNullWindow = [&]() {
             Controller controller(config, m_mockEngine, nullWindow);
-
-            // Constructor should handle null or throw
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            // Exception is acceptable for null parameter
-            CPPUNIT_ASSERT(true);
-        }
-    }
-
-    void testConstructorCreatesInternalObjects()
-    {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-
-            Controller controller(config, m_mockEngine, m_mockWindow);
-
-            // Constructor should complete successfully with all internal objects created
-            // We can't directly access private members, but successful construction
-            // indicates they were created
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            CPPUNIT_FAIL(std::string("Constructor failed to create internal objects: ") + e.what());
-        }
+        };
+        CPPUNIT_ASSERT_NO_THROW(constructWithNullWindow());
     }
 
     void testStopWithoutStartAsync()
     {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-            Controller controller(config, m_mockEngine, m_mockWindow);
+        Options opts = TestOptionsHelper::createValidOptions();
+        Configuration config(opts);
+        Controller controller(config, m_mockEngine, m_mockWindow);
 
-            // Call stop without starting - should be safe due to joinable() check
-            controller.stop();
-
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            // Exception is acceptable
-            CPPUNIT_ASSERT(true);
-        }
+        CPPUNIT_ASSERT_NO_THROW(controller.stop());
     }
 
     void testOnStreamBrokenNotification()
     {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-            Controller controller(config, m_mockEngine, m_mockWindow);
+        Options opts = TestOptionsHelper::createValidOptions();
+        Configuration config(opts);
+        Controller controller(config, m_mockEngine, m_mockWindow);
 
-            // Call onStreamBroken - should handle gracefully
-            controller.onStreamBroken();
-
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            CPPUNIT_FAIL(std::string("onStreamBroken failed: ") + e.what());
-        }
-    }
-
-    void testOnStreamBrokenMultipleTimes()
-    {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-            Controller controller(config, m_mockEngine, m_mockWindow);
-
-            // Call onStreamBroken multiple times
-            controller.onStreamBroken();
-            controller.onStreamBroken();
-            controller.onStreamBroken();
-
-            // Should handle repeated notifications without crash
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            CPPUNIT_FAIL(std::string("Multiple onStreamBroken calls failed: ") + e.what());
-        }
+        CPPUNIT_ASSERT_NO_THROW(controller.onStreamBroken());
+        CPPUNIT_ASSERT_NO_THROW(controller.onStreamBroken());
     }
 
     void testAddBufferWhenNotRendering()
     {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-            Controller controller(config, m_mockEngine, m_mockWindow);
+        Options opts = TestOptionsHelper::createValidOptions();
+        Configuration config(opts);
+        Controller controller(config, m_mockEngine, m_mockWindow);
 
-            // Create a valid data buffer
+        auto emptyBuffer = std::make_unique<DataBuffer>();
+        CPPUNIT_ASSERT_NO_THROW(controller.addBuffer(std::move(emptyBuffer)));
+
+        for (int i = 0; i < 10; ++i)
+        {
             auto buffer = std::make_unique<DataBuffer>();
-            buffer->resize(100);
-
-            // Add buffer when no controller is active
-            // This should be skipped according to the implementation
-            controller.addBuffer(std::move(buffer));
-
-            // Should complete without error
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            CPPUNIT_FAIL(std::string("addBuffer when not rendering failed: ") + e.what());
+            buffer->resize(100 + i);
+            CPPUNIT_ASSERT_NO_THROW(controller.addBuffer(std::move(buffer)));
         }
     }
-
-    void testAddBufferWithEmptyBuffer()
-    {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-            Controller controller(config, m_mockEngine, m_mockWindow);
-
-            // Create an empty buffer (size 0)
-            auto buffer = std::make_unique<DataBuffer>();
-
-            // Add empty buffer
-            controller.addBuffer(std::move(buffer));
-
-            // Should handle empty buffer gracefully
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            CPPUNIT_FAIL(std::string("addBuffer with empty buffer failed: ") + e.what());
-        }
-    }
-
-    void testAddBufferMultipleTimes()
-    {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-            Controller controller(config, m_mockEngine, m_mockWindow);
-
-            // Add multiple buffers sequentially
-            for (int i = 0; i < 10; ++i)
-            {
-                auto buffer = std::make_unique<DataBuffer>();
-                buffer->resize(100 + i);
-                controller.addBuffer(std::move(buffer));
-            }
-
-            // Should handle multiple additions
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            CPPUNIT_FAIL(std::string("Multiple addBuffer calls failed: ") + e.what());
-        }
-    }
-
 
     void testOnPacketReceivedBeforeStart()
     {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Configuration config(opts);
-            Controller controller(config, m_mockEngine, m_mockWindow);
+        Options opts = TestOptionsHelper::createValidOptions();
+        Configuration config(opts);
+        Controller controller(config, m_mockEngine, m_mockWindow);
 
-            // Create a mock packet
-            MockPacket packet(Packet::Type::RESET_ALL);
-
-            // Call onPacketReceived before startAsync
-            controller.onPacketReceived(packet);
-
-            // Should handle gracefully
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            CPPUNIT_FAIL(std::string("onPacketReceived before start failed: ") + e.what());
-        }
+        PacketResetAll packet;
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(packet));
     }
 
 private:

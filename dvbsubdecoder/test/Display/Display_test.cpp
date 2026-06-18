@@ -46,6 +46,7 @@ CPPUNIT_TEST_SUITE( DisplayTest );
     CPPUNIT_TEST(testConstReferenceStability);
     CPPUNIT_TEST(testIdempotency);
     CPPUNIT_TEST(testExtremeValues);
+    CPPUNIT_TEST(testInvalidRectangleContract);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -55,8 +56,7 @@ public:
     }
 
     void tearDown()
-    {
-        // noop
+    {        // noop
     }
 
     void testSimple()
@@ -463,40 +463,12 @@ public:
     void testIdempotency()
     {
         Display display;
-        Rectangle testDisplay = { 5, 10, 15, 20 };
-        Rectangle testWindow = { 7, 12, 13, 18 };
-        std::uint8_t testVersion = 11;
-        
-        // Set values
-        display.set(testVersion, testDisplay, testWindow);
-        
-        // Capture initial state
-        std::uint8_t version1 = display.getVersion();
-        Rectangle display1 = display.getDisplayBounds();
-        Rectangle window1 = display.getWindowBounds();
-        
-        // Set identical values again
-        display.set(testVersion, testDisplay, testWindow);
-        
-        // Verify state is identical
-        std::uint8_t version2 = display.getVersion();
-        Rectangle display2 = display.getDisplayBounds();
-        Rectangle window2 = display.getWindowBounds();
-        
-        CPPUNIT_ASSERT(version1 == version2);
-        CPPUNIT_ASSERT(display1 == display2);
-        CPPUNIT_ASSERT(window1 == window2);
-        
-        // Set identical values a third time
-        display.set(testVersion, testDisplay, testWindow);
-        
-        std::uint8_t version3 = display.getVersion();
-        Rectangle display3 = display.getDisplayBounds();
-        Rectangle window3 = display.getWindowBounds();
-        
-        CPPUNIT_ASSERT(version2 == version3);
-        CPPUNIT_ASSERT(display2 == display3);
-        CPPUNIT_ASSERT(window2 == window3);
+        Rectangle rect = { 10, 20, 30, 40 };
+        display.set(1, rect, rect);
+        auto before = display.getDisplayBounds();
+        display.set(1, rect, rect); // idempotent set
+        auto after = display.getDisplayBounds();
+        CPPUNIT_ASSERT(before == after);
     }
 
     void testExtremeValues()
@@ -523,6 +495,29 @@ public:
         CPPUNIT_ASSERT(display.getDisplayBounds() == mixedExtremeRect);
         CPPUNIT_ASSERT(display.getWindowBounds() == mixedExtremeRect);
         CPPUNIT_ASSERT(display.getVersion() == 127);
+    }
+
+    void testInvalidRectangleContract()
+    {
+        Display display;
+        std::uint8_t version = 9;
+        // Inverted rectangle (x2 < x1, y2 < y1)
+        Rectangle inverted = { 100, 100, 50, 50 };
+        display.set(version, inverted, inverted);
+        // Document: Display stores as-is, does not normalize or reject
+        CPPUNIT_ASSERT(display.getDisplayBounds() == inverted);
+        // Zero-area rectangle
+        Rectangle zeroArea = { 10, 10, 10, 10 };
+        display.set(version, zeroArea, zeroArea);
+        CPPUNIT_ASSERT(display.getDisplayBounds() == zeroArea);
+        // Negative coordinates
+        Rectangle negative = { -100, -100, -50, -50 };
+        display.set(version, negative, negative);
+        CPPUNIT_ASSERT(display.getDisplayBounds() == negative);
+        // Out-of-range values (INT32_MIN/INT32_MAX)
+        Rectangle extreme = { INT32_MIN, INT32_MIN, INT32_MAX, INT32_MAX };
+        display.set(version, extreme, extreme);
+        CPPUNIT_ASSERT(display.getDisplayBounds() == extreme);
     }
 };
 

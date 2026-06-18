@@ -20,7 +20,6 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include "DecoderClientGfxRenderer.hpp"
 #include <subttxrend/gfx/Window.hpp>
-#include <dvbsubdecoder/DecoderClient.hpp>
 #include <memory>
 #include <vector>
 #include <stdexcept>
@@ -35,8 +34,6 @@ public:
         : m_visible(false)
         , m_updateCount(0)
         , m_size(0, 0)
-        , m_fillRectangleCount(0)
-        , m_drawPixmapCount(0)
     {}
 
     virtual ~MockWindow() {}
@@ -66,28 +63,20 @@ public:
     bool isVisible() const { return m_visible; }
     int getUpdateCount() const { return m_updateCount; }
     void resetUpdateCount() { m_updateCount = 0; }
-    void resetFillRectangleCount() { m_fillRectangleCount = 0; }
-    void resetDrawPixmapCount() { m_drawPixmapCount = 0; }
-    int getFillRectangleCount() const { return m_fillRectangleCount; }
-    int getDrawPixmapCount() const { return m_drawPixmapCount; }
 
     class MockDrawContext : public DrawContext
     {
     public:
-        MockDrawContext(MockWindow* parent) : m_parent(parent) {}
+           MockDrawContext() = default;
 
         void fillRectangle(ColorArgb color, const Rectangle& rectangle) override
-        {
-            if (m_parent) m_parent->m_fillRectangleCount++;
-        }
+        {}
 
         void drawUnderline(ColorArgb color, const Rectangle& rectangle) override {}
 
         void drawPixmap(const ClutBitmap& bitmap, const Rectangle& srcRect,
                       const Rectangle& dstRect) override
-        {
-            if (m_parent) m_parent->m_drawPixmapCount++;
-        }
+        {}
 
         void drawBitmap(const Bitmap& bitmap, const Rectangle& dstRect) override {}
 
@@ -98,18 +87,13 @@ public:
                       const std::vector<GlyphData>& glyphs, const ColorArgb fgColor,
                       const ColorArgb bgColor, int outlineSize = 0,
                       int verticalOffset = 0) override {}
-
-    private:
-        MockWindow* m_parent;
     };
 
 private:
     bool m_visible;
     int m_updateCount;
     Size m_size;
-    int m_fillRectangleCount;
-    int m_drawPixmapCount;
-    MockDrawContext m_mockDrawContext{this};
+    MockDrawContext m_mockDrawContext;
 };
 
 class DecoderClientGfxRendererTest : public CppUnit::TestFixture
@@ -119,12 +103,9 @@ class DecoderClientGfxRendererTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testConstructor);
     CPPUNIT_TEST(testDestructor);
     CPPUNIT_TEST(testDestructorAfterInit);
-    CPPUNIT_TEST(testGetDecoderClient);
     CPPUNIT_TEST(testGfxInit);
     CPPUNIT_TEST(testGfxInitNullWindow);
     CPPUNIT_TEST(testGfxInitCalledTwice);
-    CPPUNIT_TEST(testGfxShutdown);
-    CPPUNIT_TEST(testGfxShutdownCalledTwice);
     CPPUNIT_TEST(testGfxShow);
     CPPUNIT_TEST(testGfxHide);
     CPPUNIT_TEST(testGfxShowWithoutInit);
@@ -158,8 +139,17 @@ public:
     {
         // Test that destructor doesn't crash without initialization
         auto tempRenderer = std::make_unique<DecoderClientGfxRenderer>();
-        tempRenderer.reset();
-        CPPUNIT_ASSERT(true);
+        try {
+            tempRenderer.reset();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Destructor threw exception: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Destructor threw unknown exception");
+        }
+
+        // Ensure we can still create a renderer afterwards
+        auto renderer2 = std::make_unique<DecoderClientGfxRenderer>();
+        CPPUNIT_ASSERT(renderer2 != nullptr);
     }
 
     void testDestructorAfterInit()
@@ -167,23 +157,44 @@ public:
         // Test that destructor doesn't crash after initialization
         auto tempRenderer = std::make_unique<DecoderClientGfxRenderer>();
         tempRenderer->gfxInit(m_mockWindow.get());
-        tempRenderer.reset();
-        CPPUNIT_ASSERT(true);
-    }
+        try {
+            tempRenderer.reset();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Destructor threw exception after init: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Destructor threw unknown exception after init");
+        }
 
-    void testGetDecoderClient()
-    {
-        dvbsubdecoder::DecoderClient& client = m_renderer->getDecoderClient();
-
-        // Should return a valid reference
-        CPPUNIT_ASSERT(&client != nullptr);
+        // Ensure a new renderer can be created and initialized after destruction
+        auto renderer2 = std::make_unique<DecoderClientGfxRenderer>();
+        CPPUNIT_ASSERT(renderer2 != nullptr);
+        try {
+            renderer2->gfxInit(m_mockWindow.get());
+            renderer2->gfxShow();
+            CPPUNIT_ASSERT(m_mockWindow->isVisible());
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Post-destruct init/show failed: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Post-destruct init/show threw unknown exception");
+        }
     }
 
     void testGfxInit()
     {
-        // Should initialize without throwing
-        m_renderer->gfxInit(m_mockWindow.get());
-        CPPUNIT_ASSERT(true);
+        // Should initialize without throwing and allow showing to affect window
+        try {
+            m_renderer->gfxInit(m_mockWindow.get());
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("gfxInit threw exception: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("gfxInit threw unknown exception");
+        }
+
+        // After init, calling show should set window visible and produce an update
+        m_mockWindow->resetUpdateCount();
+        m_renderer->gfxShow();
+        CPPUNIT_ASSERT(m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getUpdateCount() > 0);
     }
 
     void testGfxInitNullWindow()
@@ -196,32 +207,20 @@ public:
     {
         m_renderer->gfxInit(m_mockWindow.get());
 
-        // Second init should overwrite (no guard against it)
+        // Second init should overwrite (no guard against it) and subsequent show should affect the new window
         auto secondWindow = std::make_unique<MockWindow>();
-        m_renderer->gfxInit(secondWindow.get());
+        try {
+            m_renderer->gfxInit(secondWindow.get());
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Second gfxInit threw exception: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Second gfxInit threw unknown exception");
+        }
 
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testGfxShutdown()
-    {
-        m_renderer->gfxInit(m_mockWindow.get());
-
-        // Should shutdown without issues
-        m_renderer->gfxShutdown();
-
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testGfxShutdownCalledTwice()
-    {
-        m_renderer->gfxInit(m_mockWindow.get());
-        m_renderer->gfxShutdown();
-
-        // Second shutdown should not crash
-        m_renderer->gfxShutdown();
-
-        CPPUNIT_ASSERT(true);
+        secondWindow->resetUpdateCount();
+        m_renderer->gfxShow();
+        CPPUNIT_ASSERT(secondWindow->isVisible());
+        CPPUNIT_ASSERT(secondWindow->getUpdateCount() > 0);
     }
 
     void testGfxShow()
@@ -249,16 +248,52 @@ public:
 
     void testGfxShowWithoutInit()
     {
-        // Should not crash when called without init
-        m_renderer->gfxShow();
-        CPPUNIT_ASSERT(true);
+        // Should not crash when called without init and should allow later init
+        try {
+            m_renderer->gfxShow();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("gfxShow threw when uninitialized: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("gfxShow threw unknown exception when uninitialized");
+        }
+
+        // Ensure init later still works
+        try {
+            m_renderer->gfxInit(m_mockWindow.get());
+            m_mockWindow->resetUpdateCount();
+            m_renderer->gfxShow();
+            CPPUNIT_ASSERT(m_mockWindow->isVisible());
+            CPPUNIT_ASSERT(m_mockWindow->getUpdateCount() > 0);
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Init/show after uninitialized show failed: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Init/show after uninitialized show threw unknown exception");
+        }
     }
 
     void testGfxHideWithoutInit()
     {
-        // Should not crash when called without init
-        m_renderer->gfxHide();
-        CPPUNIT_ASSERT(true);
+        // Should not crash when called without init and should allow later init
+        try {
+            m_renderer->gfxHide();
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("gfxHide threw when uninitialized: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("gfxHide threw unknown exception when uninitialized");
+        }
+
+        // Ensure init later still works
+        try {
+            m_renderer->gfxInit(m_mockWindow.get());
+            m_mockWindow->resetUpdateCount();
+            m_renderer->gfxShow();
+            CPPUNIT_ASSERT(m_mockWindow->isVisible());
+            CPPUNIT_ASSERT(m_mockWindow->getUpdateCount() > 0);
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Init/show after uninitialized hide failed: ") + e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Init/show after uninitialized hide threw unknown exception");
+        }
     }
 
     void testMultipleShowHideCycles()

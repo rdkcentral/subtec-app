@@ -98,33 +98,15 @@ public:
 
     void testConstructorWithValidOptions()
     {
-        try
-        {
-            Options opts = TestOptionsHelper::createValidOptions();
-            Application app(opts);
-            // If we reach here, constructor succeeded
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            CPPUNIT_FAIL(std::string("Constructor failed with exception: ") + e.what());
-        }
+        Options opts = TestOptionsHelper::createValidOptions();
+        CPPUNIT_ASSERT_NO_THROW(Application app(opts));
     }
 
     void testConstructorWithMinimalOptions()
     {
-        try
-        {
-            Options opts = TestOptionsHelper::createMinimalOptions();
-            Application app(opts);
-            // Constructor should handle minimal options
-            CPPUNIT_ASSERT(true);
-        }
-        catch (const std::exception& e)
-        {
-            // It's acceptable for constructor to throw with minimal options
-            CPPUNIT_ASSERT(true);
-        }
+        Options opts = TestOptionsHelper::createMinimalOptions();
+        // Minimal options should construct without throwing
+        CPPUNIT_ASSERT_NO_THROW(Application app(opts));
     }
 };
 

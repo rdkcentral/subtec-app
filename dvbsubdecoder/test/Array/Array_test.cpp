@@ -205,14 +205,30 @@ public:
         dvbsubdecoder::SizedArray<int, 0> zeroArray;
         
         CPPUNIT_ASSERT(zeroArray.getSize() == 0);
-        // Just verify it's callable.
-        int* data = zeroArray.getData();
-        (void)data; // Suppress unused variable warning
-        
-        // Test polymorphic access with zero size
+
+        // Define contract for zero-sized arrays: getData() is stable per access path,
+        // but may be nullptr or a non-null sentinel.
+        int* directData1 = zeroArray.getData();
+        int* directData2 = zeroArray.getData();
+        CPPUNIT_ASSERT(directData1 == directData2);
+
+        const dvbsubdecoder::SizedArray<int, 0>& constZeroArray = zeroArray;
+        const int* constData1 = constZeroArray.getData();
+        const int* constData2 = constZeroArray.getData();
+        CPPUNIT_ASSERT(constData1 == constData2);
+
+        // Verify polymorphic access is callable and stable.
         dvbsubdecoder::Array<int>& baseRef = zeroArray;
         CPPUNIT_ASSERT(baseRef.getSize() == 0);
-        CPPUNIT_ASSERT(baseRef.getData() == zeroArray.getData());
+        int* baseData1 = baseRef.getData();
+        int* baseData2 = baseRef.getData();
+        CPPUNIT_ASSERT(baseData1 == baseData2);
+
+        const dvbsubdecoder::Array<int>& constBaseRef = zeroArray;
+        CPPUNIT_ASSERT(constBaseRef.getSize() == 0);
+        const int* constBaseData1 = constBaseRef.getData();
+        const int* constBaseData2 = constBaseRef.getData();
+        CPPUNIT_ASSERT(constBaseData1 == constBaseData2);
     }
 
     void testSingleElementArray()
@@ -345,18 +361,29 @@ public:
         dvbsubdecoder::SizedArray<int, 4> array1;
         dvbsubdecoder::SizedArray<int, 4> array2;
         dvbsubdecoder::SizedArray<int, 4> array3;
-        
-        // Verify different instances have different data pointers
-        CPPUNIT_ASSERT(array1.getData() != array2.getData());
-        CPPUNIT_ASSERT(array2.getData() != array3.getData());
-        CPPUNIT_ASSERT(array1.getData() != array3.getData());
-        
-        // Verify instance independence
-        array1.getData()[0] = 111;
-        array2.getData()[0] = 222;
-        array3.getData()[0] = 333;
-        
+
+        // Verify instance independence by behavior.
+        int* data1 = array1.getData();
+        int* data2 = array2.getData();
+        int* data3 = array3.getData();
+
+        data1[0] = 111;
+        data1[1] = 112;
+        data2[0] = 222;
+        data2[1] = 223;
+        data3[0] = 333;
+        data3[1] = 334;
+
         CPPUNIT_ASSERT(array1.getData()[0] == 111);
+        CPPUNIT_ASSERT(array1.getData()[1] == 112);
+        CPPUNIT_ASSERT(array2.getData()[0] == 222);
+        CPPUNIT_ASSERT(array2.getData()[1] == 223);
+        CPPUNIT_ASSERT(array3.getData()[0] == 333);
+        CPPUNIT_ASSERT(array3.getData()[1] == 334);
+
+        // Ensure writes in one instance don't affect the others.
+        data1[0] = 444;
+        CPPUNIT_ASSERT(array1.getData()[0] == 444);
         CPPUNIT_ASSERT(array2.getData()[0] == 222);
         CPPUNIT_ASSERT(array3.getData()[0] == 333);
         

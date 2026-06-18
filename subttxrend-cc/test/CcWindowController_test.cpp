@@ -751,7 +751,8 @@ public:
         controller->defineWindow(wd);
 
         mockGfx->reset();
-        controller->report("Hello");
+        // Ensure reporting text does not throw
+        CPPUNIT_ASSERT_NO_THROW(controller->report("Hello"));
 
         // Verify window still exists after reporting text
         WindowDefinition retrieved;
@@ -1036,8 +1037,15 @@ public:
         WindowDefinition wd = createDefaultWindowDefinition(0, 0);
         controller->defineWindow(wd);
 
-        // Note: redrawFlashingText() is private, tested indirectly
-        CPPUNIT_ASSERT(controller != nullptr);
+        // Note: redrawFlashingText() is private; exercise indirect path
+        mockGfx->reset();
+        WindowsMap wm = createWindowsMap(0x01);
+        // Ensure displayWindows doesn't throw when there's no flashing text
+        CPPUNIT_ASSERT_NO_THROW(controller->displayWindows(wm));
+
+        // Window should still exist after the call
+        WindowDefinition retrieved;
+        CPPUNIT_ASSERT_EQUAL(true, controller->getWindowDefinition(retrieved));
     }
 
     void testDrawWindowsNoWindows()

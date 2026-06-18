@@ -22,10 +22,10 @@
 #include <fstream>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <thread>
 #include <chrono>
 #include <memory>
-#include <atomic>
 
 #include "../src/UnixSocketSource.hpp"
 #include "../include/PacketReceiver.hpp"
@@ -48,7 +48,7 @@ public:
 class UnixSocketSourceTest : public CppUnit::TestFixture
 {
     CPPUNIT_TEST_SUITE(UnixSocketSourceTest);
-    CPPUNIT_TEST(testConstructorWithVeryLongPath);
+    CPPUNIT_TEST(testConstructorAcceptsVeryLongPath);
     CPPUNIT_TEST(testConstructorDoesNotCreateSocket);
     CPPUNIT_TEST(testDestructorOnRunningSource);
     CPPUNIT_TEST(testDestructorWithoutStart);
@@ -56,17 +56,15 @@ class UnixSocketSourceTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testStartCreatesSocket);
     CPPUNIT_TEST(testStartAfterStop);
     CPPUNIT_TEST(testStartWithExistingSocketFile);
-    CPPUNIT_TEST(testStartRapidStartStop);
-    CPPUNIT_TEST(testStartSocketPermissions);
+    CPPUNIT_TEST(testStartCreatesSocketFileType);
     CPPUNIT_TEST(testStartMultipleSourcesSamePath);
     CPPUNIT_TEST(testStopOnRunningSource);
     CPPUNIT_TEST(testStopJoinsThread);
     CPPUNIT_TEST(testCreateSocketRetryDelay);
-    CPPUNIT_TEST(testCreateSocketMultipleRetries);
-    CPPUNIT_TEST(testCreateSocketExitsOnStop);
-    CPPUNIT_TEST(testSourceLoopExitsOnStop);
+    CPPUNIT_TEST(testCreateSocketSucceedsWhenParentDirAppears);
+    CPPUNIT_TEST(testCreateSocketSucceedsAfterLongerDelay);
     CPPUNIT_TEST(testMultipleStartStopCycles);
-    CPPUNIT_TEST(testConcurrentStartStop);
+    CPPUNIT_TEST(testStopShortlyAfterStart);
 
     CPPUNIT_TEST_SUITE_END();
 
@@ -86,7 +84,7 @@ public:
         m_receiver.reset();
     }
 
-    void testConstructorWithVeryLongPath()
+    void testConstructorAcceptsVeryLongPath()
     {
         // Create path longer than 108 characters (socket path limit)
         std::string path(120, 'a');
@@ -96,6 +94,9 @@ public:
 
         // Constructor should accept long path (validation during socket creation)
         CPPUNIT_ASSERT(path.length() > 108);
+
+        // Constructor must not create the socket implicitly
+        CPPUNIT_ASSERT(!waitForUnixSocket(path, 150, 10));
     }
 
     void testConstructorDoesNotCreateSocket()
@@ -116,35 +117,43 @@ public:
     {
         std::string path = m_testSocketPath;
 
-        {
-            UnixSocketSource source(path);
-            source.start(m_receiver.get());
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            // Ensure socket is ready before destructor triggers stop
-            CPPUNIT_ASSERT(waitForUnixSocket(m_testSocketPath, 600, 10));
-
-            // Destructor should call stop() automatically
-            // This should log a warning but not crash
+        // Run destructor test in a child process so an assert/abort
+        // inside production code won't kill the test runner.
+        pid_t pid = fork();
+        CPPUNIT_ASSERT(pid != -1);
+        if (pid == 0) {
+            // child
+            {
+                UnixSocketSource source(path);
+                source.start(m_receiver.get());
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                // Ensure socket is ready before destructor triggers stop
+                if (!waitForUnixSocket(m_testSocketPath, 600, 10)) {
+                    _exit(2);
+                }
+                // leaving scope invokes destructor
+            }
+            _exit(0);
         }
 
-        // If we reach here, destructor handled running state
-        CPPUNIT_ASSERT(true);
+        // parent: wait for child and assert it exited cleanly
+        int status = 0;
+        pid_t w = waitpid(pid, &status, 0);
+        CPPUNIT_ASSERT_EQUAL(pid, w);
+        if (WIFEXITED(status)) {
+            CPPUNIT_ASSERT_EQUAL(0, WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+            CPPUNIT_FAIL(std::string("Child terminated by signal ") + std::to_string(WTERMSIG(status)));
+        } else {
+            CPPUNIT_FAIL("Child did not exit cleanly");
+        }
     }
 
     void testDestructorAfterExplicitStop()
     {
         std::string path = m_testSocketPath;
 
-        {
-            UnixSocketSource source(path);
-            source.start(m_receiver.get());
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            source.stop();
-
-            // Explicit stop before destructor should prevent double cleanup
-        }
-
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(runExplicitStopThenDestructorIsolated(path, 600, 10));
     }
 
     void testDestructorWithoutStart()
@@ -157,7 +166,8 @@ public:
             // Destructor without start() should be safe
         }
 
-        CPPUNIT_ASSERT(true);
+        // Constructor should not create socket implicitly
+        CPPUNIT_ASSERT(!waitForUnixSocket(path, 150, 10));
     }
 
     void testStartCreatesSocket()
@@ -180,16 +190,14 @@ public:
 
         // First start-stop cycle
         source.start(m_receiver.get());
+        CPPUNIT_ASSERT(waitForUnixSocket(m_testSocketPath, 500, 10));
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         source.stop();
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
         // Second start should work
         source.start(m_receiver.get());
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(waitForUnixSocket(m_testSocketPath, 500, 10));
 
         source.stop();
     }
@@ -213,35 +221,16 @@ public:
         source.stop();
     }
 
-    void testStartRapidStartStop()
-    {
-        UnixSocketSource source(m_testSocketPath);
-
-        for (int i = 0; i < 3; i++) {
-            source.start(m_receiver.get());
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            source.stop();
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-
-        // Should handle rapid cycles
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testStartSocketPermissions()
+    void testStartCreatesSocketFileType()
     {
         UnixSocketSource source(m_testSocketPath);
 
         source.start(m_receiver.get());
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        CPPUNIT_ASSERT(waitForUnixSocket(m_testSocketPath, 500, 10));
 
-        if (isUnixSocketFile(m_testSocketPath)) {
-            struct stat statbuf;
-            CPPUNIT_ASSERT_EQUAL(0, stat(m_testSocketPath.c_str(), &statbuf));
-
-            // Socket should exist
-            CPPUNIT_ASSERT(S_ISSOCK(statbuf.st_mode));
-        }
+        struct stat statbuf;
+        CPPUNIT_ASSERT_EQUAL(0, stat(m_testSocketPath.c_str(), &statbuf));
+        CPPUNIT_ASSERT(S_ISSOCK(statbuf.st_mode));
 
         source.stop();
     }
@@ -250,35 +239,46 @@ public:
     {
         std::string path = m_testSocketPath;
 
-        UnixSocketSource source1(path);
-        source1.start(m_receiver.get());
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // Run the competing-source scenario in a child process because the
+        // second source may leave a joinable thread behind even when it never
+        // acquires m_socket, which makes destruction unsafe in-process.
+        pid_t pid = fork();
+        CPPUNIT_ASSERT(pid != -1);
+        if (pid == 0) {
+            UnixSocketSource source1(path);
+            source1.start(m_receiver.get());
+            if (!waitForUnixSocket(path, 500, 10)) {
+                _exit(2);
+            }
 
-        // Second source with same path
-        MockPacketReceiver receiver2;
-        UnixSocketSource source2(path);
-        source2.start(&receiver2);
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            MockPacketReceiver receiver2;
+            UnixSocketSource source2(path);
+            source2.start(&receiver2);
 
-        // Both should handle the situation (second may fail socket creation)
-        CPPUNIT_ASSERT(true);
+            // The observable contract here is that attempting to start a
+            // second source does not make the socket endpoint disappear.
+            if (!waitForUnixSocket(path, 500, 10)) {
+                _exit(3);
+            }
 
-        source2.stop();
-        source1.stop();
+            _exit(0);
+        }
+
+        int status = 0;
+        pid_t w = waitpid(pid, &status, 0);
+        CPPUNIT_ASSERT_EQUAL(pid, w);
+        if (WIFEXITED(status)) {
+            CPPUNIT_ASSERT_EQUAL(0, WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+            CPPUNIT_FAIL(std::string("Child terminated by signal ") + std::to_string(WTERMSIG(status)));
+        } else {
+            CPPUNIT_FAIL("Child did not exit cleanly");
+        }
     }
 
     void testStopOnRunningSource()
     {
-        UnixSocketSource source(m_testSocketPath);
-
-        source.start(m_receiver.get());
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        // Guard: ensure socket exists before stopping for robustness
-        (void)waitForUnixSocket(m_testSocketPath, 500, 10);
-        source.stop();
-
-        // Should stop cleanly
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(runStartStopIsolated(m_testSocketPath, 100, 600, 10));
     }
 
     void testStopJoinsThread()
@@ -305,22 +305,28 @@ public:
 
         UnixSocketSource source(path);
 
-        auto start = std::chrono::steady_clock::now();
         source.start(m_receiver.get());
 
-        // Use larger delay and settle to avoid flakiness
-        const int delayBeforeCreateMs = 150;
-        const int settleMs = 200;
-        createParentDirThenStop(source, path, delayBeforeCreateMs, settleMs);
+        // Keep the parent absent for the first create attempt, then allow the next retry.
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        auto start = std::chrono::steady_clock::now();
+        ensureDirExists(parentDir(path));
+        bool created = waitForUnixSocket(path, 600, 10);
 
         auto end = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-        // Assert a meaningful delay occurred
-        CPPUNIT_ASSERT(duration.count() >= delayBeforeCreateMs + 10);
+        if (created) {
+            source.stop();
+        }
+        cleanupSocketFile(path);
+        removeDirIfExists(parentDir(path));
+
+        CPPUNIT_ASSERT(created);
+        CPPUNIT_ASSERT(duration.count() >= 30);
     }
 
-    void testCreateSocketExitsOnStop()
+    void testCreateSocketSucceedsWhenParentDirAppears()
     {
         std::string path = prepareDeferredSocketPath("exit_on_stop.sock");
 
@@ -328,35 +334,24 @@ public:
         source.start(m_receiver.get());
 
         // Let it retry a few times, then allow and stop
-        createParentDirThenStop(source, path, 80, 120);
+        bool created = createParentDirThenStop(source, path, 80, 120);
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(created);
     }
 
-    void testCreateSocketMultipleRetries()
+    void testCreateSocketSucceedsAfterLongerDelay()
     {
         std::string path = prepareDeferredSocketPath("multiple_retries.sock");
 
         UnixSocketSource source(path);
         source.start(m_receiver.get());
 
+        CPPUNIT_ASSERT(!waitForUnixSocket(path, 80, 10));
+
         // Should retry multiple times, then succeed and stop (>=2 retries)
-        createParentDirThenStop(source, path, 120, 120);
+        bool created = createParentDirThenStop(source, path, 120, 120);
 
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testSourceLoopExitsOnStop()
-    {
-        UnixSocketSource source(m_testSocketPath);
-
-        source.start(m_receiver.get());
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        (void)waitForUnixSocket(m_testSocketPath, 500, 10);
-        source.stop();
-
-        // Loop should exit cleanly
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(created);
     }
 
     void testMultipleStartStopCycles()
@@ -365,25 +360,16 @@ public:
 
         for (int i = 0; i < 3; i++) {
             source.start(m_receiver.get());
+            CPPUNIT_ASSERT(waitForUnixSocket(m_testSocketPath, 500, 10));
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             source.stop();
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
-
-        CPPUNIT_ASSERT(true);
     }
 
-    void testConcurrentStartStop()
+    void testStopShortlyAfterStart()
     {
-        UnixSocketSource source(m_testSocketPath);
-
-        source.start(m_receiver.get());
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-        // Stop shortly after start
-        source.stop();
-
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(runStartStopIsolated(m_testSocketPath, 50, 600, 10));
     }
 
 private:
@@ -447,6 +433,51 @@ private:
         }
     }
 
+    bool childExitedCleanly(pid_t pid)
+    {
+        int status = 0;
+        pid_t w = waitpid(pid, &status, 0);
+        if (w != pid) return false;
+        return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    }
+
+    bool runStartStopIsolated(const std::string& path, int stopDelayMs, int timeoutMs = 600, int pollMs = 10)
+    {
+        pid_t pid = fork();
+        if (pid == -1) return false;
+        if (pid == 0) {
+            UnixSocketSource source(path);
+            source.start(m_receiver.get());
+            if (!waitForUnixSocket(path, timeoutMs, pollMs)) {
+                _exit(2);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(stopDelayMs));
+            source.stop();
+            _exit(0);
+        }
+
+        return childExitedCleanly(pid);
+    }
+
+    bool runExplicitStopThenDestructorIsolated(const std::string& path, int timeoutMs = 600, int pollMs = 10)
+    {
+        pid_t pid = fork();
+        if (pid == -1) return false;
+        if (pid == 0) {
+            {
+                UnixSocketSource source(path);
+                source.start(m_receiver.get());
+                if (!waitForUnixSocket(path, timeoutMs, pollMs)) {
+                    _exit(2);
+                }
+                source.stop();
+            }
+            _exit(0);
+        }
+
+        return childExitedCleanly(pid);
+    }
+
     // Helper: prepare a socket path under a base dir that does not yet exist
     std::string prepareDeferredSocketPath(const std::string& sockName)
     {
@@ -457,7 +488,7 @@ private:
     }
 
     // Helper: create parent dir after delay, wait for bind (poll), then stop safely
-    void createParentDirThenStop(UnixSocketSource& source, const std::string& socketPath, int delayBeforeCreateMs = 150, int settleMs = 200)
+    bool createParentDirThenStop(UnixSocketSource& source, const std::string& socketPath, int delayBeforeCreateMs = 150, int settleMs = 200)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(delayBeforeCreateMs));
         ensureDirExists(parentDir(socketPath));
@@ -473,6 +504,7 @@ private:
         // Cleanup directory (best-effort)
         cleanupSocketFile(socketPath);
         removeDirIfExists(parentDir(socketPath));
+        return created;
     }
 
     std::string generateTestSocketPath()

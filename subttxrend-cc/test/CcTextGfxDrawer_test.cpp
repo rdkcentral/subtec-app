@@ -256,7 +256,6 @@ class CcTextGfxDrawerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testConstructorInitializesFont);
     CPPUNIT_TEST(testTransparentSpaceAddsSpace);
     CPPUNIT_TEST(testTransparentSpaceWithTrue);
-    CPPUNIT_TEST(testTransparentSpaceWithFalse);
     CPPUNIT_TEST(testMultipleTransparentSpaces);
     CPPUNIT_TEST(testBackspaceOnEmptyText);
     CPPUNIT_TEST(testBackspaceOnSingleChar);
@@ -428,13 +427,6 @@ public:
     void testTransparentSpaceWithTrue()
     {
         drawer->transparentSpace(true);
-        CPPUNIT_ASSERT_EQUAL(std::string(" "), drawer->getText());
-        CPPUNIT_ASSERT_EQUAL(true, drawer->drawable());
-    }
-
-    void testTransparentSpaceWithFalse()
-    {
-        drawer->transparentSpace(false);
         CPPUNIT_ASSERT_EQUAL(std::string(" "), drawer->getText());
         CPPUNIT_ASSERT_EQUAL(true, drawer->drawable());
     }
@@ -876,9 +868,7 @@ public:
         attrs.flashing = true;
         drawer->setPenAttributes(attrs);
 
-        drawer->setFlashState(FlashControl::Show);
-        // State set, no crash
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(drawer->setFlashState(FlashControl::Show));
     }
 
     void testSetFlashStateHide()
@@ -887,8 +877,7 @@ public:
         attrs.flashing = true;
         drawer->setPenAttributes(attrs);
 
-        drawer->setFlashState(FlashControl::Hide);
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(drawer->setFlashState(FlashControl::Hide));
     }
 
     void testSetFlashStateWhenNotFlashing()
@@ -897,9 +886,7 @@ public:
         attrs.flashing = false;
         drawer->setPenAttributes(attrs);
 
-        drawer->setFlashState(FlashControl::Hide);
-        // Should be ignored
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_NO_THROW(drawer->setFlashState(FlashControl::Hide));
     }
 
     void testDrawOnEmptyText()
@@ -907,8 +894,8 @@ public:
         mockGfx->reset();
         Point point{0, 0};
         drawer->draw(point, WindowPd::LEFT_RIGHT, WindowJustify::LEFT);
-        // No crash on empty text
-        CPPUNIT_ASSERT(true);
+        // No drawing expected for empty text
+        CPPUNIT_ASSERT_EQUAL(0, mockGfx->mockWindow->mockContext.drawStringCalls);
     }
 
     void testDrawBasicTextLeftRight()

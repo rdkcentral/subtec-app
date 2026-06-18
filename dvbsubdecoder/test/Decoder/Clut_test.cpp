@@ -99,12 +99,6 @@ public:
             std::uint32_t value = (i << 24) | (i << 16) | i;
             testClut.set2bit(i, value);
         }
-        for (int i = 0; i < (1 << 2); ++i)
-        {
-            // use bitwise OR to compose ARGB-like pattern (was logical OR previously)
-            std::uint32_t value = (i << 24) | (i << 16) | i;
-            testClut.set2bit(i, value);
-        }
         for (int i = 0; i < (1 << 4); ++i)
         {
             std::uint32_t value = (i << 24) | (i << 16) | i;
@@ -115,9 +109,8 @@ public:
             std::uint32_t value = (i << 24) | (i << 16) | i;
             testClut.set8bit(i, value);
         }
-            std::uint32_t value = (i << 24) | (i << 16) | i;
-            CPPUNIT_ASSERT_EQUAL(value, testArray[i]);
-        }
+
+        // test set
         for (int i = 0; i < (1 << 2); ++i)
         {
             auto testArray = testClut.getArray2bit();
@@ -136,6 +129,12 @@ public:
             std::uint32_t value = (i << 24) | (i << 16) | i;
             CPPUNIT_ASSERT_EQUAL(value, testArray[i]);
         }
+
+        testClut.reset();
+
+        // check after reset state
+        for (int i = 0; i < (1 << 2); ++i)
+        {
             auto defaultArray = defaultClut.getArray2bit();
             auto testArray = testClut.getArray2bit();
             CPPUNIT_ASSERT_EQUAL(defaultArray[i], testArray[i]);

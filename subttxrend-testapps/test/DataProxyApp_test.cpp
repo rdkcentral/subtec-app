@@ -18,7 +18,9 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <cstdlib>
@@ -30,17 +32,7 @@ using namespace subttxrend::testapps;
 class DataProxyAppTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( DataProxyAppTest );
-    CPPUNIT_TEST(testConstructorWithValidInputs);
-    CPPUNIT_TEST(testConstructorWithEmptyAppName);
-    CPPUNIT_TEST(testConstructorWithEmptyArguments);
-    CPPUNIT_TEST(testConstructorWithSingleArgument);
-    CPPUNIT_TEST(testConstructorWithTwoArguments);
-    CPPUNIT_TEST(testConstructorWithMultipleArguments);
-    CPPUNIT_TEST(testConstructorWithLongAppName);
-    CPPUNIT_TEST(testConstructorWithSpecialCharactersInAppName);
-    CPPUNIT_TEST(testConstructorWithUnicodeInAppName);
-    CPPUNIT_TEST(testConstructorWithArgumentsContainingSpaces);
-    CPPUNIT_TEST(testConstructorWithArgumentsContainingSpecialChars);
+    CPPUNIT_TEST(testRunPrintsUsageWithConfiguredAppName);
     CPPUNIT_TEST(testRunWithNoArguments);
     CPPUNIT_TEST(testRunWithOneArgument);
     CPPUNIT_TEST(testRunWithThreeArguments);
@@ -88,85 +80,32 @@ public:
     }
 
 protected:
-    void testConstructorWithValidInputs()
-    {
-        std::vector<std::string> args = {"source:path", "target:path"};
-        DataProxyApp app("testApp", args);
-        // If constructor completes without exception, test passes
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testConstructorWithEmptyAppName()
-    {
-        std::vector<std::string> args = {"source:path", "target:path"};
-        DataProxyApp app("", args);
-        // Should not throw - empty app name is technically valid
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testConstructorWithEmptyArguments()
+    void testRunPrintsUsageWithConfiguredAppName()
     {
         std::vector<std::string> args;
-        DataProxyApp app("testApp", args);
-        // Constructor should succeed even with empty arguments
-        CPPUNIT_ASSERT(true);
-    }
+        DataProxyApp app("usage-test-app", args);
 
-    void testConstructorWithSingleArgument()
-    {
-        std::vector<std::string> args = {"single:argument"};
-        DataProxyApp app("testApp", args);
-        CPPUNIT_ASSERT(true);
-    }
+        std::ostringstream capturedOutput;
+        std::streambuf* originalBuffer = std::cout.rdbuf(capturedOutput.rdbuf());
 
-    void testConstructorWithTwoArguments()
-    {
-        std::vector<std::string> args = {"first:arg", "second:arg"};
-        DataProxyApp app("testApp", args);
-        CPPUNIT_ASSERT(true);
-    }
+        try
+        {
+            int result = app.run();
+            std::cout.rdbuf(originalBuffer);
 
-    void testConstructorWithMultipleArguments()
-    {
-        std::vector<std::string> args = {"arg1", "arg2", "arg3", "arg4", "arg5"};
-        DataProxyApp app("testApp", args);
-        CPPUNIT_ASSERT(true);
-    }
+            CPPUNIT_ASSERT_EQUAL(EXIT_FAILURE, result);
 
-    void testConstructorWithLongAppName()
-    {
-        std::string longName(1000, 'x');
-        std::vector<std::string> args = {"source", "target"};
-        DataProxyApp app(longName, args);
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testConstructorWithSpecialCharactersInAppName()
-    {
-        std::vector<std::string> args = {"source", "target"};
-        DataProxyApp app("test@app#123!$%", args);
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testConstructorWithUnicodeInAppName()
-    {
-        std::vector<std::string> args = {"source", "target"};
-        DataProxyApp app("测试应用", args);
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testConstructorWithArgumentsContainingSpaces()
-    {
-        std::vector<std::string> args = {"file:/path with spaces/file.txt", "target: also has spaces"};
-        DataProxyApp app("testApp", args);
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testConstructorWithArgumentsContainingSpecialChars()
-    {
-        std::vector<std::string> args = {"file:/tmp/@#$%/file", "console:!@#"};
-        DataProxyApp app("testApp", args);
-        CPPUNIT_ASSERT(true);
+            const std::string output = capturedOutput.str();
+            CPPUNIT_ASSERT(output.find("Usage:") != std::string::npos);
+            CPPUNIT_ASSERT(output.find("usage-test-app <source-path> <target-path>") != std::string::npos);
+            CPPUNIT_ASSERT(output.find("The <source-path> can be one of:") != std::string::npos);
+            CPPUNIT_ASSERT(output.find("The <target-path> can be one of:") != std::string::npos);
+        }
+        catch (...)
+        {
+            std::cout.rdbuf(originalBuffer);
+            throw;
+        }
     }
 
     void testRunWithNoArguments()

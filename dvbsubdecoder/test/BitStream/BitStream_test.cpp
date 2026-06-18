@@ -20,6 +20,8 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <vector>
+
 #include "BitStream.hpp"
 
 using dvbsubdecoder::BitStream;
@@ -69,6 +71,9 @@ public:
     template<std::uint32_t ITEM_SIZE>
     void testReadSimple(std::uint32_t dataValue)
     {
+        static_assert((ITEM_SIZE >= 1) && (ITEM_SIZE <= 8),
+            "testReadSimple supports ITEM_SIZE in range [1,8]");
+
         // build bytes table
         std::vector<std::uint8_t> data;
         data.push_back((dataValue >> 24) & 0xFF);
@@ -78,7 +83,7 @@ public:
 
         // build expected bit chunks table
         std::vector<std::uint8_t> expected;
-        const std::uint32_t bitMask = (1 << ITEM_SIZE) - 1;
+        const std::uint32_t bitMask = (std::uint32_t{1} << ITEM_SIZE) - 1U;
         for (int bitIndex = 32 - ITEM_SIZE; bitIndex >= 0; bitIndex -=
                 ITEM_SIZE)
         {
@@ -494,7 +499,7 @@ public:
     void testReadEmptyData()
     {
         // Test with PesPacketReader that has no data
-        PesPacketReader reader; // Empty constructor
+        PesPacketReader reader(nullptr, 0, nullptr, 0);
         BitStream bitStream(reader);
         
         try

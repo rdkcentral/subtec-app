@@ -689,7 +689,11 @@ Special Characters
         WebVTTDocument doc;
         CPPUNIT_ASSERT_NO_THROW(std::tie(list, std::ignore) = doc.parseCueList(unknown));
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.size());
-        // Should not throw, cue should still be present
+        CPPUNIT_ASSERT_EQUAL(TimePoint(89000), list.front()->startTime());
+        CPPUNIT_ASSERT_EQUAL(TimePoint(91000), list.front()->endTime());
+        CPPUNIT_ASSERT_EQUAL(std::string("bar"), list.front()->regionId());
+        CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.front()->lines().size());
+        CPPUNIT_ASSERT_EQUAL(std::string("Text"), list.front()->lines().front());
     }
     void testRegionWithInvalidFields() {
         std::istringstream bad(
@@ -725,6 +729,10 @@ Special Characters
         WebVTTDocument doc;
         CPPUNIT_ASSERT_NO_THROW(std::tie(list, std::ignore) = doc.parseCueList(bad));
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.size());
+        CPPUNIT_ASSERT_EQUAL(TimePoint(89000), list.front()->startTime());
+        CPPUNIT_ASSERT_EQUAL(TimePoint(91000), list.front()->endTime());
+        CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.front()->lines().size());
+        CPPUNIT_ASSERT_EQUAL(std::string("Text"), list.front()->lines().front());
     }
     void testDuplicateCueIdentifiers() {
         std::istringstream dup(
@@ -742,7 +750,16 @@ Special Characters
         WebVTTDocument doc;
         CPPUNIT_ASSERT_NO_THROW(std::tie(list, std::ignore) = doc.parseCueList(dup));
         CPPUNIT_ASSERT_EQUAL((std::size_t)2, list.size());
-        // Both cues should be present, even with duplicate IDs
+        auto firstCue = list.begin();
+        auto secondCue = std::next(firstCue);
+        CPPUNIT_ASSERT_EQUAL(TimePoint(89000), (*firstCue)->startTime());
+        CPPUNIT_ASSERT_EQUAL(TimePoint(91000), (*firstCue)->endTime());
+        CPPUNIT_ASSERT_EQUAL((std::size_t)1, (*firstCue)->lines().size());
+        CPPUNIT_ASSERT_EQUAL(std::string("Text1"), (*firstCue)->lines().front());
+        CPPUNIT_ASSERT_EQUAL(TimePoint(91000), (*secondCue)->startTime());
+        CPPUNIT_ASSERT_EQUAL(TimePoint(93000), (*secondCue)->endTime());
+        CPPUNIT_ASSERT_EQUAL((std::size_t)1, (*secondCue)->lines().size());
+        CPPUNIT_ASSERT_EQUAL(std::string("Text2"), (*secondCue)->lines().front());
     }
 };
 

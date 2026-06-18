@@ -86,15 +86,11 @@ CPPUNIT_TEST_SUITE(MetadataProcessorTest);
     CPPUNIT_TEST(testMagPacket30Nullptr);
     CPPUNIT_TEST(testMagPacket31Nullptr);
     CPPUNIT_TEST(testProcessBsdUpdatesDatabase);
-    CPPUNIT_TEST(testBsdPacketValidPageId);
-    CPPUNIT_TEST(testBsdPacketMultipleTimes);
     CPPUNIT_TEST(testTripletsValidMagRange);
     CPPUNIT_TEST(testTripletsInvalidMagazine);
     CPPUNIT_TEST(testTripletsWrongPacketAddr);
     CPPUNIT_TEST(testBsdBufferReused);
-    CPPUNIT_TEST(testBsdDataFlowToDatabase);
     CPPUNIT_TEST(testSequentialProcessing);
-    CPPUNIT_TEST(testResetClearsState);
     CPPUNIT_TEST(testMultipleResetsConsistent);
     CPPUNIT_TEST(testBufferConsistencyAfterReset);
     CPPUNIT_TEST(testDatabaseAfterMultipleBsd);
@@ -115,6 +111,26 @@ public:
     }
 
 protected:
+    void assertPageIdEquals(const PageId& expected, const PageId& actual)
+    {
+        CPPUNIT_ASSERT_EQUAL(expected.getMagazinePage(), actual.getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(expected.getSubpage(), actual.getSubpage());
+    }
+
+    PacketTriplets* getTripletsBuffer(std::uint8_t magazine,
+                                      std::int8_t designationCode)
+    {
+        Packet* buffer = m_processor->getPacketBuffer(magazine, 29, designationCode);
+        CPPUNIT_ASSERT(buffer != nullptr);
+        CPPUNIT_ASSERT_EQUAL(PacketType::TRIPLETS, buffer->getType());
+
+        PacketTriplets* triplets = static_cast<PacketTriplets*>(buffer);
+        triplets->setMagazineNumber(magazine);
+        triplets->setPacketAddress(29);
+        triplets->setDesignationCode(designationCode);
+        return triplets;
+    }
+
     void testConstructorInitialized()
     {
         // Verify constructor succeeds and processor is ready to use
@@ -126,10 +142,6 @@ protected:
         CPPUNIT_ASSERT(buffer != nullptr);
         CPPUNIT_ASSERT_EQUAL(PacketType::BCAST_SERVICE_DATA, buffer->getType());
     }
-
-
-
-
 
     void testBsdBufferCode0()
     {
@@ -237,80 +249,61 @@ protected:
         PacketBcastServiceData bsdPacket;
         bsdPacket.setMagazineNumber(0);
         bsdPacket.setPacketAddress(30);
+        PageId expectedPage(0x234, 0x0001);
+        bsdPacket.setInitialPage(expectedPage);
 
-        // Process BSD packet and verify database was updated
         m_processor->processPacket(bsdPacket);
-        PageId indexPage = m_database->getIndexPageP830();
-        CPPUNIT_ASSERT(true);  // Verifies no crash during processing
-    }
-
-    void testBsdPacketValidPageId()
-    {
-        // Process BSD packet
-        PacketBcastServiceData bsdPacket;
-        bsdPacket.setMagazineNumber(0);
-        bsdPacket.setPacketAddress(30);
-        m_processor->processPacket(bsdPacket);
-
-        // Verify database was updated
-        PageId indexPage = m_database->getIndexPageP830();
-        // Database should be accessible and valid
-        CPPUNIT_ASSERT(true);
-    }
-
-    void testBsdPacketMultipleTimes()
-    {
-        // Process multiple BSD packets and verify database consistency
-        for (int i = 0; i < 3; ++i)
-        {
-            PacketBcastServiceData bsdPacket;
-            bsdPacket.setMagazineNumber(0);
-            bsdPacket.setPacketAddress(30);
-            m_processor->processPacket(bsdPacket);
-
-            // Verify database remains accessible after each packet
-            PageId indexPage = m_database->getIndexPageP830();
-        }
+        assertPageIdEquals(expectedPage, m_database->getIndexPageP830());
     }
 
     void testTripletsValidMagRange()
     {
-        // Test all valid magazines (0-7) with packet 29
         for (std::uint8_t mag = 0; mag < Database::MAGAZINE_COUNT; ++mag)
         {
-            PacketTriplets triplets;
-            triplets.setMagazineNumber(mag);
-            triplets.setPacketAddress(29);
+            PacketTriplets* triplets = getTripletsBuffer(mag, 0);
+            m_processor->processPacket(*triplets);
 
-            m_processor->processPacket(triplets);
+            const PacketTriplets* storedPacket = m_database->getMagazinePage(mag).getPacket29_0();
+            CPPUNIT_ASSERT_EQUAL(static_cast<const PacketTriplets*>(triplets), storedPacket);
         }
-
-        // All should complete successfully
     }
 
     void testTripletsInvalidMagazine()
     {
+        PacketTriplets* validTriplets = getTripletsBuffer(1, 0);
+        m_processor->processPacket(*validTriplets);
+
         PacketTriplets triplets;
         triplets.setMagazineNumber(8);  // >= MAGAZINE_COUNT
         triplets.setPacketAddress(29);
+        triplets.setDesignationCode(0);
 
-        // Should not crash - condition check prevents processing
         m_processor->processPacket(triplets);
+
+        const PacketTriplets* storedPacket = m_database->getMagazinePage(1).getPacket29_0();
+        CPPUNIT_ASSERT_EQUAL(static_cast<const PacketTriplets*>(validTriplets), storedPacket);
     }
 
     void testTripletsWrongPacketAddr()
     {
+        PacketTriplets* validTriplets = getTripletsBuffer(1, 0);
+        m_processor->processPacket(*validTriplets);
+
         PacketTriplets triplets1;
         triplets1.setMagazineNumber(1);
         triplets1.setPacketAddress(28);
+        triplets1.setDesignationCode(0);
 
         PacketTriplets triplets2;
         triplets2.setMagazineNumber(1);
         triplets2.setPacketAddress(30);
+        triplets2.setDesignationCode(0);
 
-        // Neither should be processed (only packet 29)
         m_processor->processPacket(triplets1);
         m_processor->processPacket(triplets2);
+
+        const PacketTriplets* storedPacket = m_database->getMagazinePage(1).getPacket29_0();
+        CPPUNIT_ASSERT_EQUAL(static_cast<const PacketTriplets*>(validTriplets), storedPacket);
     }
 
     void testBsdBufferReused()
@@ -329,65 +322,26 @@ protected:
         CPPUNIT_ASSERT_EQUAL(buffer2, buffer3);
     }
 
-    void testBsdDataFlowToDatabase()
-    {
-        // Step 1: Get BSD buffer from processor
-        Packet* buffer = m_processor->getPacketBuffer(0, 30, 0);
-        CPPUNIT_ASSERT(buffer != nullptr);
-        CPPUNIT_ASSERT_EQUAL(PacketType::BCAST_SERVICE_DATA, buffer->getType());
-
-        // Step 2: Cast to concrete type
-        PacketBcastServiceData* bsdBuffer =
-            static_cast<PacketBcastServiceData*>(buffer);
-        CPPUNIT_ASSERT(bsdBuffer != nullptr);
-
-        // Step 3: Process packet (should call setIndexPageP830)
-        m_processor->processPacket(*bsdBuffer);
-
-        // Step 4: Verify database was updated
-        PageId indexPage = m_database->getIndexPageP830();
-        // Should have a valid result (either still initial or updated from packet)
-        // The flow validates: getPacketBuffer -> cast -> processPacket -> setIndexPageP830
-        CPPUNIT_ASSERT(true);
-    }
-
     void testSequentialProcessing()
     {
         MockPage page(PageType::DISPLAYABLE);
-        PacketTriplets triplets;
-        triplets.setMagazineNumber(1);
-        triplets.setPacketAddress(29);
+        PacketTriplets* triplets = getTripletsBuffer(1, 0);
+        PacketBcastServiceData* bsdBuffer =
+            static_cast<PacketBcastServiceData*>(m_processor->getPacketBuffer(0, 30, 0));
+        CPPUNIT_ASSERT(bsdBuffer != nullptr);
 
-        // Interleave different operations
-        m_processor->processPage(page);
-        m_processor->processPacket(triplets);
-
-        Packet* buffer = m_processor->getPacketBuffer(0, 30, 0);
-        CPPUNIT_ASSERT(buffer != nullptr);
+        PageId expectedPage(0x345, 0x0002);
+        bsdBuffer->setInitialPage(expectedPage);
 
         m_processor->processPage(page);
-        m_processor->processPacket(triplets);
+        m_processor->processPacket(*triplets);
 
-        // All operations should succeed without interference
-    }
+        m_processor->processPage(page);
+        m_processor->processPacket(*bsdBuffer);
 
-    void testResetClearsState()
-    {
-        // Process some packets
-        PacketTriplets triplets;
-        triplets.setMagazineNumber(1);
-        triplets.setPacketAddress(29);
-        m_processor->processPacket(triplets);
-
-        // Reset
-        m_processor->reset();
-
-        // Process again after reset
-        m_processor->processPacket(triplets);
-
-        // Verify packet buffer still works
-        Packet* buffer = m_processor->getPacketBuffer(0, 30, 0);
-        CPPUNIT_ASSERT(buffer != nullptr);
+        CPPUNIT_ASSERT_EQUAL(static_cast<const PacketTriplets*>(triplets),
+                             m_database->getMagazinePage(1).getPacket29_0());
+        assertPageIdEquals(expectedPage, m_database->getIndexPageP830());
     }
 
     void testMultipleResetsConsistent()
@@ -419,26 +373,25 @@ protected:
 
     void testDatabaseAfterMultipleBsd()
     {
-        // Process multiple BSD packets and verify database state
         PacketBcastServiceData bsd1, bsd2, bsd3;
         bsd1.setMagazineNumber(0);
         bsd1.setPacketAddress(30);
+        bsd1.setInitialPage(PageId(0x123, 0x0001));
         bsd2.setMagazineNumber(0);
         bsd2.setPacketAddress(30);
+        bsd2.setInitialPage(PageId(0x456, 0x0002));
         bsd3.setMagazineNumber(0);
         bsd3.setPacketAddress(30);
+        bsd3.setInitialPage(PageId(0x789, 0x0003));
 
         m_processor->processPacket(bsd1);
-        PageId page1 = m_database->getIndexPageP830();
+        assertPageIdEquals(bsd1.getInitialPage(), m_database->getIndexPageP830());
 
         m_processor->processPacket(bsd2);
-        PageId page2 = m_database->getIndexPageP830();
+        assertPageIdEquals(bsd2.getInitialPage(), m_database->getIndexPageP830());
 
         m_processor->processPacket(bsd3);
-        PageId page3 = m_database->getIndexPageP830();
-
-        // Each processing should update database
-        // Test verifies no crashes and database is accessible
+        assertPageIdEquals(bsd3.getInitialPage(), m_database->getIndexPageP830());
     }
 
 private:

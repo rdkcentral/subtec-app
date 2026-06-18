@@ -54,6 +54,7 @@ CPPUNIT_TEST_SUITE( ParserODSTest );
     CPPUNIT_TEST(testLargeFieldLengths);
     CPPUNIT_TEST(testAllCodingMethods);
     CPPUNIT_TEST(testInsufficientData);
+    CPPUNIT_TEST(testRegionStateAfterParse);
     CPPUNIT_TEST_SUITE_END()
     ;
 
@@ -557,6 +558,53 @@ public:
                 CPPUNIT_ASSERT(!ObjectParserStub::wasCalled());
             }
         }
+        // Corrupt buffer (random data)
+        {
+            m_database->epochReset();
+            m_database->getPage().startParsing(0, StcTime(), 0);
+            CPPUNIT_ASSERT(
+                m_database->addRegionAndClut(0, 100, 100,
+                        dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+                        dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 0));
+            auto region = m_database->getRegionByIndex(0);
+            CPPUNIT_ASSERT(m_database->addRegionObject(region, 0x1000, 0, 0));
+
+            ObjectParserStub::resetCallCounter();
+            std::vector<uint8_t> corruptData = {0xFF, 0x00, 0xAA};
+            PesPacketReader reader(corruptData.data(), corruptData.size(), nullptr, 0);
+            try {
+                ParserODS().parseObjectDataSegment(*m_database, reader);
+                CPPUNIT_ASSERT(!ObjectParserStub::wasCalled());
+            } catch (...) {
+                CPPUNIT_ASSERT(!ObjectParserStub::wasCalled());
+            }
+        }
+    }
+
+    void testRegionStateAfterParse()
+    {
+        // Valid parse should update region
+        const std::uint16_t OBJECT_ID = 1000;
+        m_database->epochReset();
+        m_database->getPage().startParsing(0, StcTime(), 0);
+        CPPUNIT_ASSERT(
+            m_database->addRegionAndClut(0, 100, 100,
+                    dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+                    dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 0));
+        auto region = m_database->getRegionByIndex(0);
+        CPPUNIT_ASSERT(m_database->addRegionObject(region, OBJECT_ID, 0, 0));
+
+        BitStreamWriter writer;
+        writer.write(OBJECT_ID, 16);
+        writer.write(0xC << 4, 8);
+        writer.write(1, 16);
+        writer.write(0, 16);
+        writer.write(0xF0, 8);
+
+        ObjectParserStub::resetCallCounter();
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserODS().parseObjectDataSegment(*m_database, reader);
+        CPPUNIT_ASSERT(ObjectParserStub::wasCalled());
     }
 
 private:

@@ -36,7 +36,7 @@ using namespace subttxrend::gfx;
 class MockWindow : public Window
 {
 public:
-    MockWindow() {}
+    MockWindow() : m_visible(false), m_visibleTrueCount(0), m_visibleFalseCount(0), m_updateCount(0), m_fillRectangleCount(0) {}
     virtual ~MockWindow() {}
 
     void addKeyEventListener(KeyEventListener* listener) override {}
@@ -47,31 +47,59 @@ public:
     }
 
     DrawContext& getDrawContext() override {
-        static class MockDrawContext : public DrawContext {
+        class MockDrawContext : public DrawContext {
         public:
-            void fillRectangle(ColorArgb color, const Rectangle& rectangle) override {}
+            explicit MockDrawContext(int& fillRectangleCount) : m_fillRectangleCount(fillRectangleCount) {}
+            void fillRectangle(ColorArgb color, const Rectangle& rectangle) override { ++m_fillRectangleCount; }
             void drawUnderline(ColorArgb color, const Rectangle& rectangle) override {}
             void drawPixmap(const ClutBitmap& bitmap, const Rectangle& srcRect, const Rectangle& dstRect) override {}
             void drawBitmap(const Bitmap& bitmap, const Rectangle& dstRect) override {}
             void drawGlyph(const FontStripPtr& fontStrip, std::int32_t glyphIndex, const Rectangle& rect, ColorArgb fgColor, ColorArgb bgColor) override {}
             void drawString(PrerenderedFont& font, const Rectangle &destinationRect, const std::vector<GlyphData>& glyphs, const ColorArgb fgColor, const ColorArgb bgColor, int outlineSize = 0, int verticalOffset = 0) override {}
-        } mockContext;
-        return mockContext;
+        private:
+            int& m_fillRectangleCount;
+        };
+        if (!m_mockContext) {
+            m_mockContext = std::make_unique<MockDrawContext>(m_fillRectangleCount);
+        }
+        return *m_mockContext;
     }
 
     Size getPreferredSize() const override {
         return Size(1920, 1080);
     }
 
-    void setSize(const Size& newSize) override {}
+    void setSize(const Size& newSize) override { m_size = newSize; }
     Size getSize() const override {
-        return Size(1920, 1080);
+        return m_size;
     }
 
-    void setVisible(bool visible) override {}
+    void setVisible(bool visible) override {
+        m_visible = visible;
+        if (visible) {
+            ++m_visibleTrueCount;
+        }
+        else {
+            ++m_visibleFalseCount;
+        }
+    }
     void clear() override {}
-    void update() override {}
+    void update() override { ++m_updateCount; }
     void setDrawDirection(DrawDirection dir) override {}
+
+    bool isVisible() const { return m_visible; }
+    int getVisibleTrueCount() const { return m_visibleTrueCount; }
+    int getVisibleFalseCount() const { return m_visibleFalseCount; }
+    int getFillRectangleCount() const { return m_fillRectangleCount; }
+
+private:
+    bool m_visible;
+    int m_visibleTrueCount;
+    int m_visibleFalseCount;
+    int m_updateCount;
+    int m_fillRectangleCount;
+    Size m_size{1920, 1080};
+    std::unique_ptr<DrawContext> m_mockContext;
 };
 
 // Helper to create PacketSubtitleSelection for testing SCTE
@@ -299,30 +327,51 @@ protected:
 
     void testDestructorWhenRendererStarted()
     {
-        bool destructorCompleted = false;
-        {
-            auto packet = PacketSubtitleSelectionBuilder::buildScte(100);
-            ScteSubController controller(*packet, m_window, *m_stcProvider);
-            controller.activate();
-            destructorCompleted = true;
-            // Destructor called here - should stop and shutdown renderer
+        auto packet = PacketSubtitleSelectionBuilder::buildScte(100);
+
+        // Create and destroy a controller that has been activated, ensuring destructor runs
+        try {
+            {
+                ScteSubController controller(*packet, m_window, *m_stcProvider);
+                controller.activate();
+                // leaving scope calls destructor
+            }
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Destructor threw unknown exception");
         }
-        CPPUNIT_ASSERT_MESSAGE("Destructor should complete successfully when renderer is started",
-                               destructorCompleted);
+
+        // Verify no global state was corrupted by constructing a fresh controller and exercising it
+        auto packet2 = PacketSubtitleSelectionBuilder::buildScte(100);
+        ScteSubController controller2(*packet2, m_window, *m_stcProvider);
+        auto scteDataPacket = PacketDataBuilder::buildMinimalScteData(100);
+        CPPUNIT_ASSERT_MESSAGE("Controller should want SCTE data after previous destructor",
+                               controller2.wantsData(*scteDataPacket));
     }
 
     void testDestructorWhenRendererNotStarted()
     {
-        bool destructorCompleted = false;
-        {
-            auto packet = PacketSubtitleSelectionBuilder::buildScte(100);
-            ScteSubController controller(*packet, m_window, *m_stcProvider);
-            controller.deactivate();
-            destructorCompleted = true;
-            // Destructor called here - should only shutdown renderer
+        auto packet = PacketSubtitleSelectionBuilder::buildScte(100);
+
+        try {
+            {
+                ScteSubController controller(*packet, m_window, *m_stcProvider);
+                controller.deactivate();
+                // leaving scope calls destructor
+            }
+        } catch (const std::exception& e) {
+            CPPUNIT_FAIL(e.what());
+        } catch (...) {
+            CPPUNIT_FAIL("Destructor threw unknown exception");
         }
-        CPPUNIT_ASSERT_MESSAGE("Destructor should complete successfully when renderer is not started",
-                               destructorCompleted);
+
+        // Sanity-check that new controllers can still be created and used
+        auto packet2 = PacketSubtitleSelectionBuilder::buildScte(100);
+        ScteSubController controller2(*packet2, m_window, *m_stcProvider);
+        auto scteDataPacket = PacketDataBuilder::buildMinimalScteData(100);
+        CPPUNIT_ASSERT_MESSAGE("Controller should want SCTE data after previous destructor",
+                               controller2.wantsData(*scteDataPacket));
     }
 
     void testProcessWhenActive()
@@ -333,10 +382,7 @@ protected:
         controller.activate();
         controller.process();
 
-        // Verify controller still wants SCTE data after process
-        auto scteDataPacket = PacketDataBuilder::buildMinimalScteData(100);
-        CPPUNIT_ASSERT_MESSAGE("Controller should still want SCTE data after process",
-                               controller.wantsData(*scteDataPacket));
+        CPPUNIT_ASSERT_MESSAGE("Process should not hide the active SCTE window", m_window->isVisible());
     }
 
     void testProcessMultipleTimes()
@@ -484,12 +530,12 @@ protected:
         ScteSubController controller(*packet, m_window, *m_stcProvider);
 
         controller.deactivate();
+        CPPUNIT_ASSERT_MESSAGE("Deactivate should hide the SCTE window", !m_window->isVisible());
+        const int visibleTrueCountBeforeActivate = m_window->getVisibleTrueCount();
         controller.activate();
 
-        // Verify controller is reactivated
-        auto testPacket = PacketDataBuilder::buildMinimalScteData(100);
-        CPPUNIT_ASSERT_MESSAGE("Controller should want SCTE data after reactivation",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Activate should show the SCTE window again", m_window->isVisible());
+        CPPUNIT_ASSERT(m_window->getVisibleTrueCount() > visibleTrueCountBeforeActivate);
     }
 
     void testActivateWhenAlreadyActive()
@@ -497,13 +543,14 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::buildScte(100);
         ScteSubController controller(*packet, m_window, *m_stcProvider);
 
+        const int visibleFalseCountBeforeActivate = m_window->getVisibleFalseCount();
+        const int visibleTrueCountBeforeActivate = m_window->getVisibleTrueCount();
         controller.activate();
         controller.activate(); // Should be idempotent
 
-        // Verify controller still wants data
-        auto testPacket = PacketDataBuilder::buildMinimalScteData(100);
-        CPPUNIT_ASSERT_MESSAGE("Controller should still want SCTE data after redundant activate",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Redundant activate should leave the SCTE window visible", m_window->isVisible());
+        CPPUNIT_ASSERT(m_window->getVisibleFalseCount() > visibleFalseCountBeforeActivate);
+        CPPUNIT_ASSERT(m_window->getVisibleTrueCount() > visibleTrueCountBeforeActivate);
     }
 
     void testDeactivateWhenActive()
@@ -514,10 +561,7 @@ protected:
         controller.activate();
         controller.deactivate();
 
-        // Still wants SCTE data (deactivate doesn't change data acceptance)
-        auto testPacket = PacketDataBuilder::buildMinimalScteData(100);
-        CPPUNIT_ASSERT_MESSAGE("Controller should still want SCTE data after deactivate",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Deactivate should hide the SCTE window", !m_window->isVisible());
     }
 
     void testDeactivateWhenAlreadyDeactivated()
@@ -581,13 +625,14 @@ protected:
         ScteSubController controller(*packet, m_window, *m_stcProvider);
 
         controller.mute(true);
+        CPPUNIT_ASSERT_MESSAGE("Mute should hide the SCTE window", !m_window->isVisible());
+        const int fillCountBeforeUnmute = m_window->getFillRectangleCount();
         controller.mute(false);
+        CPPUNIT_ASSERT_MESSAGE("Unmute should show the SCTE window", m_window->isVisible());
+        CPPUNIT_ASSERT(m_window->getFillRectangleCount() > fillCountBeforeUnmute);
         controller.mute(true);
 
-        // Verify controller remains functional after mute toggle
-        auto testPacket = PacketDataBuilder::buildMinimalScteData(100);
-        CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after mute toggle",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Mute should hide the SCTE window again", !m_window->isVisible());
     }
 
     void testMuteTrueMultipleTimes()
@@ -692,10 +737,9 @@ protected:
 
         controller.deactivate();
 
-        // Verify controller completed workflow and maintains state
-        auto testPacket = PacketDataBuilder::buildMinimalScteData(100);
-        CPPUNIT_ASSERT_MESSAGE("Controller should maintain state after complete workflow",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Complete SCTE workflow should end with a hidden window", !m_window->isVisible());
+        CPPUNIT_ASSERT(m_window->getVisibleTrueCount() > 0);
+        CPPUNIT_ASSERT(m_window->getVisibleFalseCount() > 0);
     }
 
     void testWorkflowWithMuting()

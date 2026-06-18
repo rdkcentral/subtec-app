@@ -119,7 +119,11 @@ bool TtmlFileSource::readPacket(DataPacket& packet)
     }
 
     struct stat st;
-    stat(getPath().c_str(), &st);
+    if (stat(getPath().c_str(), &st) != 0)
+    {
+        std::cerr << "Cannot stat file '" << getPath() << "'" << std::endl;
+        return false;
+    }
 
     std::uint32_t packetDataSize = static_cast<std::uint32_t>(st.st_size);
 

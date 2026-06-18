@@ -26,15 +26,32 @@
 int main(int argc,
          char* argv[])
 {
-    std::string appName = argv[0];
-    std::vector<std::string> arguments;
-
-    for (int i = 1; i < argc; ++i)
+    if (argc < 1)
     {
-        arguments.push_back(argv[i]);
+        return EXIT_FAILURE;
     }
+    try
+    {
+        std::string appName = argv[0];
+        std::vector<std::string> arguments;
 
-    subttxrend::testapps::DataProxyApp app(appName, arguments);
+        for (int i = 1; i < argc; ++i)
+        {
+            arguments.push_back(argv[i]);
+        }
 
-    return app.run();
+        subttxrend::testapps::DataProxyApp app(appName, arguments);
+
+        return app.run();
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "Fatal error: " << ex.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+    catch (...)
+    {
+        std::cerr << "Fatal error: unknown exception" << std::endl;
+        return EXIT_FAILURE;
+    }
 }

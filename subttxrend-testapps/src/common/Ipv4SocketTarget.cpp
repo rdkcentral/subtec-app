@@ -35,7 +35,8 @@ namespace testapps
 
 Ipv4SocketTarget::Ipv4SocketTarget(const std::string& path) :
         DataTarget(path),
-        m_socketHandle(-1)
+        m_socketHandle(-1),
+        m_targetAddress{}
 {
     // noop
 }

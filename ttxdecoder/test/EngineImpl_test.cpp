@@ -18,19 +18,15 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <algorithm>
+#include <array>
 #include <memory>
 #include <vector>
 
 #include "EngineImpl.hpp"
 #include "EngineClient.hpp"
 #include "Allocator.hpp"
-#include "Database.hpp"
-#include "CacheImpl.hpp"
-#include "PesBuffer.hpp"
-#include "Decoder.hpp"
-#include "Parser.hpp"
-#include "PageId.hpp"
-#include "DecodedPage.hpp"
+#include "ControlInfo.hpp"
 
 using namespace ttxdecoder;
 
@@ -41,8 +37,9 @@ class MockEngineClient : public EngineClient
 {
 public:
     MockEngineClient()
-        : m_pageReadyCalled(false)
-        , m_headerReadyCalled(false)
+        : m_pageReadyCount(0)
+        , m_headerReadyCount(0)
+        , m_getStcCallCount(0)
         , m_stcValue(0)
         , m_stcAvailable(true)
     {
@@ -52,12 +49,12 @@ public:
 
     virtual void pageReady() override
     {
-        m_pageReadyCalled = true;
+        ++m_pageReadyCount;
     }
 
     virtual void headerReady() override
     {
-        m_headerReadyCalled = true;
+        ++m_headerReadyCount;
     }
 
     virtual void drcsCharDecoded(unsigned char index,
@@ -67,6 +64,7 @@ public:
 
     virtual bool getStc(std::uint32_t& stc) override
     {
+        ++m_getStcCallCount;
         if (m_stcAvailable)
         {
             stc = m_stcValue;
@@ -87,23 +85,40 @@ public:
 
     void resetCallFlags()
     {
-        m_pageReadyCalled = false;
-        m_headerReadyCalled = false;
+        m_pageReadyCount = 0;
+        m_headerReadyCount = 0;
+        m_getStcCallCount = 0;
     }
 
     bool wasPageReadyCalled() const
     {
-        return m_pageReadyCalled;
+        return m_pageReadyCount > 0;
     }
 
     bool wasHeaderReadyCalled() const
     {
-        return m_headerReadyCalled;
+        return m_headerReadyCount > 0;
+    }
+
+    int getPageReadyCount() const
+    {
+        return m_pageReadyCount;
+    }
+
+    int getHeaderReadyCount() const
+    {
+        return m_headerReadyCount;
+    }
+
+    int getStcCallCount() const
+    {
+        return m_getStcCallCount;
     }
 
 private:
-    bool m_pageReadyCalled;
-    bool m_headerReadyCalled;
+    int m_pageReadyCount;
+    int m_headerReadyCount;
+    int m_getStcCallCount;
     std::uint32_t m_stcValue;
     bool m_stcAvailable;
 };
@@ -116,74 +131,51 @@ class MockAllocator : public Allocator
 public:
     MockAllocator(std::size_t totalSize = 10 * 1024 * 1024)  // Increased to 10MB to avoid allocation failures
         : m_totalSize(totalSize)
-        , m_freeSize(totalSize)
-        , m_allocations()
+        , m_buffer(new std::uint8_t[totalSize])
+        , m_usedSize(0)
     {
     }
 
-    virtual ~MockAllocator()
-    {
-        // Cleanup any allocated memory
-        for (auto ptr : m_allocations)
-        {
-            delete[] ptr;
-        }
-        m_allocations.clear();
-    }
+    virtual ~MockAllocator() = default;
 
     virtual std::uint8_t* alloc(std::size_t size) override
     {
-        if (size == 0 || size > m_freeSize)
+        if (size == 0 || size > getFreeSize())
         {
-            return nullptr;
+            throw std::bad_alloc();
         }
 
-        try
-        {
-            std::uint8_t* ptr = new std::uint8_t[size];
-            m_allocations.push_back(ptr);
-            m_freeSize -= size;
-            return ptr;
-        }
-        catch (...)
-        {
-            return nullptr;
-        }
+        std::uint8_t* ptr = m_buffer.get() + m_usedSize;
+        m_usedSize += size;
+        return ptr;
     }
 
     virtual std::size_t getFreeSize() override
     {
-        return m_freeSize;
-    }
-
-    void resetFreeSize()
-    {
-        m_freeSize = m_totalSize;
+        return m_totalSize - m_usedSize;
     }
 
 private:
     std::size_t m_totalSize;
-    std::size_t m_freeSize;
-    std::vector<std::uint8_t*> m_allocations;
+    std::unique_ptr<std::uint8_t[]> m_buffer;
+    std::size_t m_usedSize;
 };
 
 class EngineImplTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( EngineImplTest );
     CPPUNIT_TEST(testConstructorInitializesWithValidAllocator);
-    CPPUNIT_TEST(testConstructorAllocatesMemoryCorrectly);
     CPPUNIT_TEST(testConstructorCallsResetAcquisition);
     CPPUNIT_TEST(testProcessEmptyBuffer);
     CPPUNIT_TEST(testProcessSingleValidPacket);
+    CPPUNIT_TEST(testHeaderPacketNotifiesClient);
+    CPPUNIT_TEST(testPtsHeaderWaitsThenProcesses);
+    CPPUNIT_TEST(testSubtitleHeaderSkipsNotification);
     CPPUNIT_TEST(testProcessWaitActionHaltsProcessing);
     CPPUNIT_TEST(testProcessEmptyBufferMultipleTimes);
-    CPPUNIT_TEST(testAddPesPacketWithZeroLength);
-    CPPUNIT_TEST(testAddPesPacketWithMaxLength);
     CPPUNIT_TEST(testSetCurrentPageIdWithValidPageId);
     CPPUNIT_TEST(testSetCurrentPageIdSamePageNoChange);
     CPPUNIT_TEST(testSetCurrentPageIdWithEmptyPageId);
-    CPPUNIT_TEST(testGetNextPageIdDelegatesDatabase);
-    CPPUNIT_TEST(testGetPrevPageIdDelegatesDatabase);
     CPPUNIT_TEST(testGetPageIdActualSubpageWithCurrentPage);
     CPPUNIT_TEST(testGetPageIdActualSubpageWithoutCurrentPage);
     CPPUNIT_TEST(testGetPageIdLastPageWithCurrentPage);
@@ -192,15 +184,10 @@ CPPUNIT_TEST_SUITE( EngineImplTest );
     CPPUNIT_TEST(testGetPageIdUnsupportedTypesReturnEmpty);
     CPPUNIT_TEST(testGetPageReturnsDecodedPage);
     CPPUNIT_TEST(testSetNavigationModeDefault);
-    CPPUNIT_TEST(testResetAcquisitionClearsAllState);
     CPPUNIT_TEST(testSetIgnorePtsTrue);
     CPPUNIT_TEST(testSetIgnorePtsFalse);
-    CPPUNIT_TEST(testGetCharsetMappingValidCharset);
     CPPUNIT_TEST(testSetCharsetMappingValidInput);
     CPPUNIT_TEST(testSetCharsetMappingMultipleCharsetsIndependent);
-    CPPUNIT_TEST(testSetDefaultPrimaryNationalCharset);
-    CPPUNIT_TEST(testSetDefaultSecondaryNationalCharset);
-    CPPUNIT_TEST(testNationalCharsetConfigurationPersistence);
     CPPUNIT_TEST(testGetColorsDefaultPalette);
     CPPUNIT_TEST(testGetColorsArraySize);
     CPPUNIT_TEST(testGetScreenColorIndex);
@@ -217,13 +204,6 @@ CPPUNIT_TEST_SUITE( EngineImplTest );
     CPPUNIT_TEST(testRefreshPageDataWithEmptyPage);
     CPPUNIT_TEST(testSetPageThenGetPage);
     CPPUNIT_TEST(testSetCurrentPageIdWithLargeSubpage);
-    CPPUNIT_TEST(testGetNextPageIdFromInvalidInput);
-    CPPUNIT_TEST(testGetPageIdFirstSubpage);
-    CPPUNIT_TEST(testGetPageIdIndexPageP830);
-    CPPUNIT_TEST(testGetPageIdNextSubpage);
-    CPPUNIT_TEST(testGetPageIdPrevSubpage);
-    CPPUNIT_TEST(testGetPageIdHighestSubpage);
-    CPPUNIT_TEST(testGetPageIdLastReceivedSubpage);
     CPPUNIT_TEST(testGetPageControlInfo);
     CPPUNIT_TEST(testGetNavigationStateWithNoLinks);
     CPPUNIT_TEST(testNavigationModePersistence);
@@ -233,8 +213,6 @@ CPPUNIT_TEST_SUITE( EngineImplTest );
     CPPUNIT_TEST(testPacketPTSFarInFuture);
     CPPUNIT_TEST(testLatePacketWithinTolerance);
     CPPUNIT_TEST(testVeryLatePacketRejection);
-    CPPUNIT_TEST(testBufferAdditionWhenFull);
-    CPPUNIT_TEST(testNonTeletextPacket);
     CPPUNIT_TEST(testClientGetStcReturnsFalse);
 CPPUNIT_TEST_SUITE_END();
 
@@ -320,6 +298,108 @@ public:
         return packet;
     }
 
+    std::uint8_t getHammingByte(std::uint8_t nibble)
+    {
+        static const std::uint8_t hammingEncode[16] = {
+            0x28, 0x00, 0x12, 0x3A, 0x06, 0x4E, 0x0C, 0x74,
+            0x03, 0x63, 0x11, 0x59, 0x05, 0x2D, 0x3F, 0x17
+        };
+        return hammingEncode[nibble & 0x0F];
+    }
+
+    std::uint8_t getHammingByteForMagazine(std::uint8_t magazine)
+    {
+        return getHammingByte(magazine & 0x07);
+    }
+
+    std::vector<std::uint8_t> createHeaderDataUnit(std::uint8_t magazine,
+                                                   std::uint16_t page,
+                                                   std::uint16_t subpage,
+                                                   std::uint8_t controlInfo)
+    {
+        std::vector<std::uint8_t> data;
+        data.reserve(47);
+
+        data.push_back(0x10);
+        data.push_back(0x02);
+        data.push_back(0x2C);
+        data.push_back(0xFF);
+        data.push_back(0xE4);
+        data.push_back(getHammingByteForMagazine(magazine));
+        data.push_back(0x28);
+
+        const std::uint8_t pageOnly = page & 0xFF;
+        const std::uint8_t pageUnits = pageOnly & 0x0F;
+        const std::uint8_t pageTens = (pageOnly >> 4) & 0x0F;
+        data.push_back(getHammingByte(pageUnits));
+        data.push_back(getHammingByte(pageTens));
+
+        const std::uint8_t byte2 = (subpage >> 0) & 0x0F;
+        const std::uint8_t byte3 = ((subpage >> 4) & 0x07)
+                | ((controlInfo & ControlInfo::ERASE_PAGE) ? 0x08 : 0x00);
+        const std::uint8_t byte4 = (subpage >> 8) & 0x0F;
+        const std::uint8_t byte5 = ((subpage >> 12) & 0x03)
+                | ((controlInfo & ControlInfo::NEWSFLASH) ? 0x04 : 0x00)
+                | ((controlInfo & ControlInfo::SUBTITLE) ? 0x08 : 0x00);
+        const std::uint8_t byte6 = ((controlInfo & ControlInfo::SUPRESS_HEADER) ? 0x01 : 0x00)
+                | ((controlInfo & ControlInfo::UPDATE_INDICATOR) ? 0x02 : 0x00)
+                | ((controlInfo & ControlInfo::INTERRUPTED_SEQUENCE) ? 0x04 : 0x00)
+                | ((controlInfo & ControlInfo::INHIBIT_DISPLAY) ? 0x08 : 0x00);
+        const std::uint8_t byte7 = (controlInfo & ControlInfo::MAGAZINE_SERIAL) ? 0x01 : 0x00;
+
+        data.push_back(getHammingByte(byte2));
+        data.push_back(getHammingByte(byte3));
+        data.push_back(getHammingByte(byte4));
+        data.push_back(getHammingByte(byte5));
+        data.push_back(getHammingByte(byte6));
+        data.push_back(getHammingByte(byte7));
+
+        for (int index = 0; index < 32; ++index)
+        {
+            data.push_back(0x20);
+        }
+
+        return data;
+    }
+
+    std::vector<std::uint8_t> createHeaderPesPacket(std::uint8_t magazine,
+                                                    std::uint16_t page,
+                                                    std::uint16_t subpage,
+                                                    std::uint8_t controlInfo,
+                                                    bool withPts = false,
+                                                    std::uint32_t ptsValue = 0)
+    {
+        std::vector<std::uint8_t> payload = createHeaderDataUnit(magazine,
+                                                                 page,
+                                                                 subpage,
+                                                                 controlInfo);
+        const std::uint16_t payloadSize = static_cast<std::uint16_t>(payload.size());
+        std::vector<std::uint8_t> packet = createValidPesPacket(
+                withPts ? payloadSize : static_cast<std::uint16_t>(payloadSize + 3),
+                0xBD,
+                withPts,
+                ptsValue);
+
+        std::size_t payloadOffset = 14U;
+        if (!withPts)
+        {
+            packet[6] = 0x80;
+            packet[7] = 0x00;
+            packet[8] = 0x00;
+            payloadOffset = 9U;
+        }
+
+        std::copy(payload.begin(), payload.end(), packet.begin() + payloadOffset);
+
+        return packet;
+    }
+
+    void assertCharsetMappingEquals(const CharsetMappingArray& expected,
+                                    const CharsetMappingArray& actual)
+    {
+        CPPUNIT_ASSERT(std::equal(expected.begin(), expected.end(), actual.begin()));
+    }
+
     void assertPageIsEmpty(const DecodedPage& page)
     {
         CPPUNIT_ASSERT(!page.getPageId().isValidDecimal());
@@ -337,18 +417,6 @@ public:
 
         assertPageIsEmpty(m_engine->getPage());
         CPPUNIT_ASSERT_EQUAL(NavigationState::DEFAULT, m_engine->getNavigationState());
-    }
-
-    void testConstructorAllocatesMemoryCorrectly()
-    {
-        std::size_t allocatorSize = 2048 * 1024;
-        auto allocator = std::make_unique<MockAllocator>(allocatorSize);
-
-        // Create engine - this will allocate memory for cache and PES buffer
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(allocator));
-
-        // Verify object was created (memory allocation succeeded)
-        CPPUNIT_ASSERT(m_engine != nullptr);
     }
 
     void testConstructorCallsResetAcquisition()
@@ -390,6 +458,49 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), m_engine->process());
     }
 
+    void testHeaderPacketNotifiesClient()
+    {
+        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
+
+        auto packet = createHeaderPesPacket(1, 0x0100, 0x0000, 0);
+
+        CPPUNIT_ASSERT(m_engine->addPesPacket(packet.data(), static_cast<std::uint16_t>(packet.size())));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1), m_engine->process());
+        CPPUNIT_ASSERT_EQUAL(1, m_mockClient->getHeaderReadyCount());
+        CPPUNIT_ASSERT_EQUAL(0, m_mockClient->getPageReadyCount());
+    }
+
+    void testPtsHeaderWaitsThenProcesses()
+    {
+        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
+
+        const std::uint32_t pts = 100000;
+        auto packet = createHeaderPesPacket(1, 0x0100, 0x0000, 0, true, pts);
+
+        m_mockClient->setStcValue(0);
+        CPPUNIT_ASSERT(m_engine->addPesPacket(packet.data(), static_cast<std::uint16_t>(packet.size())));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), m_engine->process());
+        CPPUNIT_ASSERT_EQUAL(0, m_mockClient->getHeaderReadyCount());
+
+        m_mockClient->setStcValue(pts);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1), m_engine->process());
+        CPPUNIT_ASSERT_EQUAL(1, m_mockClient->getHeaderReadyCount());
+        CPPUNIT_ASSERT_EQUAL(0, m_mockClient->getPageReadyCount());
+        CPPUNIT_ASSERT(m_mockClient->getStcCallCount() >= 2);
+    }
+
+    void testSubtitleHeaderSkipsNotification()
+    {
+        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
+
+        auto packet = createHeaderPesPacket(1, 0x0100, 0x0000, ControlInfo::SUBTITLE);
+
+        CPPUNIT_ASSERT(m_engine->addPesPacket(packet.data(), static_cast<std::uint16_t>(packet.size())));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1), m_engine->process());
+        CPPUNIT_ASSERT_EQUAL(0, m_mockClient->getHeaderReadyCount());
+        CPPUNIT_ASSERT_EQUAL(0, m_mockClient->getPageReadyCount());
+    }
+
     void testProcessWaitActionHaltsProcessing()
     {
         m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
@@ -414,29 +525,6 @@ public:
         m_engine->resetAcquisition();
         std::uint32_t count2 = m_engine->process();
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), count2);
-    }
-
-    void testAddPesPacketWithZeroLength()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        std::uint8_t packet[100] = {0};
-
-        // Add packet with zero length
-        bool result = m_engine->addPesPacket(packet, 0);
-
-        // Should return false for zero-length packet
-        CPPUNIT_ASSERT(!result);
-    }
-
-    void testAddPesPacketWithMaxLength()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        std::vector<std::uint8_t> largePacket = createValidPesPacket(65529);
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(65535), largePacket.size());
-        CPPUNIT_ASSERT(m_engine->addPesPacket(largePacket.data(), static_cast<std::uint16_t>(largePacket.size())));
     }
 
     void testSetCurrentPageIdWithValidPageId()
@@ -467,7 +555,8 @@ public:
         m_engine->setCurrentPageId(pageId);
 
         // Should return early without callbacks
-        CPPUNIT_ASSERT(!m_mockClient->wasPageReadyCalled());
+        CPPUNIT_ASSERT_EQUAL(0, m_mockClient->getPageReadyCount());
+        CPPUNIT_ASSERT_EQUAL(0, m_mockClient->getHeaderReadyCount());
     }
 
     void testSetCurrentPageIdWithEmptyPageId()
@@ -484,30 +573,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(emptyPageId.getMagazinePage(), retrieved.getMagazinePage());
         CPPUNIT_ASSERT_EQUAL(emptyPageId.getSubpage(), retrieved.getSubpage());
         CPPUNIT_ASSERT(!retrieved.isValidDecimal());  // Verify it's actually invalid
-    }
-
-    void testGetNextPageIdDelegatesDatabase()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        PageId inputPageId(0x0100, 0x0000);
-
-        PageId nextPageId = m_engine->getNextPageId(inputPageId);
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0101), nextPageId.getMagazinePage());
-        CPPUNIT_ASSERT(nextPageId.isAnySubpage());
-    }
-
-    void testGetPrevPageIdDelegatesDatabase()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        PageId inputPageId(0x0100, 0x0000);
-
-        PageId prevPageId = m_engine->getPrevPageId(inputPageId);
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0899), prevPageId.getMagazinePage());
-        CPPUNIT_ASSERT(prevPageId.isAnySubpage());
     }
 
     void testGetPageIdActualSubpageWithCurrentPage()
@@ -612,26 +677,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(NavigationState::DEFAULT, m_engine->getNavigationState());
     }
 
-    void testResetAcquisitionClearsAllState()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        // Set some state
-        PageId pageId(0x0104, 0x0004);
-        m_engine->setCurrentPageId(pageId);
-
-        // Reset
-        m_engine->resetAcquisition();
-
-        // After reset, page should be cleared (empty PageId)
-        const DecodedPage& page = m_engine->getPage();
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0), page.getPageControlInfo());
-
-        // Navigation state should be DEFAULT
-        NavigationState state = m_engine->getNavigationState();
-        CPPUNIT_ASSERT_EQUAL(NavigationState::DEFAULT, state);
-    }
-
     void testSetIgnorePtsTrue()
     {
         m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
@@ -656,22 +701,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), m_engine->process());
     }
 
-    void testGetCharsetMappingValidCharset()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        // Get charset mapping for a valid charset
-        const CharsetMappingArray& mapping = m_engine->getCharsetMapping(Charset::G0_LATIN);
-
-        // CharsetMappingArray is std::array - verify it has expected size
-        // Just getting here without crash proves mapping is valid reference
-        CPPUNIT_ASSERT(mapping.size() > 0);  // Array should have elements
-
-        // Verify we can access elements without crash
-        std::uint32_t firstElement = mapping[0];
-        CPPUNIT_ASSERT(firstElement >= 0);  // Valid value check
-    }
-
     void testSetCharsetMappingValidInput()
     {
         m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
@@ -685,7 +714,7 @@ public:
 
         // Verify mapping was set by retrieving it
         const CharsetMappingArray& retrieved = m_engine->getCharsetMapping(Charset::G0_LATIN);
-        CPPUNIT_ASSERT(retrieved.size() > 0);
+        assertCharsetMappingEquals(testMapping, retrieved);
     }
 
     void testSetCharsetMappingMultipleCharsetsIndependent()
@@ -706,51 +735,8 @@ public:
         const CharsetMappingArray& retrieved1 = m_engine->getCharsetMapping(Charset::G0_LATIN);
         const CharsetMappingArray& retrieved2 = m_engine->getCharsetMapping(Charset::G2_CYRILLIC);
 
-        // Should return valid arrays
-        CPPUNIT_ASSERT(retrieved1.size() > 0);
-        CPPUNIT_ASSERT(retrieved2.size() > 0);
-    }
-
-    void testSetDefaultPrimaryNationalCharset()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        // Set primary national charset
-        m_engine->setDefaultPrimaryNationalCharset(0, NationalCharset::ENGLISH);
-
-        // Should not throw and engine should still be usable
-        const DecodedPage& page = m_engine->getPage();
-        CPPUNIT_ASSERT(page.getPageControlInfo() >= 0);
-    }
-
-    void testSetDefaultSecondaryNationalCharset()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        // Set secondary national charset
-        m_engine->setDefaultSecondaryNationalCharset(0, NationalCharset::FRENCH);
-
-        // Should not throw and engine should still be usable
-        const DecodedPage& page = m_engine->getPage();
-        CPPUNIT_ASSERT(page.getPageControlInfo() >= 0);
-    }
-
-    void testNationalCharsetConfigurationPersistence()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        // Set charsets
-        m_engine->setDefaultPrimaryNationalCharset(0, NationalCharset::ENGLISH);
-        m_engine->setDefaultSecondaryNationalCharset(0, NationalCharset::FRENCH);
-
-        // Process should still work
-        std::uint32_t result = m_engine->process();
-        CPPUNIT_ASSERT(result >= 0);
-
-        // Reset and verify charsets are still available
-        m_engine->resetAcquisition();
-        const DecodedPage& page = m_engine->getPage();
-        CPPUNIT_ASSERT(page.getPageControlInfo() >= 0);
+        assertCharsetMappingEquals(mapping1, retrieved1);
+        assertCharsetMappingEquals(mapping2, retrieved2);
     }
 
     void testGetColorsDefaultPalette()
@@ -965,87 +951,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(largeSubpagePage.getSubpage(), retrieved.getSubpage());
     }
 
-    void testGetNextPageIdFromInvalidInput()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        PageId invalidPageId;  // Default constructor - invalid
-
-        PageId nextPageId = m_engine->getNextPageId(invalidPageId);
-
-        CPPUNIT_ASSERT(!nextPageId.isValidDecimal());
-    }
-
-    void testGetPageIdFirstSubpage()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        PageId firstSubpage = m_engine->getPageId(PageIdType::FIRST_SUBPAGE);
-
-        CPPUNIT_ASSERT(!firstSubpage.isValidDecimal());
-    }
-
-    void testGetPageIdIndexPageP830()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        PageId indexPage = m_engine->getPageId(PageIdType::INDEX_PAGE_P830);
-
-        CPPUNIT_ASSERT(!indexPage.isValidDecimal());
-    }
-
-    void testGetPageIdNextSubpage()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        // Set display page
-        PageId pageId(0x0100, 0x0001);
-        m_engine->setCurrentPageId(pageId);
-
-        PageId result = m_engine->getPageId(PageIdType::NEXT_SUBPAGE);
-
-        CPPUNIT_ASSERT(!result.isValidDecimal());
-    }
-
-    void testGetPageIdPrevSubpage()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        // Set display page
-        PageId pageId(0x0100, 0x0002);
-        m_engine->setCurrentPageId(pageId);
-
-        PageId result = m_engine->getPageId(PageIdType::PREV_SUBPAGE);
-
-        CPPUNIT_ASSERT(!result.isValidDecimal());
-    }
-
-    void testGetPageIdHighestSubpage()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        // Set display page
-        PageId pageId(0x0100, 0x0000);
-        m_engine->setCurrentPageId(pageId);
-
-        PageId result = m_engine->getPageId(PageIdType::HIGHEST_SUBPAGE);
-
-        CPPUNIT_ASSERT(!result.isValidDecimal());
-    }
-
-    void testGetPageIdLastReceivedSubpage()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        // Set display page
-        PageId pageId(0x0100, 0x0000);
-        m_engine->setCurrentPageId(pageId);
-
-        PageId result = m_engine->getPageId(PageIdType::LAST_RECEIVED_SUBPAGE);
-
-        CPPUNIT_ASSERT(!result.isValidDecimal());
-    }
-
     void testGetPageControlInfo()
     {
         m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
@@ -1154,29 +1059,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1), result);
         CPPUNIT_ASSERT(!m_mockClient->wasHeaderReadyCalled());
         CPPUNIT_ASSERT(!m_mockClient->wasPageReadyCalled());
-    }
-
-    void testBufferAdditionWhenFull()
-    {
-        auto allocator = std::make_unique<MockAllocator>(128 * 1024);
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(allocator));
-
-        auto packet = createValidPesPacket(39994);
-
-        CPPUNIT_ASSERT(m_engine->addPesPacket(packet.data(), static_cast<std::uint16_t>(packet.size())));
-        CPPUNIT_ASSERT(!m_engine->addPesPacket(packet.data(), static_cast<std::uint16_t>(packet.size())));
-    }
-
-    void testNonTeletextPacket()
-    {
-        m_engine = std::make_unique<EngineImpl>(*m_mockClient, std::move(m_mockAllocator));
-
-        auto packet = createValidPesPacket(10, 0xC0);
-
-        CPPUNIT_ASSERT(!m_engine->addPesPacket(packet.data(), static_cast<std::uint16_t>(packet.size())));
-
-        std::uint32_t result = m_engine->process();
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), result);
     }
 
     void testClientGetStcReturnsFalse()

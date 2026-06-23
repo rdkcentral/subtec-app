@@ -20,6 +20,10 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <memory>
+#include <stdexcept>
+#include <string>
+
 #include "DecodedPage.hpp"
 
 using namespace ttxdecoder;
@@ -124,6 +128,20 @@ protected:
             CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, linkValue.getMagazinePage());
             CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, linkValue.getSubpage());
         }
+
+        // Verify rows are initialized to cleared values
+        for (std::size_t rowIndex = 0; rowIndex < page.getRowCount(); ++rowIndex)
+        {
+            const DecodedPageRow& row = page.getRow(rowIndex);
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(' '),
+                               row.m_levelOnePageSegment.m_charArray[0]);
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0),
+                               row.m_levelOnePageSegment.m_bgColorIndexArray[0]);
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0),
+                               row.m_levelOnePageSegment.m_fgColorIndexArray[0]);
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0),
+                               row.m_levelOnePageSegment.m_propertiesArray[0]);
+        }
     }
 
     void testMultipleObjectInstantiation()
@@ -179,6 +197,12 @@ protected:
         m_page->setPageId(testId);
         m_page->setPageControlInfo(0xFF);
 
+        DecodedPageRow& row = m_page->getRow(0);
+        row.m_levelOnePageSegment.m_charArray[0] = 0x1234;
+        row.m_levelOnePageSegment.m_bgColorIndexArray[0] = 0xAA;
+        row.m_levelOnePageSegment.m_fgColorIndexArray[0] = 0xBB;
+        row.m_levelOnePageSegment.m_propertiesArray[0] = 0x5678;
+
         // Set all color links
         PageId linkId1(0x101, 0x0001);
         PageId linkId2(0x102, 0x0002);
@@ -198,7 +222,17 @@ protected:
         // Verify all fields are reset
         PageId pageId = m_page->getPageId();
         CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, pageId.getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, pageId.getSubpage());
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), m_page->getPageControlInfo());
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(' '),
+                           m_page->getRow(0).m_levelOnePageSegment.m_charArray[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0),
+                           m_page->getRow(0).m_levelOnePageSegment.m_bgColorIndexArray[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0),
+                           m_page->getRow(0).m_levelOnePageSegment.m_fgColorIndexArray[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0),
+                           m_page->getRow(0).m_levelOnePageSegment.m_propertiesArray[0]);
 
         // Verify all color links are reset
         for (int i = 0; i <= static_cast<int>(DecodedPage::Link::LAST); ++i)
@@ -206,6 +240,7 @@ protected:
             DecodedPage::Link link = static_cast<DecodedPage::Link>(i);
             const PageId& linkValue = m_page->getColourKeyLink(link);
             CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, linkValue.getMagazinePage());
+            CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, linkValue.getSubpage());
         }
     }
 
@@ -253,13 +288,14 @@ protected:
 
     void testSetPageIdWithNullPage()
     {
-        PageId testId(0x00FF, 0x3F7F);
+        PageId testId(NULL_MAGAZINE_PAGE_MASK, NULL_SUBPAGE);
         m_page->setPageId(testId);
 
         PageId retrievedId = m_page->getPageId();
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x00FF), retrievedId.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x3F7F), retrievedId.getSubpage());
+        CPPUNIT_ASSERT_EQUAL(NULL_MAGAZINE_PAGE_MASK, retrievedId.getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(NULL_SUBPAGE, retrievedId.getSubpage());
         CPPUNIT_ASSERT(retrievedId.isNull());
+        CPPUNIT_ASSERT(retrievedId.isAnySubpage());
     }
 
     void testOverwriteExistingPageId()
@@ -348,9 +384,9 @@ protected:
 
     void testGetRowCountOnNewPage()
     {
+        // A new page exposes rows 0..25, including the header row.
         std::size_t rowCount = m_page->getRowCount();
         CPPUNIT_ASSERT_EQUAL(MAX_ROWS, rowCount);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(26), rowCount);
     }
 
     void testGetRowCountAfterClear()
@@ -603,13 +639,14 @@ protected:
 
     void testSetColorLinkWithNullPageId()
     {
-        PageId nullId(0x00FF, 0x3F7F);
+        PageId nullId(NULL_MAGAZINE_PAGE_MASK, NULL_SUBPAGE);
         m_page->setColourKeyLink(DecodedPage::Link::CYAN, nullId);
 
         const PageId& retrievedLink = m_page->getColourKeyLink(DecodedPage::Link::CYAN);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x00FF), retrievedLink.getMagazinePage());
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x3F7F), retrievedLink.getSubpage());
+        CPPUNIT_ASSERT_EQUAL(NULL_MAGAZINE_PAGE_MASK, retrievedLink.getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(NULL_SUBPAGE, retrievedLink.getSubpage());
         CPPUNIT_ASSERT(retrievedLink.isNull());
+        CPPUNIT_ASSERT(retrievedLink.isAnySubpage());
     }
 
     void testSetColorLinkWithBoundaryPageIds()
@@ -659,6 +696,8 @@ protected:
             DecodedPageRow& row = m_page->getRow(i);
             row.m_levelOnePageSegment.m_charArray[0] = 0xFFFF;
             row.m_levelOnePageSegment.m_bgColorIndexArray[0] = 0xAA;
+            row.m_levelOnePageSegment.m_fgColorIndexArray[0] = 0xBB;
+            row.m_levelOnePageSegment.m_propertiesArray[0] = 0x1234;
         }
 
         m_page->clear();
@@ -671,6 +710,10 @@ protected:
                                row.m_levelOnePageSegment.m_charArray[0]);
             CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0),
                                row.m_levelOnePageSegment.m_bgColorIndexArray[0]);
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0),
+                               row.m_levelOnePageSegment.m_fgColorIndexArray[0]);
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0),
+                               row.m_levelOnePageSegment.m_propertiesArray[0]);
         }
     }
 
@@ -887,7 +930,7 @@ protected:
 
         for (int i = 0; i < NUM_INSTANCES; ++i)
         {
-            DecodedPage* page = new DecodedPage();
+            std::unique_ptr<DecodedPage> page = std::make_unique<DecodedPage>();
 
             // Set some data
             PageId pageId(0x100 + i, 0x0001);
@@ -901,8 +944,6 @@ protected:
                                page->getPageId().getSubpage());
             CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(i),
                                page->getPageControlInfo());
-
-            delete page;
         }
     }
 

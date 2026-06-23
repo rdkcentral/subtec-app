@@ -56,12 +56,19 @@ bool hasOddParity(std::uint8_t value)
 
 std::uint8_t encode84(std::uint8_t nibble)
 {
-    static const std::uint8_t hammingEncode[16] = {
-        0x28, 0x00, 0x12, 0x3A, 0x06, 0x4E, 0x0C, 0x74,
-        0x03, 0x63, 0x11, 0x59, 0x05, 0x2D, 0x3F, 0x17
-    };
+    const std::uint8_t data1 = static_cast<std::uint8_t>((nibble >> 0) & 0x01);
+    const std::uint8_t data2 = static_cast<std::uint8_t>((nibble >> 1) & 0x01);
+    const std::uint8_t data3 = static_cast<std::uint8_t>((nibble >> 2) & 0x01);
+    const std::uint8_t data4 = static_cast<std::uint8_t>((nibble >> 3) & 0x01);
 
-    return hammingEncode[nibble & 0x0F];
+    const std::uint8_t parity1 = static_cast<std::uint8_t>(1 ^ data1 ^ data3 ^ data4);
+    const std::uint8_t parity2 = static_cast<std::uint8_t>(1 ^ data1 ^ data2 ^ data4);
+    const std::uint8_t parity3 = static_cast<std::uint8_t>(1 ^ data1 ^ data2 ^ data3);
+    const std::uint8_t parity4 = static_cast<std::uint8_t>(1 ^ parity1 ^ data1 ^ parity2 ^ data2 ^ parity3 ^ data3 ^ data4);
+
+    return static_cast<std::uint8_t>((parity1 << 7) | (data1 << 6) | (parity2 << 5)
+        | (data2 << 4) | (parity3 << 3) | (data3 << 2) | (parity4 << 1)
+        | (data4 << 0));
 }
 
 std::uint8_t encodeParityProtectedByte(std::uint8_t payload)
@@ -144,12 +151,11 @@ CPPUNIT_TEST_SUITE( HammingTest );
     CPPUNIT_TEST( test_decode2418_corrects_single_bit_errors );
     CPPUNIT_TEST( test_decode2418_rejects_double_bit_errors );
     CPPUNIT_TEST( test_decode84_decodes_canonical_codewords );
-    CPPUNIT_TEST( test_decode84_corrects_single_bit_errors );
-    CPPUNIT_TEST( test_decode84_rejects_known_invalid_codewords );
+    CPPUNIT_TEST( test_decode84_corrects_all_single_bit_errors );
+    CPPUNIT_TEST( test_decode84_rejects_invalid_codewords );
     CPPUNIT_TEST( test_decodeParity_round_trips_full_payload_range );
     CPPUNIT_TEST( test_decodeParity_rejects_invalid_parity );
     CPPUNIT_TEST( test_decodeParity_masks_parity_bit );
-    CPPUNIT_TEST( test_decoders_are_stateless );
 
 CPPUNIT_TEST_SUITE_END();
 
@@ -189,18 +195,27 @@ public:
 
     void test_decode2418_rejects_double_bit_errors()
     {
-        const std::uint32_t value = 0x2AAAA;
-        std::array<std::uint8_t, 3> corrupted = encode2418(value);
+        const std::uint32_t values[] = {0x00000, 0x12345, 0x3FFFF};
 
-        corrupted[0] = static_cast<std::uint8_t>(corrupted[0] ^ 0x01);
-        corrupted[1] = static_cast<std::uint8_t>(corrupted[1] ^ 0x01);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1),
-            m_hamming.decode2418(corrupted[0], corrupted[1], corrupted[2]));
+        for (std::uint32_t value : values)
+        {
+            const std::array<std::uint8_t, 3> encoded = encode2418(value);
 
-        corrupted = encode2418(value);
-        corrupted[2] = static_cast<std::uint8_t>(corrupted[2] ^ 0x03);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1),
-            m_hamming.decode2418(corrupted[0], corrupted[1], corrupted[2]));
+            for (std::size_t firstBit = 0; firstBit < 24; ++firstBit)
+            {
+                for (std::size_t secondBit = firstBit + 1; secondBit < 24; ++secondBit)
+                {
+                    std::array<std::uint8_t, 3> corrupted = encoded;
+                    corrupted[firstBit / 8] = static_cast<std::uint8_t>(
+                        corrupted[firstBit / 8] ^ (0x01u << (firstBit % 8)));
+                    corrupted[secondBit / 8] = static_cast<std::uint8_t>(
+                        corrupted[secondBit / 8] ^ (0x01u << (secondBit % 8)));
+
+                    CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1),
+                        m_hamming.decode2418(corrupted[0], corrupted[1], corrupted[2]));
+                }
+            }
+        }
     }
 
     void test_decode84_decodes_canonical_codewords()
@@ -211,19 +226,43 @@ public:
         }
     }
 
-    void test_decode84_corrects_single_bit_errors()
+    void test_decode84_corrects_all_single_bit_errors()
     {
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x08), m_hamming.decode84(0x03));
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x0C), m_hamming.decode84(0x05));
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x04), m_hamming.decode84(0x06));
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x0E), m_hamming.decode84(0xFF));
+        for (std::uint8_t nibble = 0; nibble < 16; ++nibble)
+        {
+            const std::uint8_t encoded = encode84(nibble);
+
+            for (std::uint8_t bitMask = 0x01; bitMask != 0; bitMask = static_cast<std::uint8_t>(bitMask << 1))
+            {
+                CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(nibble),
+                    m_hamming.decode84(static_cast<std::uint8_t>(encoded ^ bitMask)));
+            }
+        }
     }
 
-    void test_decode84_rejects_known_invalid_codewords()
+    void test_decode84_rejects_invalid_codewords()
     {
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(-1), m_hamming.decode84(0x01));
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(-1), m_hamming.decode84(0x02));
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(-1), m_hamming.decode84(0x04));
+        std::array<bool, 256> correctable{};
+
+        for (std::uint8_t nibble = 0; nibble < 16; ++nibble)
+        {
+            const std::uint8_t encoded = encode84(nibble);
+            correctable[encoded] = true;
+
+            for (std::uint8_t bitMask = 0x01; bitMask != 0; bitMask = static_cast<std::uint8_t>(bitMask << 1))
+            {
+                correctable[static_cast<std::uint8_t>(encoded ^ bitMask)] = true;
+            }
+        }
+
+        for (std::size_t encoded = 0; encoded < correctable.size(); ++encoded)
+        {
+            if (!correctable[encoded])
+            {
+                CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(-1),
+                    m_hamming.decode84(static_cast<std::uint8_t>(encoded)));
+            }
+        }
     }
 
     void test_decodeParity_round_trips_full_payload_range()
@@ -253,20 +292,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x7F), m_hamming.decodeParity(encodeParityProtectedByte(0x7F)));
     }
 
-    void test_decoders_are_stateless()
-    {
-        const std::array<std::uint8_t, 3> encoded2418 = encode2418(0x12345);
-        const std::int32_t first2418 = m_hamming.decode2418(encoded2418[0], encoded2418[1], encoded2418[2]);
-
-        m_hamming.decode84(encode84(0x09));
-        m_hamming.decodeParity(encodeParityProtectedByte(0x35));
-
-        CPPUNIT_ASSERT_EQUAL(first2418,
-            m_hamming.decode2418(encoded2418[0], encoded2418[1], encoded2418[2]));
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x09), m_hamming.decode84(encode84(0x09)));
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(0x35),
-            m_hamming.decodeParity(encodeParityProtectedByte(0x35)));
-    }
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION( HammingTest );

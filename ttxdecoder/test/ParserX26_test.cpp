@@ -90,17 +90,20 @@ CPPUNIT_TEST_SUITE(ParserX26Test);
     CPPUNIT_TEST(testPacketTripletsSetAndGetTripletValue);
     CPPUNIT_TEST(testPacketTripletsInvalidIndexReturnsMax);
     CPPUNIT_TEST(testPacketTripletsAllThirteenTriplets);
-    CPPUNIT_TEST(testParsePageWithEmptyDisplayable);
-    CPPUNIT_TEST(testParsePageFullModeLevel1);
-    CPPUNIT_TEST(testParsePageFullModeLevel1_5);
-    CPPUNIT_TEST(testParsePageX26MapsAddress40ToRow24);
-    CPPUNIT_TEST(testParsePageX26AddressDisplayRow0TargetsHeaderRow);
-    CPPUNIT_TEST(testParsePageX26SmoothMosaicWritesCharacter);
-    CPPUNIT_TEST(testParsePageX26CharacterFromG2WritesMappedCharacter);
-    CPPUNIT_TEST(testParsePageX26AppliesDiacriticProperty);
-    CPPUNIT_TEST(testParsePageX26TerminationMarkerStopsProcessing);
-    CPPUNIT_TEST(testParsePageX26TerminationMarkerWithHighBitsStopsProcessing);
-    CPPUNIT_TEST(testParsePageX26IgnoresNonPrintableData);
+    CPPUNIT_TEST(testEmptyDisplayable);
+    CPPUNIT_TEST(testFullModeLevel1);
+    CPPUNIT_TEST(testFullModeLevel15);
+    CPPUNIT_TEST(testAddress40MapsToRow24);
+    CPPUNIT_TEST(testAddressDisplayRow0TargetsHeader);
+    CPPUNIT_TEST(testSmoothMosaicWritesCharacter);
+    CPPUNIT_TEST(testG2CharacterWritesMappedCharacter);
+    CPPUNIT_TEST(testDiacriticPropertyApplied);
+    CPPUNIT_TEST(testTerminationMarkerStopsProcessing);
+    CPPUNIT_TEST(testTerminationMarkerWithHighBitsStopsProcessing);
+    CPPUNIT_TEST(testContinuesAcrossPackets);
+    CPPUNIT_TEST(testLaterPacketTerminationStopsFollowingPackets);
+    CPPUNIT_TEST(testUnsupportedPrintableModeIgnored);
+    CPPUNIT_TEST(testNonPrintableDataIgnored);
 
 CPPUNIT_TEST_SUITE_END();
 
@@ -145,7 +148,8 @@ private:
 
     PacketTriplets& configureX26Packet(PageDisplayable& page,
                                        std::int8_t designationCode,
-                                       std::initializer_list<std::uint32_t> triplets)
+                                       std::initializer_list<std::uint32_t> triplets,
+                                       std::uint32_t trailingValue = 0x7FF)
     {
         auto* packet = static_cast<PacketTriplets*>(page.takePacket(26, designationCode));
         CPPUNIT_ASSERT(packet != nullptr);
@@ -154,7 +158,7 @@ private:
 
         for (std::size_t i = 0; i < PacketTriplets::TRIPLET_COUNT; ++i)
         {
-            packet->setTripletValue(i, 0x7FF);
+            packet->setTripletValue(i, trailingValue);
         }
 
         std::size_t index = 0;
@@ -218,7 +222,7 @@ private:
         }
     }
 
-    void testParsePageWithEmptyDisplayable()
+    void testEmptyDisplayable()
     {
         PacketHeader header;
         createHeaderPacket(header, 100, ControlInfo::ERASE_PAGE);
@@ -236,7 +240,7 @@ private:
                              decodedPage.getPageControlInfo());
     }
 
-    void testParsePageFullModeLevel1()
+    void testFullModeLevel1()
     {
         Database db;
         MockCharsetConfig config;
@@ -257,7 +261,7 @@ private:
                              decodedPage.getPageControlInfo());
     }
 
-    void testParsePageFullModeLevel1_5()
+    void testFullModeLevel15()
     {
         Database db;
         MockCharsetConfig config;
@@ -278,7 +282,7 @@ private:
                              decodedPage.getPageControlInfo());
     }
 
-    void testParsePageX26MapsAddress40ToRow24()
+    void testAddress40MapsToRow24()
     {
         PacketHeader header;
         createHeaderPacket(header, 400, ControlInfo::ERASE_PAGE);
@@ -298,7 +302,7 @@ private:
                              decodedPage.getRow(24).m_levelOnePageSegment.m_charArray[39]);
     }
 
-    void testParsePageX26AddressDisplayRow0TargetsHeaderRow()
+    void testAddressDisplayRow0TargetsHeader()
     {
         PacketHeader header;
         createHeaderPacket(header, 401, ControlInfo::ERASE_PAGE);
@@ -318,7 +322,7 @@ private:
                              decodedPage.getRow(0).m_levelOnePageSegment.m_charArray[5]);
     }
 
-    void testParsePageX26SmoothMosaicWritesCharacter()
+    void testSmoothMosaicWritesCharacter()
     {
         PacketHeader header;
         createHeaderPacket(header, 402, ControlInfo::ERASE_PAGE);
@@ -338,7 +342,7 @@ private:
                              decodedPage.getRow(2).m_levelOnePageSegment.m_charArray[3]);
     }
 
-    void testParsePageX26CharacterFromG2WritesMappedCharacter()
+    void testG2CharacterWritesMappedCharacter()
     {
         PacketHeader header;
         createHeaderPacket(header, 403, ControlInfo::ERASE_PAGE);
@@ -358,7 +362,7 @@ private:
                              decodedPage.getRow(3).m_levelOnePageSegment.m_charArray[4]);
     }
 
-    void testParsePageX26AppliesDiacriticProperty()
+    void testDiacriticPropertyApplied()
     {
         PacketHeader header;
         createHeaderPacket(header, 404, ControlInfo::ERASE_PAGE);
@@ -380,7 +384,7 @@ private:
                              decodedPage.getRow(4).m_levelOnePageSegment.m_propertiesArray[6]);
     }
 
-    void testParsePageX26TerminationMarkerStopsProcessing()
+    void testTerminationMarkerStopsProcessing()
     {
         PacketHeader header;
         createHeaderPacket(header, 405, ControlInfo::ERASE_PAGE);
@@ -405,7 +409,7 @@ private:
                              decodedPage.getRow(2).m_levelOnePageSegment.m_charArray[2]);
     }
 
-    void testParsePageX26TerminationMarkerWithHighBitsStopsProcessing()
+    void testTerminationMarkerWithHighBitsStopsProcessing()
     {
         PacketHeader header;
         createHeaderPacket(header, 406, ControlInfo::ERASE_PAGE);
@@ -430,7 +434,89 @@ private:
                              decodedPage.getRow(2).m_levelOnePageSegment.m_charArray[2]);
     }
 
-    void testParsePageX26IgnoresNonPrintableData()
+    void testContinuesAcrossPackets()
+    {
+        PacketHeader header;
+        createHeaderPacket(header, 408, ControlInfo::ERASE_PAGE);
+
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(45, 0x4, 0),
+                },
+                0);
+        configureX26Packet(page, 1,
+                {
+                    makeTriplet(7, 0x10, 0x2A),
+                });
+
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('`'),
+                             decodedPage.getRow(5).m_levelOnePageSegment.m_charArray[7]);
+    }
+
+    void testLaterPacketTerminationStopsFollowingPackets()
+    {
+        PacketHeader header;
+        createHeaderPacket(header, 409, ControlInfo::ERASE_PAGE);
+
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(41, 0x4, 0),
+                    makeTriplet(1, 0x10, 0x2A),
+            },
+            0);
+        configureX26Packet(page, 1,
+                {
+                    makeTriplet(42, 0x4, 0),
+                    makeTriplet(2, 0x10, 0x2A),
+                    0x7FF,
+                });
+        configureX26Packet(page, 2,
+                {
+                    makeTriplet(43, 0x4, 0),
+                    makeTriplet(3, 0x10, 0x2A),
+                });
+
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('`'),
+                             decodedPage.getRow(1).m_levelOnePageSegment.m_charArray[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('`'),
+                             decodedPage.getRow(2).m_levelOnePageSegment.m_charArray[2]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(' '),
+                             decodedPage.getRow(3).m_levelOnePageSegment.m_charArray[3]);
+    }
+
+    void testUnsupportedPrintableModeIgnored()
+    {
+        PacketHeader header;
+        createHeaderPacket(header, 410, ControlInfo::ERASE_PAGE);
+
+        PageDisplayable page;
+        configureX26Packet(page, 0,
+                {
+                    makeTriplet(43, 0x4, 0),
+                    makeTriplet(4, 0x3, 0x41),
+                });
+
+        DecodedPage decodedPage;
+        m_parser->parsePage(page, header, Parser::Mode::FULL_PAGE,
+                            NavigationMode::DEFAULT, decodedPage);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(' '),
+                             decodedPage.getRow(3).m_levelOnePageSegment.m_charArray[4]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0),
+                             decodedPage.getRow(3).m_levelOnePageSegment.m_propertiesArray[4]);
+    }
+
+    void testNonPrintableDataIgnored()
     {
         PacketHeader header;
         createHeaderPacket(header, 407, ControlInfo::ERASE_PAGE);

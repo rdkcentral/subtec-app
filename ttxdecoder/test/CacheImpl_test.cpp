@@ -48,7 +48,9 @@ CPPUNIT_TEST_SUITE( CacheImplTest );
     CPPUNIT_TEST(testIsPageNeededCurrent);
     CPPUNIT_TEST(testIsPageNeededBasic);
     CPPUNIT_TEST(testIsPageNeededCacheRange);
+    CPPUNIT_TEST(testIsPageNeededWrapRange);
     CPPUNIT_TEST(testIsPageNeededLinkedPages);
+    CPPUNIT_TEST(testLinkedPagesGate);
     CPPUNIT_TEST(testIsPageNeededInvalidDecimal);
     CPPUNIT_TEST(testIsPageNeededBoundaryRange);
     CPPUNIT_TEST(testConstructorZeroSize);
@@ -59,6 +61,7 @@ CPPUNIT_TEST_SUITE( CacheImplTest );
     CPPUNIT_TEST(testPageReuseAfterRelease);
     CPPUNIT_TEST(testSetLinkedPagesNull);
     CPPUNIT_TEST(testInsertInvalidPage);
+    CPPUNIT_TEST(testInsertPageForeign);
     CPPUNIT_TEST(testGetPageAfterClear);
     CPPUNIT_TEST(testPageLifecycleFull);
     CPPUNIT_TEST(testClearDuringActivePages);
@@ -107,7 +110,12 @@ public:
         auto readyPage = cache.getPage(pageId);
         cache.releasePage(readyPage);
 
-        CPPUNIT_ASSERT_NO_THROW(cache.insertPage(mutablePage));
+        cache.insertPage(mutablePage);
+
+        auto updatedPage = cache.getPage(pageId);
+        CPPUNIT_ASSERT(updatedPage != nullptr);
+        CPPUNIT_ASSERT(updatedPage == mutablePage);
+        cache.releasePage(updatedPage);
     }
 
     // Test getPage for a pageId that was never inserted (should return nullptr)
@@ -210,11 +218,16 @@ public:
     // Test constructor with minimum valid buffer size
     void testConstructorMinimumBuffer()
     {
-        // Calculate minimum buffer size needed for CacheImpl
-        auto constexpr MIN_BUFFER_SIZE = 64 * 1024; // Increased to ensure sufficient space
-        std::uint8_t buffer[MIN_BUFFER_SIZE];
+        auto constexpr MIN_PAGES = 1 + 1 + 4 + 3 + 2;
+        auto constexpr MIN_BUFFER_SIZE = sizeof(ttxdecoder::CachePage) * MIN_PAGES;
+        auto constexpr TOO_SMALL_BUFFER_SIZE = MIN_BUFFER_SIZE - 1;
 
-        CPPUNIT_ASSERT_NO_THROW(CacheImpl cache(buffer, MIN_BUFFER_SIZE));
+        std::uint8_t validBuffer[MIN_BUFFER_SIZE];
+        std::uint8_t invalidBuffer[MIN_BUFFER_SIZE];
+
+        CPPUNIT_ASSERT_NO_THROW(CacheImpl cache(validBuffer, MIN_BUFFER_SIZE));
+        CPPUNIT_ASSERT_THROW(CacheImpl cache(invalidBuffer, TOO_SMALL_BUFFER_SIZE),
+                             std::invalid_argument);
     }
 
     // Test basic getMutablePage functionality
@@ -353,11 +366,13 @@ public:
 
         // Test with maximum valid PageId values
         PageId maxPageId{0x8FF, 0x3F7F}; // Maximum valid values
-        CPPUNIT_ASSERT_NO_THROW(cache.setCurrentPage(maxPageId));
+        cache.setCurrentPage(maxPageId);
+        CPPUNIT_ASSERT(cache.isPageNeeded(PageId{0x8FF, 0}));
 
         // Test with minimum valid PageId values
         PageId minPageId{0x100, 0x0000}; // Minimum valid values
-        CPPUNIT_ASSERT_NO_THROW(cache.setCurrentPage(minPageId));
+        cache.setCurrentPage(minPageId);
+        CPPUNIT_ASSERT(cache.isPageNeeded(PageId{0x100, 1}));
     }
 
     // Test getNewestSubpage for non-existing page
@@ -449,7 +464,7 @@ public:
         auto headerPacket = clearPage->takeHeader();
         headerPacket->setPageInfo(pageId, ttxdecoder::ControlInfo::MAGAZINE_SERIAL, 0);
         clearPage->setLastPacketValid(headerPacket);
-        CPPUNIT_ASSERT_NO_THROW(cache.insertPage(clearPage));
+        cache.insertPage(clearPage);
 
         // Should be able to retrieve it since it's the current page
         auto retrievedPage = cache.getPage(pageId);
@@ -476,29 +491,38 @@ public:
 
         // Different magazine page should not be needed (unless in range)
         PageId differentMagazine{400, 0};
-        // This may or may not be needed depending on cache range - just ensure no crash
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(differentMagazine));
+        CPPUNIT_ASSERT(!cache.isPageNeeded(differentMagazine));
     }
 
     // Test isPageNeeded with cache range logic
     void testIsPageNeededCacheRange()
     {
-        auto constexpr BUFFER_SIZE = 64 * 1024;
+        auto constexpr BUFFER_SIZE = 1024 * 1024;
         std::uint8_t buffer[BUFFER_SIZE];
         CacheImpl cache{buffer, BUFFER_SIZE};
 
-        // Use decimal page numbers for cache range testing
         PageId currentPage{0x150, 0}; // Page 150 in decimal
         cache.setCurrentPage(currentPage);
 
-        // Pages close to current should be needed
-        PageId closePage{0x151, 0}; // Page 151
-        // Note: Actual behavior depends on cache range size - just ensure no crash
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(closePage));
+        CPPUNIT_ASSERT(cache.isPageNeeded(PageId{0x100, 0}));
+        CPPUNIT_ASSERT(cache.isPageNeeded(PageId{0x150, 0}));
+        CPPUNIT_ASSERT(cache.isPageNeeded(PageId{0x200, 0}));
+        CPPUNIT_ASSERT(!cache.isPageNeeded(PageId{0x201, 0}));
+    }
 
-        // Very distant pages should not be needed
-        PageId distantPage{0x800, 0}; // Page 800
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(distantPage));
+    void testIsPageNeededWrapRange()
+    {
+        auto constexpr BUFFER_SIZE = 1024 * 1024;
+        std::uint8_t buffer[BUFFER_SIZE];
+        CacheImpl cache{buffer, BUFFER_SIZE};
+
+        cache.setCurrentPage(PageId{0x149, 0});
+        CPPUNIT_ASSERT(cache.isPageNeeded(PageId{0x899, 0}));
+        CPPUNIT_ASSERT(!cache.isPageNeeded(PageId{0x898, 0}));
+
+        cache.setCurrentPage(PageId{0x850, 0});
+        CPPUNIT_ASSERT(cache.isPageNeeded(PageId{0x100, 0}));
+        CPPUNIT_ASSERT(!cache.isPageNeeded(PageId{0x101, 0}));
     }
 
     // Test isPageNeeded with linked pages
@@ -508,21 +532,55 @@ public:
         std::uint8_t buffer[BUFFER_SIZE];
         CacheImpl cache{buffer, BUFFER_SIZE};
 
-        PageId currentPage{300, 0};
-        PageId linkedPages[] = {{400, 0}, {500, 0}, {600, 0}};
+        PageId currentPage{0x200, 0};
+        PageId linkedPages[] = {{0x300, 0}, {0x500, 0}, {0x600, 0}};
 
         cache.setCurrentPage(currentPage);
         cache.setLinkedPages(linkedPages, 3);
 
-        // Current page should be needed
-        CPPUNIT_ASSERT(cache.isPageNeeded(currentPage) == true);
+        auto clearPage = cache.getClearPage();
+        CPPUNIT_ASSERT(clearPage != nullptr);
 
-        // Linked pages should be needed (when current page exists in cache)
-        // Note: This requires the current page to exist in cache for linked pages to be checked
-        // For now, just test that the method doesn't crash
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(linkedPages[0]));
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(linkedPages[1]));
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(linkedPages[2]));
+        auto headerPacket = clearPage->takeHeader();
+        CPPUNIT_ASSERT(headerPacket != nullptr);
+        headerPacket->setPageInfo(currentPage, ttxdecoder::ControlInfo::MAGAZINE_SERIAL, 0);
+        clearPage->setLastPacketValid(headerPacket);
+        cache.insertPage(clearPage);
+
+        CPPUNIT_ASSERT(cache.isPageNeeded(currentPage));
+        CPPUNIT_ASSERT(cache.isPageNeeded(linkedPages[0]));
+        CPPUNIT_ASSERT(cache.isPageNeeded(linkedPages[1]));
+        CPPUNIT_ASSERT(cache.isPageNeeded(linkedPages[2]));
+    }
+
+    void testLinkedPagesGate()
+    {
+        auto constexpr BUFFER_SIZE = 64 * 1024;
+        std::uint8_t buffer[BUFFER_SIZE];
+        CacheImpl cache{buffer, BUFFER_SIZE};
+
+        PageId currentPage{0x200, 0};
+        PageId nextCurrentPage{0x500, 0};
+        PageId linkedPage{0x300, 0};
+
+        cache.setCurrentPage(currentPage);
+        cache.setLinkedPages(&linkedPage, 1);
+
+        CPPUNIT_ASSERT(!cache.isPageNeeded(linkedPage));
+
+        auto clearPage = cache.getClearPage();
+        CPPUNIT_ASSERT(clearPage != nullptr);
+
+        auto headerPacket = clearPage->takeHeader();
+        CPPUNIT_ASSERT(headerPacket != nullptr);
+        headerPacket->setPageInfo(currentPage, ttxdecoder::ControlInfo::MAGAZINE_SERIAL, 0);
+        clearPage->setLastPacketValid(headerPacket);
+        cache.insertPage(clearPage);
+
+        CPPUNIT_ASSERT(cache.isPageNeeded(linkedPage));
+
+        cache.setCurrentPage(nextCurrentPage);
+        CPPUNIT_ASSERT(!cache.isPageNeeded(linkedPage));
     }
 
     // Test isPageNeeded with invalid decimal pages
@@ -541,13 +599,13 @@ public:
 
         // Other invalid decimal pages
         PageId otherInvalid{0xBBB, 0};
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(otherInvalid));
+        CPPUNIT_ASSERT(!cache.isPageNeeded(otherInvalid));
     }
 
     // Test isPageNeeded with boundary range values
     void testIsPageNeededBoundaryRange()
     {
-        auto constexpr BUFFER_SIZE = 64 * 1024;
+        auto constexpr BUFFER_SIZE = 1024 * 1024;
         std::uint8_t buffer[BUFFER_SIZE];
         CacheImpl cache{buffer, BUFFER_SIZE};
 
@@ -556,10 +614,8 @@ public:
         cache.setCurrentPage(edgePage);
 
         CPPUNIT_ASSERT(cache.isPageNeeded(edgePage) == true);
-
-        // Test with maximum valid decimal
-        PageId maxPage{0x899, 0}; // Maximum valid decimal (899)
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(maxPage));
+        CPPUNIT_ASSERT(cache.isPageNeeded(PageId{0x150, 0}));
+        CPPUNIT_ASSERT(!cache.isPageNeeded(PageId{0x151, 0}));
     }
 
     // Test constructor with zero size
@@ -587,8 +643,8 @@ public:
         // Create NULL page (using NULL constants)
         PageId nullPage{0x00FF, 0x3F7F}; // NULL_MAGAZINE_PAGE_MASK and NULL_SUBPAGE
 
-        CPPUNIT_ASSERT_NO_THROW(cache.setCurrentPage(nullPage));
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(nullPage));
+        cache.setCurrentPage(nullPage);
+        CPPUNIT_ASSERT(cache.isPageNeeded(nullPage));
 
         auto page = cache.getPage(nullPage);
         CPPUNIT_ASSERT(page == nullptr); // Should not find NULL page
@@ -604,8 +660,8 @@ public:
         // Create invalid page
         PageId invalidPage{0xFFFF, 0}; // INVALID_MAGAZINE_PAGE
 
-        CPPUNIT_ASSERT_NO_THROW(cache.setCurrentPage(invalidPage));
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(invalidPage));
+        cache.setCurrentPage(invalidPage);
+        CPPUNIT_ASSERT(cache.isPageNeeded(invalidPage));
 
         auto page = cache.getPage(invalidPage);
         CPPUNIT_ASSERT(page == nullptr); // Should not find invalid page
@@ -621,8 +677,8 @@ public:
         // Maximum valid decimal values
         PageId maxValid{0x899, 0x3F7E}; // Max valid decimal page and subpage
 
-        CPPUNIT_ASSERT_NO_THROW(cache.setCurrentPage(maxValid));
-        CPPUNIT_ASSERT_NO_THROW(cache.isPageNeeded(maxValid));
+        cache.setCurrentPage(maxValid);
+        CPPUNIT_ASSERT(cache.isPageNeeded(maxValid));
 
         auto page = cache.getPage(maxValid);
         CPPUNIT_ASSERT(page == nullptr); // Should not find page that wasn't inserted
@@ -690,8 +746,11 @@ public:
 
         PageId currentPage{0x200, 0};
         PageId linkedPages[] = {{0x300, 0}, {0x301, 0}};
+        PageId unrelatedPage{0x400, 0};
 
         cache.setCurrentPage(currentPage);
+        cache.setLinkedPages(nullptr, 2);
+        CPPUNIT_ASSERT(!cache.isPageNeeded(unrelatedPage));
 
         auto clearPage = cache.getClearPage();
         CPPUNIT_ASSERT(clearPage != nullptr);
@@ -707,6 +766,9 @@ public:
         CPPUNIT_ASSERT(cache.isPageNeeded(linkedPages[1]));
 
         cache.setLinkedPages(nullptr, 0);
+        CPPUNIT_ASSERT(cache.isPageNeeded(linkedPages[0]));
+        CPPUNIT_ASSERT(cache.isPageNeeded(linkedPages[1]));
+
         cache.setLinkedPages(nullptr, 5);
 
         CPPUNIT_ASSERT(cache.isPageNeeded(linkedPages[0]));
@@ -727,11 +789,27 @@ public:
 
         // Don't set up the page properly (so isValid() returns false)
         // Just insert it directly without making it valid
-        CPPUNIT_ASSERT_NO_THROW(cache.insertPage(clearPage));
+        cache.insertPage(clearPage);
 
         // Should not be findable since it's invalid
         auto retrievedPage = cache.getPage(pageId);
         CPPUNIT_ASSERT(retrievedPage == nullptr);
+    }
+
+    void testInsertPageForeign()
+    {
+        auto constexpr BUFFER_SIZE = 64 * 1024;
+        std::uint8_t buffer1[BUFFER_SIZE];
+        std::uint8_t buffer2[BUFFER_SIZE];
+        CacheImpl cache1{buffer1, BUFFER_SIZE};
+        CacheImpl cache2{buffer2, BUFFER_SIZE};
+
+        auto foreignPage = cache1.getClearPage();
+        CPPUNIT_ASSERT(foreignPage != nullptr);
+
+        CPPUNIT_ASSERT_THROW(cache2.insertPage(foreignPage), std::invalid_argument);
+
+        cache1.releasePage(foreignPage);
     }
 
     // Test getPage after clear
@@ -787,7 +865,7 @@ public:
         CPPUNIT_ASSERT(clearPage->isValid());
 
         // 4. Insert page
-        CPPUNIT_ASSERT_NO_THROW(cache.insertPage(clearPage));
+        cache.insertPage(clearPage);
 
         // 5. Retrieve page
         auto retrievedPage = cache.getPage(pageId);
@@ -796,7 +874,7 @@ public:
         CPPUNIT_ASSERT(retrievedPage->isValid());
 
         // 6. Release page
-        CPPUNIT_ASSERT_NO_THROW(cache.releasePage(retrievedPage));
+        cache.releasePage(retrievedPage);
     }
 
     // Test clear during active page references
@@ -819,7 +897,7 @@ public:
         CPPUNIT_ASSERT(activePage != nullptr);
 
         // Clear while page is still referenced
-        CPPUNIT_ASSERT_NO_THROW(cache.clear());
+        cache.clear();
 
         // Should still be able to use the active page
         CPPUNIT_ASSERT(activePage->isValid());
@@ -853,7 +931,7 @@ public:
         CPPUNIT_ASSERT(activePage1 != nullptr);
 
         // Change current page while first page is still referenced
-        CPPUNIT_ASSERT_NO_THROW(cache.setCurrentPage(pageId2));
+        cache.setCurrentPage(pageId2);
 
         // First page should still be usable
         CPPUNIT_ASSERT(activePage1->isValid());
@@ -861,6 +939,9 @@ public:
 
         // Release first page
         cache.releasePage(activePage1);
+
+        auto oldPage = cache.getPage(pageId1);
+        CPPUNIT_ASSERT(oldPage == nullptr);
     }
 
     void testGetNewestSubpageMultipleSubpages()

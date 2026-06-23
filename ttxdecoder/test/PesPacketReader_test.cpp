@@ -50,7 +50,6 @@ CPPUNIT_TEST_SUITE( PesPacketReaderTest );
     CPPUNIT_TEST(testComplexOperationSequences);
     CPPUNIT_TEST(testSubReaderMinimalCases);
     CPPUNIT_TEST(testSkipZeroBytes);
-    CPPUNIT_TEST(testEmptyReaderOperations);
     CPPUNIT_TEST(testPeekAtChunkBoundary);
     CPPUNIT_TEST(testReadAtChunkBoundary);
     CPPUNIT_TEST(testSkipAcrossChunkBoundary);
@@ -79,6 +78,10 @@ public:
         CPPUNIT_ASSERT_THROW(reader.peekUint8(), PesPacketReader::Exception);
         CPPUNIT_ASSERT_THROW(reader.readUint8(), PesPacketReader::Exception);
         CPPUNIT_ASSERT_THROW(reader.skip(1), PesPacketReader::Exception);
+
+        // Skip zero should be a no-op even on an empty reader.
+        CPPUNIT_ASSERT_NO_THROW(reader.skip(0));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), reader.getBytesLeft());
     }
 
     void testSimple()
@@ -249,12 +252,19 @@ public:
         // Create sub-reader with exact available count
         PesPacketReader subReader(originalReader, 4);
 
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(4), originalReader.getBytesLeft());
+        CPPUNIT_ASSERT_EQUAL(0x10, static_cast<int>(originalReader.peekUint8()));
+
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(4), subReader.getBytesLeft());
         CPPUNIT_ASSERT_EQUAL(0x10, static_cast<int>(subReader.readUint8()));
         CPPUNIT_ASSERT_EQUAL(0x20, static_cast<int>(subReader.readUint8()));
         CPPUNIT_ASSERT_EQUAL(0x30, static_cast<int>(subReader.readUint8()));
         CPPUNIT_ASSERT_EQUAL(0x40, static_cast<int>(subReader.readUint8()));
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), subReader.getBytesLeft());
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(4), originalReader.getBytesLeft());
+        CPPUNIT_ASSERT_EQUAL(0x10, static_cast<int>(originalReader.readUint8()));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(3), originalReader.getBytesLeft());
     }
 
     void testSubReaderZeroCount()
@@ -362,6 +372,16 @@ public:
 
         // Trying again should still throw
         CPPUNIT_ASSERT_THROW(reader.readUint8(), PesPacketReader::Exception);
+
+        std::vector<std::uint8_t> chunk1 = {0x01, 0x02};
+        std::vector<std::uint8_t> chunk2 = {0x03};
+        PesPacketReader overskipReader(chunk1.data(), chunk1.size(), chunk2.data(), chunk2.size());
+
+        CPPUNIT_ASSERT_THROW(overskipReader.skip(4), PesPacketReader::Exception);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), overskipReader.getBytesLeft());
+        CPPUNIT_ASSERT_THROW(overskipReader.readUint8(), PesPacketReader::Exception);
+        CPPUNIT_ASSERT_THROW(overskipReader.peekUint8(), PesPacketReader::Exception);
+        CPPUNIT_ASSERT_THROW(overskipReader.skip(1), PesPacketReader::Exception);
     }
 
     void testGetBytesLeftAccuracy()
@@ -497,21 +517,6 @@ public:
         // Skip zero again
         CPPUNIT_ASSERT_NO_THROW(reader.skip(0));
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), reader.getBytesLeft());
-    }
-
-    void testEmptyReaderOperations()
-    {
-        PesPacketReader emptyReader;
-
-        // Test all operations on empty reader
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), emptyReader.getBytesLeft());
-        CPPUNIT_ASSERT_THROW(emptyReader.peekUint8(), PesPacketReader::Exception);
-        CPPUNIT_ASSERT_THROW(emptyReader.readUint8(), PesPacketReader::Exception);
-        CPPUNIT_ASSERT_THROW(emptyReader.skip(1), PesPacketReader::Exception);
-
-        // Skip zero should work even on empty reader
-        CPPUNIT_ASSERT_NO_THROW(emptyReader.skip(0));
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), emptyReader.getBytesLeft());
     }
 
     void testPeekAtChunkBoundary()

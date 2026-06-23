@@ -23,6 +23,7 @@
 #include "MetadataProcessor.hpp"
 #include "Database.hpp"
 #include "PacketHeader.hpp"
+#include "PacketRaw.hpp"
 #include "PacketTriplets.hpp"
 #include "PacketBcastServiceData.hpp"
 #include "Page.hpp"
@@ -30,15 +31,13 @@
 
 using namespace ttxdecoder;
 
-// Mock Page for testing
-class MockPage : public Page
+// Minimal non-BTT page used to verify forwarding does not disturb packet handling.
+class MockNonBttPage : public Page
 {
 public:
-    MockPage(PageType type) : m_type(type) {}
-
     virtual PageType getType() const override
     {
-        return m_type;
+        return PageType::DISPLAYABLE;
     }
 
     virtual bool isValid() const override
@@ -62,15 +61,11 @@ protected:
     {
         return nullptr;
     }
-
-private:
-    PageType m_type;
 };
 
 class MetadataProcessorTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE(MetadataProcessorTest);
-    CPPUNIT_TEST(testConstructorInitialized);
     CPPUNIT_TEST(testBsdBufferCode0);
     CPPUNIT_TEST(testBsdBufferCode1);
     CPPUNIT_TEST(testBsdBufferCode2);
@@ -87,12 +82,17 @@ CPPUNIT_TEST_SUITE(MetadataProcessorTest);
     CPPUNIT_TEST(testMagPacket31Nullptr);
     CPPUNIT_TEST(testProcessBsdUpdatesDatabase);
     CPPUNIT_TEST(testTripletsValidMagRange);
+    CPPUNIT_TEST(testTripletsBufferCode1);
+    CPPUNIT_TEST(testTripletsBufferCode4);
+    CPPUNIT_TEST(testTripletsBufferCode2Rejected);
+    CPPUNIT_TEST(testTripletsCode1Stored);
+    CPPUNIT_TEST(testTripletsCode4Stored);
     CPPUNIT_TEST(testTripletsInvalidMagazine);
     CPPUNIT_TEST(testTripletsWrongPacketAddr);
-    CPPUNIT_TEST(testBsdBufferReused);
-    CPPUNIT_TEST(testSequentialProcessing);
-    CPPUNIT_TEST(testMultipleResetsConsistent);
-    CPPUNIT_TEST(testBufferConsistencyAfterReset);
+    CPPUNIT_TEST(testHeaderIgnored);
+    CPPUNIT_TEST(testRawPacketIgnored);
+    CPPUNIT_TEST(testNonBttPageIgnored);
+    CPPUNIT_TEST(testResetKeepsPacketPathsWorking);
     CPPUNIT_TEST(testDatabaseAfterMultipleBsd);
 
 CPPUNIT_TEST_SUITE_END();
@@ -131,16 +131,21 @@ protected:
         return triplets;
     }
 
-    void testConstructorInitialized()
+    const PacketTriplets* getStoredTriplets(std::uint8_t magazine,
+                                            std::int8_t designationCode) const
     {
-        // Verify constructor succeeds and processor is ready to use
-        Database testDb;
-        MetadataProcessor processor(testDb);
-
-        // Verify processor can immediately provide packet buffers
-        Packet* buffer = processor.getPacketBuffer(0, 30, 0);
-        CPPUNIT_ASSERT(buffer != nullptr);
-        CPPUNIT_ASSERT_EQUAL(PacketType::BCAST_SERVICE_DATA, buffer->getType());
+        const PageMagazine& magazinePage = m_database->getMagazinePage(magazine);
+        switch (designationCode)
+        {
+        case 0:
+            return magazinePage.getPacket29_0();
+        case 1:
+            return magazinePage.getPacket29_1();
+        case 4:
+            return magazinePage.getPacket29_4();
+        default:
+            return nullptr;
+        }
     }
 
     void testBsdBufferCode0()
@@ -211,8 +216,6 @@ protected:
         // and returns a packet from magazinePage.takePacket()
     }
 
-
-
     void testMag8Packet29OutOfRange()
     {
         Packet* buffer = m_processor->getPacketBuffer(8, 29, 0);
@@ -268,6 +271,46 @@ protected:
         }
     }
 
+    void testTripletsBufferCode1()
+    {
+        Packet* buffer = m_processor->getPacketBuffer(1, 29, 1);
+        CPPUNIT_ASSERT(buffer != nullptr);
+        CPPUNIT_ASSERT_EQUAL(PacketType::TRIPLETS, buffer->getType());
+    }
+
+    void testTripletsBufferCode4()
+    {
+        Packet* buffer = m_processor->getPacketBuffer(1, 29, 4);
+        CPPUNIT_ASSERT(buffer != nullptr);
+        CPPUNIT_ASSERT_EQUAL(PacketType::TRIPLETS, buffer->getType());
+    }
+
+    void testTripletsBufferCode2Rejected()
+    {
+        Packet* buffer = m_processor->getPacketBuffer(1, 29, 2);
+        CPPUNIT_ASSERT(buffer == nullptr);
+    }
+
+    void testTripletsCode1Stored()
+    {
+        PacketTriplets* triplets = getTripletsBuffer(1, 1);
+
+        m_processor->processPacket(*triplets);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<const PacketTriplets*>(triplets),
+                             getStoredTriplets(1, 1));
+    }
+
+    void testTripletsCode4Stored()
+    {
+        PacketTriplets* triplets = getTripletsBuffer(1, 4);
+
+        m_processor->processPacket(*triplets);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<const PacketTriplets*>(triplets),
+                             getStoredTriplets(1, 4));
+    }
+
     void testTripletsInvalidMagazine()
     {
         PacketTriplets* validTriplets = getTripletsBuffer(1, 0);
@@ -306,69 +349,91 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<const PacketTriplets*>(validTriplets), storedPacket);
     }
 
-    void testBsdBufferReused()
+    void testHeaderIgnored()
     {
-        // Verify same buffer is returned for different BSD designation codes
-        Packet* buffer1 = m_processor->getPacketBuffer(0, 30, 0);
-        Packet* buffer2 = m_processor->getPacketBuffer(0, 30, 1);
-        Packet* buffer3 = m_processor->getPacketBuffer(0, 30, 2);
+        PageId expectedPage(0x345, 0x0002);
+        PacketBcastServiceData bsdPacket;
+        bsdPacket.setMagazineNumber(0);
+        bsdPacket.setPacketAddress(30);
+        bsdPacket.setInitialPage(expectedPage);
 
-        CPPUNIT_ASSERT(buffer1 != nullptr);
-        CPPUNIT_ASSERT(buffer2 != nullptr);
-        CPPUNIT_ASSERT(buffer3 != nullptr);
+        m_processor->processPacket(bsdPacket);
 
-        // All should point to the same BSD packet buffer
-        CPPUNIT_ASSERT_EQUAL(buffer1, buffer2);
-        CPPUNIT_ASSERT_EQUAL(buffer2, buffer3);
+        PacketHeader headerPacket;
+        headerPacket.setMagazineNumber(2);
+        headerPacket.setPacketAddress(0);
+
+        m_processor->processPacket(headerPacket);
+
+        assertPageIdEquals(expectedPage, m_database->getIndexPageP830());
     }
 
-    void testSequentialProcessing()
+    void testRawPacketIgnored()
     {
-        MockPage page(PageType::DISPLAYABLE);
+        PageId expectedPage(0x345, 0x0002);
+        PacketBcastServiceData bsdPacket;
+        bsdPacket.setMagazineNumber(0);
+        bsdPacket.setPacketAddress(30);
+        bsdPacket.setInitialPage(expectedPage);
+
+        m_processor->processPacket(bsdPacket);
+
+        PacketRaw rawPacket;
+        rawPacket.setMagazineNumber(2);
+        rawPacket.setPacketAddress(5);
+
+        m_processor->processPacket(rawPacket);
+
+        assertPageIdEquals(expectedPage, m_database->getIndexPageP830());
+    }
+
+    void testNonBttPageIgnored()
+    {
+        MockNonBttPage page;
         PacketTriplets* triplets = getTripletsBuffer(1, 0);
-        PacketBcastServiceData* bsdBuffer =
-            static_cast<PacketBcastServiceData*>(m_processor->getPacketBuffer(0, 30, 0));
-        CPPUNIT_ASSERT(bsdBuffer != nullptr);
+        PacketBcastServiceData bsdPacket;
+        bsdPacket.setMagazineNumber(0);
+        bsdPacket.setPacketAddress(30);
 
         PageId expectedPage(0x345, 0x0002);
-        bsdBuffer->setInitialPage(expectedPage);
+        bsdPacket.setInitialPage(expectedPage);
 
         m_processor->processPage(page);
         m_processor->processPacket(*triplets);
 
         m_processor->processPage(page);
-        m_processor->processPacket(*bsdBuffer);
+        m_processor->processPacket(bsdPacket);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<const PacketTriplets*>(triplets),
                              m_database->getMagazinePage(1).getPacket29_0());
         assertPageIdEquals(expectedPage, m_database->getIndexPageP830());
     }
 
-    void testMultipleResetsConsistent()
+    void testResetKeepsPacketPathsWorking()
     {
         for (int i = 0; i < 3; ++i)
         {
+            PacketTriplets* triplets = getTripletsBuffer(1, 1);
+            PacketBcastServiceData bsdPacket;
+            PageId expectedPage(0x120 + i, static_cast<std::uint16_t>(i + 1));
+
+            bsdPacket.setMagazineNumber(0);
+            bsdPacket.setPacketAddress(30);
+            bsdPacket.setInitialPage(expectedPage);
+
             m_processor->reset();
 
-            // After each reset, verify functionality
-            Packet* buffer = m_processor->getPacketBuffer(0, 30, 0);
-            CPPUNIT_ASSERT(buffer != nullptr);
-            CPPUNIT_ASSERT_EQUAL(PacketType::BCAST_SERVICE_DATA, buffer->getType());
+            Packet* bsdBuffer = m_processor->getPacketBuffer(0, 30, 0);
+            CPPUNIT_ASSERT(bsdBuffer != nullptr);
+            CPPUNIT_ASSERT_EQUAL(PacketType::BCAST_SERVICE_DATA, bsdBuffer->getType());
+
+            m_processor->processPacket(*triplets);
+            CPPUNIT_ASSERT_EQUAL(static_cast<const PacketTriplets*>(triplets),
+                                 getStoredTriplets(1, 1));
+
+            m_processor->processPacket(bsdPacket);
+            assertPageIdEquals(expectedPage, m_database->getIndexPageP830());
         }
-    }
-
-    void testBufferConsistencyAfterReset()
-    {
-        // Get buffer before reset
-        Packet* bufferBefore = m_processor->getPacketBuffer(0, 30, 0);
-        CPPUNIT_ASSERT(bufferBefore != nullptr);
-
-        m_processor->reset();
-
-        // Get buffer after reset - should still be same object
-        Packet* bufferAfter = m_processor->getPacketBuffer(0, 30, 0);
-        CPPUNIT_ASSERT(bufferAfter != nullptr);
-        CPPUNIT_ASSERT_EQUAL(bufferBefore, bufferAfter);
     }
 
     void testDatabaseAfterMultipleBsd()

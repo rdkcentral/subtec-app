@@ -100,6 +100,8 @@ private:
                                                      std::uint32_t ptsValue = 0,
                                                      bool withDTS = false)
     {
+        CPPUNIT_ASSERT(!withDTS || withPTS);
+
         std::vector<std::uint8_t> packet;
 
         // Start code prefix
@@ -110,84 +112,71 @@ private:
         // Stream ID (0xBD for teletext)
         packet.push_back(0xBD);
 
-        // PES packet length
-        std::uint16_t pesLength = dataSize;
-
-        if (withPTS || withDTS)
+        // Teletext PES packets always include control bytes and the PES header length field.
+        std::uint8_t pesHeaderLength = 0;
+        if (withPTS && withDTS)
         {
-            // Control bytes (2) + PES header length (1) + PTS/DTS bytes
-            std::uint8_t controlByte2 = 0x80; // Marker bits
-            std::uint8_t pesHeaderLength = 0;
-
-            if (withPTS && withDTS)
-            {
-                controlByte2 |= 0xC0; // pts_dts_flags = 11
-                pesHeaderLength = 10; // 5 for PTS + 5 for DTS
-            }
-            else if (withPTS)
-            {
-                controlByte2 |= 0x80; // pts_dts_flags = 10
-                pesHeaderLength = 5;
-            }
-
-            pesLength += 3 + pesHeaderLength; // control bytes (2) + header length (1) + header data
+            pesHeaderLength = 10; // 5 for PTS + 5 for DTS
         }
+        else if (withPTS)
+        {
+            pesHeaderLength = 5;
+        }
+
+        // PES packet length excludes the 6-byte start code and length field.
+        std::uint16_t pesLength = dataSize + 3 + pesHeaderLength;
 
         packet.push_back((pesLength >> 8) & 0xFF);
         packet.push_back(pesLength & 0xFF);
 
-        if (withPTS || withDTS)
+        // Control byte 1 (marker bits)
+        packet.push_back(0x80);
+
+        // Control byte 2
+        std::uint8_t controlByte2 = 0x00;
+        if (withPTS && withDTS)
         {
-            // Control byte 1 (marker bits)
-            packet.push_back(0x80);
+            controlByte2 = 0xC0;
+        }
+        else if (withPTS)
+        {
+            controlByte2 = 0x80;
+        }
+        packet.push_back(controlByte2);
 
-            // Control byte 2
-            std::uint8_t controlByte2 = 0x80;
-            if (withPTS && withDTS)
-            {
-                controlByte2 |= 0xC0;
-            }
-            else if (withPTS)
-            {
-                controlByte2 |= 0x80;
-            }
-            packet.push_back(controlByte2);
+        // PES header length
+        packet.push_back(pesHeaderLength);
 
-            // PES header length
-            std::uint8_t pesHeaderLength = (withPTS && withDTS) ? 10 : (withPTS ? 5 : 0);
-            packet.push_back(pesHeaderLength);
+        // PTS
+        if (withPTS)
+        {
+            std::uint8_t prefix = withDTS ? 0x30 : 0x20;
+            // Encode PTS according to MPEG-2 format to match decoder
+            // Decoder does: pts |= (ptsByte1 << 28) & 0xE0000000
+            // Takes byte bits 3-1 and puts them at pts bits 31-29
+            packet.push_back(prefix | ((ptsValue >> 28) & 0x0E) | 0x01);
+            // Decoder does: pts |= (ptsByte2 << 21) & 0x1FE00000
+            // Takes byte bits 7-0 and puts them at pts bits 28-21
+            packet.push_back((ptsValue >> 21) & 0xFF);
+            // Decoder does: pts |= (ptsByte3 << 13) & 0x001FC000
+            // Takes byte bits 7-1 and puts them at pts bits 20-14
+            packet.push_back(((ptsValue >> 13) & 0xFE) | 0x01);
+            // Decoder does: pts |= (ptsByte4 << 6) & 0x00003FC0
+            // Takes byte bits 7-0 and puts them at pts bits 13-6
+            packet.push_back((ptsValue >> 6) & 0xFF);
+            // Decoder does: pts |= (ptsByte5 >> 2) & 0x0000003F
+            // Takes byte bits 7-2 and puts them at pts bits 5-0
+            packet.push_back(((ptsValue << 2) & 0xFC) | 0x01);
+        }
 
-            // PTS
-            if (withPTS)
-            {
-                std::uint8_t prefix = withDTS ? 0x30 : 0x20;
-                // Encode PTS according to MPEG-2 format to match decoder
-                // Decoder does: pts |= (ptsByte1 << 28) & 0xE0000000
-                // Takes byte bits 3-1 and puts them at pts bits 31-29
-                packet.push_back(prefix | ((ptsValue >> 28) & 0x0E) | 0x01);
-                // Decoder does: pts |= (ptsByte2 << 21) & 0x1FE00000
-                // Takes byte bits 7-0 and puts them at pts bits 28-21
-                packet.push_back((ptsValue >> 21) & 0xFF);
-                // Decoder does: pts |= (ptsByte3 << 13) & 0x001FC000
-                // Takes byte bits 7-1 and puts them at pts bits 20-14
-                packet.push_back(((ptsValue >> 13) & 0xFE) | 0x01);
-                // Decoder does: pts |= (ptsByte4 << 6) & 0x00003FC0
-                // Takes byte bits 7-0 and puts them at pts bits 13-6
-                packet.push_back((ptsValue >> 6) & 0xFF);
-                // Decoder does: pts |= (ptsByte5 >> 2) & 0x0000003F
-                // Takes byte bits 7-2 and puts them at pts bits 5-0
-                packet.push_back(((ptsValue << 2) & 0xFC) | 0x01);
-            }
-
-            // DTS (if needed, use dummy value)
-            if (withDTS)
-            {
-                packet.push_back(0x11);
-                packet.push_back(0x00);
-                packet.push_back(0x01);
-                packet.push_back(0x00);
-                packet.push_back(0x01);
-            }
+        // DTS (if needed, use dummy value)
+        if (withDTS)
+        {
+            packet.push_back(0x11);
+            packet.push_back(0x00);
+            packet.push_back(0x01);
+            packet.push_back(0x00);
+            packet.push_back(0x01);
         }
 
         // Add payload data
@@ -197,6 +186,19 @@ private:
         }
 
         return packet;
+    }
+
+    void assertReaderContainsPayload(PesPacketReader reader,
+                                     std::uint16_t dataSize)
+    {
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(dataSize), reader.getBytesLeft());
+
+        for (std::uint16_t i = 0; i < dataSize; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(i & 0xFF), reader.readUint8());
+        }
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), reader.getBytesLeft());
     }
 
     std::vector<std::uint8_t> createInvalidPacket(const char* invalidType)
@@ -333,8 +335,8 @@ private:
         std::uint8_t smallBuffer[100];
         PesBuffer buffer(smallBuffer, smallBufferSize);
 
-        // Create packet that exactly fills buffer (100 - 6 header = 94 data)
-        auto packet = createValidPesPacket(94);
+        // Create packet that exactly fills buffer (100 - 9 bytes of PES metadata = 91 data)
+        auto packet = createValidPesPacket(91);
 
         bool result = buffer.addPesPacket(packet.data(), packet.size());
 
@@ -354,7 +356,7 @@ private:
         PesBuffer buffer(smallBuffer, smallBufferSize);
 
         // Add first packet
-        auto packet1 = createValidPesPacket(80); // ~86 bytes total
+        auto packet1 = createValidPesPacket(71); // 80 bytes total
         bool result1 = buffer.addPesPacket(packet1.data(), packet1.size());
         CPPUNIT_ASSERT(result1);
 
@@ -366,14 +368,30 @@ private:
         buffer.markPacketConsumed(header);
 
         // Add second packet near end
-        auto packet2 = createValidPesPacket(100); // ~106 bytes total
+        auto packet2 = createValidPesPacket(91); // 100 bytes total
         bool result2 = buffer.addPesPacket(packet2.data(), packet2.size());
         CPPUNIT_ASSERT(result2);
 
         // Add third packet that should wrap
-        auto packet3 = createValidPesPacket(50); // ~56 bytes total
+        auto packet3 = createValidPesPacket(30); // 39 bytes total
         bool result3 = buffer.addPesPacket(packet3.data(), packet3.size());
         CPPUNIT_ASSERT(result3);
+
+        // Verify both packets can still be read back with intact payload after wrapped write.
+        PesPacketHeader wrappedHeader;
+        PesPacketReader wrappedReader;
+        bool gotWrappedPacket = buffer.getNextPacket(wrappedHeader, wrappedReader);
+        CPPUNIT_ASSERT(gotWrappedPacket);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(94), wrappedHeader.m_pesPacketLength);
+        assertReaderContainsPayload(wrappedReader, 91);
+        buffer.markPacketConsumed(wrappedHeader);
+
+        PesPacketHeader finalHeader;
+        PesPacketReader finalReader;
+        bool gotFinalPacket = buffer.getNextPacket(finalHeader, finalReader);
+        CPPUNIT_ASSERT(gotFinalPacket);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(33), finalHeader.m_pesPacketLength);
+        assertReaderContainsPayload(finalReader, 30);
     }
 
     void testAddValidTeletextPacketWithPTS()
@@ -438,10 +456,9 @@ private:
         std::vector<std::uint8_t> largeBuffer(largeBufferSize);
         PesBuffer buffer(largeBuffer.data(), largeBufferSize);
 
-        // Max PES length is 65535, but total packet size (65541) exceeds uint16_t
-        // So test with a large but valid size that fits in uint16_t
-        // Use 65529 data bytes -> 65535 total packet size (fits in uint16_t)
-        auto packet = createValidPesPacket(65529);
+        // addPesPacket length is uint16_t, so keep the total packet size at 65535 bytes.
+        // With the 9-byte no-PTS PES envelope, that means 65526 bytes of payload data.
+        auto packet = createValidPesPacket(65526);
 
         bool result = buffer.addPesPacket(packet.data(), packet.size());
 
@@ -526,7 +543,7 @@ private:
         PesBuffer buffer(tinyBuffer, tinyBufferSize);
 
         // Fill buffer
-        auto packet1 = createValidPesPacket(44); // 50 bytes total
+        auto packet1 = createValidPesPacket(41); // 50 bytes total
         bool result1 = buffer.addPesPacket(packet1.data(), packet1.size());
         CPPUNIT_ASSERT(result1);
 
@@ -544,7 +561,7 @@ private:
         PesBuffer buffer(tinyBuffer, tinyBufferSize);
 
         // Try to add packet larger than buffer
-        auto packet = createValidPesPacket(50); // 56 bytes total > 30
+        auto packet = createValidPesPacket(50); // 59 bytes total > 30
         bool result = buffer.addPesPacket(packet.data(), packet.size());
 
         CPPUNIT_ASSERT(!result);
@@ -648,7 +665,7 @@ private:
 
         CPPUNIT_ASSERT(result);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xBD), header.m_streamId);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(50), header.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(53), header.m_pesPacketLength);
     }
 
     void testGetNextPacketWithMultiplePackets()
@@ -665,7 +682,7 @@ private:
         bool result = buffer.getNextPacket(header, reader);
 
         CPPUNIT_ASSERT(result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(50), header.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(53), header.m_pesPacketLength);
     }
 
     void testGetNextPacketAfterConsumption()
@@ -689,7 +706,7 @@ private:
         bool result = buffer.getNextPacket(header2, reader2);
 
         CPPUNIT_ASSERT(result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(60), header2.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(63), header2.m_pesPacketLength);
     }
 
     void testGetNextPacketWrappedAroundBuffer()
@@ -698,8 +715,8 @@ private:
         std::uint8_t smallBuffer[200];
         PesBuffer buffer(smallBuffer, smallBufferSize);
 
-        // Add, get, consume to advance pointers
-        auto packet1 = createValidPesPacket(80);
+        // Add, get, consume to advance pointers.
+        auto packet1 = createValidPesPacket(81); // 90 bytes total
         buffer.addPesPacket(packet1.data(), packet1.size());
 
         PesPacketHeader header1;
@@ -707,17 +724,18 @@ private:
         buffer.getNextPacket(header1, reader1);
         buffer.markPacketConsumed(header1);
 
-        // Add packet near end
-        auto packet2 = createValidPesPacket(100);
+        // Add packet that wraps across the end of the circular buffer.
+        auto packet2 = createValidPesPacket(121); // 130 bytes total
         buffer.addPesPacket(packet2.data(), packet2.size());
 
-        // Get packet that should be read correctly even if wrapped
+        // Get packet that should be read correctly even when header and payload span two chunks.
         PesPacketHeader header2;
         PesPacketReader reader2;
         bool result = buffer.getNextPacket(header2, reader2);
 
         CPPUNIT_ASSERT(result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(100), header2.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(124), header2.m_pesPacketLength);
+        assertReaderContainsPayload(reader2, 121);
     }
 
     void testGetNextPacketWithPTS()
@@ -766,6 +784,7 @@ private:
         CPPUNIT_ASSERT(result);
         CPPUNIT_ASSERT(!header.m_hasPts);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), header.m_pts);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(10), reader.getBytesLeft());
     }
 
     void testGetNextPacketWithHeaderSkip()
@@ -811,9 +830,6 @@ private:
         PesBuffer buffer(m_buffer, BUFFER_SIZE);
 
         // Add a larger valid packet and verify retrieval still succeeds.
-        // The helper payload starts with 0,1,2..., so getNextPacket interprets
-        // the first three payload bytes as the optional PES header fields and
-        // skips two more bytes from the payload.
         auto validPacket = createValidPesPacket(50);
         buffer.addPesPacket(validPacket.data(), validPacket.size());
 
@@ -822,7 +838,7 @@ private:
         bool result = buffer.getNextPacket(header, reader);
 
         CPPUNIT_ASSERT(result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(45), reader.getBytesLeft());
+        assertReaderContainsPayload(reader, 50);
     }
 
     void testGetNextPacketWithInvalidHeaderLength()
@@ -877,7 +893,7 @@ private:
         bool result = buffer.getNextPacket(header2, reader2);
 
         CPPUNIT_ASSERT(result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(60), header2.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(63), header2.m_pesPacketLength);
     }
 
     void testMarkPacketConsumedWithWrapAround()
@@ -887,7 +903,7 @@ private:
         PesBuffer buffer(smallBuffer, smallBufferSize);
 
         // Fill and consume to wrap pointers
-        auto packet1 = createValidPesPacket(80);
+        auto packet1 = createValidPesPacket(71); // 80 bytes total
         buffer.addPesPacket(packet1.data(), packet1.size());
 
         PesPacketHeader header1;
@@ -896,8 +912,8 @@ private:
         buffer.markPacketConsumed(header1);
 
         // Add more packets
-        auto packet2 = createValidPesPacket(100);
-        auto packet3 = createValidPesPacket(50);
+        auto packet2 = createValidPesPacket(91);  // 100 bytes total
+        auto packet3 = createValidPesPacket(30);  // 39 bytes total, wraps on write
         buffer.addPesPacket(packet2.data(), packet2.size());
         buffer.addPesPacket(packet3.data(), packet3.size());
 
@@ -913,7 +929,8 @@ private:
         bool result = buffer.getNextPacket(header3, reader3);
 
         CPPUNIT_ASSERT(result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(50), header3.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(33), header3.m_pesPacketLength);
+        assertReaderContainsPayload(reader3, 30);
     }
 
     void testMarkLastPacketConsumed()
@@ -957,7 +974,7 @@ private:
         // Should get third
         bool result = buffer.getNextPacket(header, reader);
         CPPUNIT_ASSERT(result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(60), header.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(63), header.m_pesPacketLength);
     }
 
     void testFullCycleAddGetConsume()
@@ -1047,7 +1064,7 @@ private:
 
         bool getResult = buffer.getNextPacket(header, reader);
         CPPUNIT_ASSERT(getResult);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(80), header.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(83), header.m_pesPacketLength);
     }
 
     void testGetWithoutConsume()
@@ -1110,17 +1127,17 @@ private:
 
         // Get small
         buffer.getNextPacket(header, reader);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(10), header.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(13), header.m_pesPacketLength);
         buffer.markPacketConsumed(header);
 
         // Get medium
         buffer.getNextPacket(header, reader);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(100), header.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(103), header.m_pesPacketLength);
         buffer.markPacketConsumed(header);
 
         // Get large
         buffer.getNextPacket(header, reader);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(500), header.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(503), header.m_pesPacketLength);
         buffer.markPacketConsumed(header);
     }
 
@@ -1130,11 +1147,11 @@ private:
         std::uint8_t tinyBuffer[10];
         PesBuffer buffer(tinyBuffer, tinyBufferSize);
 
-        // Try to add minimal valid packet (7 bytes minimum)
+        // Try to add minimal valid packet (10 bytes total)
         auto packet = createValidPesPacket(1);
         bool result = buffer.addPesPacket(packet.data(), packet.size());
 
-        // Should succeed as minimal packet is 7 bytes
+        // Should succeed as the minimal valid teletext packet is 10 bytes.
         CPPUNIT_ASSERT(result);
     }
 
@@ -1185,7 +1202,7 @@ private:
         PesPacketReader reader;
         bool getResult = buffer.getNextPacket(header, reader);
         CPPUNIT_ASSERT(getResult);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(40), header.m_pesPacketLength);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(43), header.m_pesPacketLength);
     }
 
 private:

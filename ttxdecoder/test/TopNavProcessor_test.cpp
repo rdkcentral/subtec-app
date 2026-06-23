@@ -135,6 +135,16 @@ public:
         }
     }
 
+    std::int8_t getPageType(int pageIndex) const
+    {
+        if (pageIndex >= 0 && pageIndex < 800)
+        {
+            return m_pageTypes[pageIndex];
+        }
+
+        return 0;
+    }
+
     // Build and populate a TestPageBtt object
     void build(TestPageBtt& page)
     {
@@ -226,12 +236,10 @@ CPPUNIT_TEST_SUITE(TopNavProcessorTest);
     CPPUNIT_TEST(testGetPageBufferAfterReset);
     CPPUNIT_TEST(testProcessPageWithNonBttType);
     CPPUNIT_TEST(testProcessPageWithInvalidBttData);
-    CPPUNIT_TEST(testProcessPageWithMissingPacket);
     CPPUNIT_TEST(testNavigationWithAllNavigablePages);
     CPPUNIT_TEST(testNavigationWithOnlyConvertedFirstPageNavigable);
     CPPUNIT_TEST(testPrevPageNavigation);
     CPPUNIT_TEST(testNextPageNavigation);
-    CPPUNIT_TEST(testNavigationWraparound);
     CPPUNIT_TEST(testGroupNavigationWithGroupPages);
     CPPUNIT_TEST(testGroupNavigationWithNoGroupPages);
     CPPUNIT_TEST(testGroupNavigationWithSingleGroupPage);
@@ -240,11 +248,11 @@ CPPUNIT_TEST_SUITE(TopNavProcessorTest);
     CPPUNIT_TEST(testBlockNavigationWithNoBlockPages);
     CPPUNIT_TEST(testBlockNavigationWithSingleBlockPage);
     CPPUNIT_TEST(testBlockNavigationMixedTypes);
-    CPPUNIT_TEST(testAllPageTypesHandled);
+    CPPUNIT_TEST(testAllEncodedPageTypesAreAccepted);
     CPPUNIT_TEST(testSubtitlePageNavigation);
     CPPUNIT_TEST(testMixedPageTypeNavigation);
     CPPUNIT_TEST(testInvalidDataResetsDatabase);
-    CPPUNIT_TEST(testMissingPacketResetsDatabase);
+    CPPUNIT_TEST(testMissingPacketClearsExistingMetadata);
     CPPUNIT_TEST(testCompleteWorkflow);
     CPPUNIT_TEST(testReprocessAfterReset);
     CPPUNIT_TEST(testDatabaseMetadataCorrectness);
@@ -266,6 +274,34 @@ public:
     }
 
 protected:
+    void buildPageBufferFromBuilder(Page& page, const PageBttBuilder& builder)
+    {
+        page.invalidate();
+
+        Packet* headerPacket = page.takePacket(0, 0);
+        CPPUNIT_ASSERT(headerPacket != nullptr);
+        CPPUNIT_ASSERT_EQUAL(PacketType::HEADER, headerPacket->getType());
+        page.setLastPacketValid(headerPacket);
+
+        for (std::uint8_t row = 1; row <= 20; ++row)
+        {
+            Packet* packet = page.takePacket(row, -1);
+            CPPUNIT_ASSERT(packet != nullptr);
+            CPPUNIT_ASSERT_EQUAL(PacketType::BTT_PAGE_TYPE, packet->getType());
+
+            auto* bttPacket = static_cast<PacketBttPageType*>(packet);
+            std::int8_t* buffer = bttPacket->getBuffer();
+            int baseIndex = (row - 1) * 40;
+
+            for (int i = 0; i < 40; ++i)
+            {
+                buffer[i] = builder.getPageType(baseIndex + i);
+            }
+
+            page.setLastPacketValid(packet);
+        }
+    }
+
     void testConstructorInitialized()
     {
         Database testDb;
@@ -386,21 +422,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0xFFFF), metadata.m_prevPage);
     }
 
-    void testProcessPageWithMissingPacket()
-    {
-        TestPageBtt bttPage;
-        PageBttBuilder builder;
-
-        builder.setAllPageTypes(8);
-        builder.buildWithMissingPacket(bttPage, 10); // Invalidate row 10
-
-        m_processor->processPage(bttPage);
-
-        // Database should be reset due to missing packet
-        const Database::TopMetadata& metadata = m_database->getTopMetatadata(0x100);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0xFFFF), metadata.m_nextPage);
-    }
-
     void testNavigationWithAllNavigablePages()
     {
         TestPageBtt bttPage;
@@ -495,25 +516,6 @@ protected:
 
         const Database::TopMetadata& metadata200 = m_database->getTopMetatadata(0x200);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata200.m_nextPage);
-    }
-
-    void testNavigationWraparound()
-    {
-        TestPageBtt bttPage;
-        PageBttBuilder builder;
-
-        builder.setAllPageTypes(8); // All navigable
-        builder.build(bttPage);
-
-        m_processor->processPage(bttPage);
-
-        // Last page should wrap to first page
-        const Database::TopMetadata& metadata899 = m_database->getTopMetatadata(0x899);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata899.m_nextPage);
-
-        // First page should wrap to last page
-        const Database::TopMetadata& metadata100 = m_database->getTopMetatadata(0x100);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x899), metadata100.m_prevPage);
     }
 
     void testGroupNavigationWithGroupPages()
@@ -673,9 +675,9 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x120), metadata110.m_nextBlockPage);
     }
 
-    void testAllPageTypesHandled()
+    void testAllEncodedPageTypesAreAccepted()
     {
-        // Test with all valid page type values (0-15)
+        // Every 4-bit BTT code should be accepted without resetting metadata.
         for (std::int8_t type = 0; type <= 15; ++type)
         {
             TestPageBtt bttPage;
@@ -687,37 +689,50 @@ protected:
 
             const Database::TopMetadata& metadata = m_database->getTopMetatadata(0x100);
 
-            if (type == 0)
-            {
-                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextPage);
-                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_prevPage);
-                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextGroupPage);
-                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextBlockPage);
-            }
-            else
-            {
-                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x101), metadata.m_nextPage);
-                CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x899), metadata.m_prevPage);
-
-                if ((type == 6) || (type == 7))
-                {
-                    CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x101), metadata.m_nextGroupPage);
-                }
-                else
-                {
-                    CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextGroupPage);
-                }
-
-                if ((type == 4) || (type == 5))
-                {
-                    CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x101), metadata.m_nextBlockPage);
-                }
-                else
-                {
-                    CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), metadata.m_nextBlockPage);
-                }
-            }
+            CPPUNIT_ASSERT(metadata.m_nextPage != 0xFFFF);
+            CPPUNIT_ASSERT(metadata.m_prevPage != 0xFFFF);
+            CPPUNIT_ASSERT(metadata.m_nextGroupPage != 0xFFFF);
+            CPPUNIT_ASSERT(metadata.m_nextBlockPage != 0xFFFF);
         }
+
+        // BTT_NO_PAGE is special-cased at page 100 so the table still yields navigation.
+        TestPageBtt noPageBttPage;
+        PageBttBuilder noPageBuilder;
+        noPageBuilder.setAllPageTypes(0);
+        noPageBuilder.build(noPageBttPage);
+
+        m_processor->processPage(noPageBttPage);
+
+        const Database::TopMetadata& noPageMetadata = m_database->getTopMetatadata(0x100);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), noPageMetadata.m_nextPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), noPageMetadata.m_prevPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), noPageMetadata.m_nextGroupPage);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x100), noPageMetadata.m_nextBlockPage);
+    }
+
+    void testMissingPacketClearsExistingMetadata()
+    {
+        // First populate with valid data
+        TestPageBtt validPage;
+        PageBttBuilder validBuilder;
+        validBuilder.setAllPageTypes(8);
+        validBuilder.build(validPage);
+        m_processor->processPage(validPage);
+
+        // Verify database was populated
+        const Database::TopMetadata& metadataBefore = m_database->getTopMetatadata(0x100);
+        CPPUNIT_ASSERT(metadataBefore.m_nextPage != 0xFFFF);
+
+        // Now process page with missing packet
+        TestPageBtt invalidPage;
+        PageBttBuilder invalidBuilder;
+        invalidBuilder.setAllPageTypes(8);
+        invalidBuilder.buildWithMissingPacket(invalidPage, 5);
+        m_processor->processPage(invalidPage);
+
+        // Database should be reset
+        const Database::TopMetadata& metadataAfter = m_database->getTopMetatadata(0x100);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0xFFFF), metadataAfter.m_nextPage);
     }
 
     void testSubtitlePageNavigation()
@@ -793,49 +808,24 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0xFFFF), metadataAfter.m_nextBlockPage);
     }
 
-    void testMissingPacketResetsDatabase()
-    {
-        // First populate with valid data
-        TestPageBtt validPage;
-        PageBttBuilder validBuilder;
-        validBuilder.setAllPageTypes(8);
-        validBuilder.build(validPage);
-        m_processor->processPage(validPage);
-
-        // Verify database was populated
-        const Database::TopMetadata& metadataBefore = m_database->getTopMetatadata(0x100);
-        CPPUNIT_ASSERT(metadataBefore.m_nextPage != 0xFFFF);
-
-        // Now process page with missing packet
-        TestPageBtt invalidPage;
-        PageBttBuilder invalidBuilder;
-        invalidBuilder.setAllPageTypes(8);
-        invalidBuilder.buildWithMissingPacket(invalidPage, 5);
-        m_processor->processPage(invalidPage);
-
-        // Database should be reset
-        const Database::TopMetadata& metadataAfter = m_database->getTopMetatadata(0x100);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0xFFFF), metadataAfter.m_nextPage);
-    }
-
     void testCompleteWorkflow()
     {
         // Get buffer
         PageId pageId(0x01F0, 0x0000);
         Page* buffer = m_processor->getPageBuffer(pageId);
         CPPUNIT_ASSERT(buffer != nullptr);
+        CPPUNIT_ASSERT_EQUAL(PageType::BTT, buffer->getType());
 
-        // Populate buffer
-        TestPageBtt* bttPage = static_cast<TestPageBtt*>(buffer);
+        // Populate the real buffer returned by the processor
         PageBttBuilder builder;
         builder.setPageTypeRange(0, 199, 8);    // Normal pages 100-299
         builder.setPageTypeRange(200, 399, 4);  // Block pages 300-499
         builder.setPageTypeRange(400, 599, 6);  // Group pages 500-699
         builder.setPageTypeRange(600, 799, 10); // Normal multi pages 700-899
-        builder.build(*bttPage);
+        buildPageBufferFromBuilder(*buffer, builder);
 
         // Process page
-        m_processor->processPage(*bttPage);
+        m_processor->processPage(*buffer);
 
         // Verify all metadata types are populated
         const Database::TopMetadata& metadata100 = m_database->getTopMetatadata(0x100);

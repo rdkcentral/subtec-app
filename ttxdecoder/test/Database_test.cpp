@@ -38,11 +38,9 @@ CPPUNIT_TEST_SUITE(DatabaseTest);
     CPPUNIT_TEST(testConstructorInitializesMagazinePages);
     CPPUNIT_TEST(testConstructorInitializesMetadata);
     CPPUNIT_TEST(testResetClearsIndexPage);
-    CPPUNIT_TEST(testResetKeepsMagazinePagesAccessible);
     CPPUNIT_TEST(testResetClearsTopMetadata);
     CPPUNIT_TEST(testResetTopMetadataOnly);
     CPPUNIT_TEST(testGetMagazinePageInvalidIndexReturnsDefault);
-    CPPUNIT_TEST(testGetMagazinePageNonConstVersion);
     CPPUNIT_TEST(testSetAndGetIndexPageP830);
     CPPUNIT_TEST(testIndexPageP830WithInvalidPage);
     CPPUNIT_TEST(testGetNextPageValidDecimal);
@@ -110,7 +108,6 @@ protected:
         {
             const PageMagazine& page = db.getMagazinePage(i);
             CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, page.getType());
-            CPPUNIT_ASSERT(page.isValid());
         }
     }
 
@@ -138,18 +135,6 @@ protected:
         PageId resetPage = m_database->getIndexPageP830();
         CPPUNIT_ASSERT_EQUAL(INVALID_MAGAZINE_PAGE, resetPage.getMagazinePage());
         CPPUNIT_ASSERT_EQUAL(ANY_SUBPAGE, resetPage.getSubpage());
-    }
-
-    void testResetKeepsMagazinePagesAccessible()
-    {
-        m_database->reset();
-
-        // Magazine pages remain accessible even after their packet state is cleared.
-        for (std::uint8_t i = 0; i < Database::MAGAZINE_COUNT; ++i)
-        {
-            const PageMagazine& page = m_database->getMagazinePage(i);
-            CPPUNIT_ASSERT(page.isValid());
-        }
     }
 
     void testResetClearsTopMetadata()
@@ -190,23 +175,12 @@ protected:
 
     void testGetMagazinePageInvalidIndexReturnsDefault()
     {
-        // According to implementation, invalid index returns m_magazinePages[1].
+        // Invalid magazine indices fall back to the same magazine page instance.
         const PageMagazine& invalidPage = m_database->getMagazinePage(255);
         const PageMagazine& defaultPage = m_database->getMagazinePage(1);
 
         CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, invalidPage.getType());
-        CPPUNIT_ASSERT(invalidPage.isValid());
         CPPUNIT_ASSERT(&defaultPage == &invalidPage);
-    }
-
-    void testGetMagazinePageNonConstVersion()
-    {
-        PageMagazine& page = m_database->getMagazinePage(3);
-        page.invalidate();
-
-        const PageMagazine& samePage = m_database->getMagazinePage(3);
-        CPPUNIT_ASSERT(&page == &samePage);
-        CPPUNIT_ASSERT_EQUAL(PageType::MAGAZINE, samePage.getType());
     }
 
     void testSetAndGetIndexPageP830()

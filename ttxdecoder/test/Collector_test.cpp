@@ -22,7 +22,10 @@
 
 #include "Collector.hpp"
 #include "CollectorListener.hpp"
+#include "PacketHeader.hpp"
+#include "PacketRaw.hpp"
 #include "PesPacketReader.hpp"
+#include <ttxdecoder/ControlInfo.hpp>
 
 using namespace ttxdecoder;
 
@@ -35,6 +38,32 @@ const std::uint8_t kEncodedHamming84Nibbles[16] = {
     0x03, 0x63, 0x11, 0x59,
     0x05, 0x2D, 0x3F, 0x17
 };
+
+std::uint8_t reverseBits(std::uint8_t value)
+{
+    value = static_cast<std::uint8_t>(((value & 0xF0) >> 4) | ((value & 0x0F) << 4));
+    value = static_cast<std::uint8_t>(((value & 0xCC) >> 2) | ((value & 0x33) << 2));
+    value = static_cast<std::uint8_t>(((value & 0xAA) >> 1) | ((value & 0x55) << 1));
+    return value;
+}
+
+std::uint8_t encodeParityByte(char value)
+{
+    std::uint8_t data = static_cast<std::uint8_t>(value) & 0x7F;
+    std::uint8_t parity = 0;
+
+    for (int bit = 0; bit < 7; ++bit)
+    {
+        parity ^= static_cast<std::uint8_t>((data >> bit) & 0x01);
+    }
+
+    if (parity == 0)
+    {
+        data |= 0x80;
+    }
+
+    return reverseBits(data);
+}
 
 } // namespace
 
@@ -97,6 +126,62 @@ private:
     std::vector<ContextInfo> m_contexts;
 };
 
+class RawConsumeListener : public CollectorListener
+{
+public:
+    RawConsumeListener()
+        : m_callCount(0)
+        , m_consumed(false)
+    {
+    }
+
+    virtual void onPacketReady(CollectorPacketContext& context) override
+    {
+        m_callCount++;
+        m_consumed = context.consume(m_packet);
+        m_buffer.assign(m_packet.getBuffer(), m_packet.getBuffer() + m_packet.getBufferLength());
+    }
+
+    int getCallCount() const { return m_callCount; }
+    bool isConsumed() const { return m_consumed; }
+    const PacketRaw& getPacket() const { return m_packet; }
+    const std::vector<std::uint8_t>& getBuffer() const { return m_buffer; }
+
+private:
+    int m_callCount;
+    bool m_consumed;
+    PacketRaw m_packet;
+    std::vector<std::uint8_t> m_buffer;
+};
+
+class HeaderConsumeListener : public CollectorListener
+{
+public:
+    HeaderConsumeListener()
+        : m_callCount(0)
+        , m_consumed(false)
+    {
+    }
+
+    virtual void onPacketReady(CollectorPacketContext& context) override
+    {
+        m_callCount++;
+        m_consumed = context.consume(m_packet);
+        m_buffer.assign(m_packet.getBuffer(), m_packet.getBuffer() + m_packet.getBufferLength());
+    }
+
+    int getCallCount() const { return m_callCount; }
+    bool isConsumed() const { return m_consumed; }
+    const PacketHeader& getPacket() const { return m_packet; }
+    const std::vector<std::int8_t>& getBuffer() const { return m_buffer; }
+
+private:
+    int m_callCount;
+    bool m_consumed;
+    PacketHeader m_packet;
+    std::vector<std::int8_t> m_buffer;
+};
+
 class CollectorTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( CollectorTest );
@@ -114,6 +199,13 @@ CPPUNIT_TEST_SUITE( CollectorTest );
     CPPUNIT_TEST(testProcessPacketDataAllMagazineNumbers);
     CPPUNIT_TEST(testProcessPacketDataWithDesignationCodeForPacket26);
     CPPUNIT_TEST(testProcessPacketDataWithDesignationCodeForPacket31);
+    CPPUNIT_TEST(testConsumeRaw);
+    CPPUNIT_TEST(testConsumeHeader);
+    CPPUNIT_TEST(testMissingDataId);
+    CPPUNIT_TEST(testShortUnitHeader);
+    CPPUNIT_TEST(testShortPayload);
+    CPPUNIT_TEST(testInvalidDesignationPacket26);
+    CPPUNIT_TEST(testInvalidDesignationPacket31);
     CPPUNIT_TEST(testProcessPacketDataWithNoDesignationCodeForPacket0);
     CPPUNIT_TEST(testResetAfterProcessing);
 CPPUNIT_TEST_SUITE_END();
@@ -481,6 +573,151 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), m_listener->getLastMagazineNumber());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(31), m_listener->getLastPacketAddress());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(1), m_listener->getLastDesignationCode());
+    }
+
+    void testConsumeRaw()
+    {
+        RawConsumeListener listener;
+        Collector collector(listener);
+
+        std::uint8_t data[] = {
+            0x10, 0x02, 0x2C, 0xFF, 0xE4,
+            kEncodedHamming84Nibbles[11],
+            kEncodedHamming84Nibbles[2],
+            0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+            0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
+            0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+            0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
+            0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37
+        };
+
+        PesPacketReader reader(data, sizeof(data), nullptr, 0);
+        collector.processPacketData(reader);
+
+        CPPUNIT_ASSERT_EQUAL(1, listener.getCallCount());
+        CPPUNIT_ASSERT(listener.isConsumed());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(3), listener.getPacket().getMagazineNumber());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(5), listener.getPacket().getPacketAddress());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(40), listener.getBuffer().size());
+
+        for (std::size_t i = 0; i < listener.getBuffer().size(); ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x10 + i), listener.getBuffer()[i]);
+        }
+    }
+
+    void testConsumeHeader()
+    {
+        HeaderConsumeListener listener;
+        Collector collector(listener);
+
+        const char readable[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+        std::vector<std::uint8_t> data = {
+            0x10, 0x02, 0x2C, 0xFF, 0xE4,
+            kEncodedHamming84Nibbles[1],
+            kEncodedHamming84Nibbles[0],
+            kEncodedHamming84Nibbles[3],
+            kEncodedHamming84Nibbles[2],
+            kEncodedHamming84Nibbles[5],
+            kEncodedHamming84Nibbles[8],
+            kEncodedHamming84Nibbles[0],
+            kEncodedHamming84Nibbles[12],
+            kEncodedHamming84Nibbles[0],
+            kEncodedHamming84Nibbles[11]
+        };
+
+        for (std::size_t i = 0; i < 32; ++i)
+        {
+            data.push_back(encodeParityByte(readable[i]));
+        }
+
+        PesPacketReader reader(data.data(), data.size(), nullptr, 0);
+        collector.processPacketData(reader);
+
+        CPPUNIT_ASSERT_EQUAL(1, listener.getCallCount());
+        CPPUNIT_ASSERT(listener.isConsumed());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), listener.getPacket().getMagazineNumber());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0), listener.getPacket().getPacketAddress());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x123), listener.getPacket().getPageId().getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0005), listener.getPacket().getPageId().getSubpage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(ControlInfo::ERASE_PAGE | ControlInfo::NEWSFLASH | ControlInfo::SUBTITLE | ControlInfo::MAGAZINE_SERIAL), listener.getPacket().getControlInfo());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(5), listener.getPacket().getNationalOption());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(32), listener.getBuffer().size());
+
+        for (std::size_t i = 0; i < listener.getBuffer().size(); ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::int8_t>(readable[i]), listener.getBuffer()[i]);
+        }
+    }
+
+    void testMissingDataId()
+    {
+        PesPacketReader reader(nullptr, 0, nullptr, 0);
+
+        CPPUNIT_ASSERT_THROW(m_collector->processPacketData(reader), PesPacketReader::Exception);
+    }
+
+    void testShortUnitHeader()
+    {
+        std::uint8_t data[] = { 0x10, 0x02 };
+        PesPacketReader reader(data, sizeof(data), nullptr, 0);
+
+        CPPUNIT_ASSERT_THROW(m_collector->processPacketData(reader), PesPacketReader::Exception);
+    }
+
+    void testShortPayload()
+    {
+        std::uint8_t data[] = {
+            0x10, 0x02, 0x2C,
+            0xFF, 0xE4, 0x00
+        };
+        PesPacketReader reader(data, sizeof(data), nullptr, 0);
+
+        CPPUNIT_ASSERT_THROW(m_collector->processPacketData(reader), PesPacketReader::Exception);
+    }
+
+    void testInvalidDesignationPacket26()
+    {
+        std::uint8_t data[] = {
+            0x10, 0x02, 0x2C, 0xFF, 0xE4,
+            kEncodedHamming84Nibbles[1],
+            kEncodedHamming84Nibbles[13],
+            0x01,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        };
+
+        PesPacketReader reader(data, sizeof(data), nullptr, 0);
+        m_collector->processPacketData(reader);
+
+        CPPUNIT_ASSERT_EQUAL(1, m_listener->getCallCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(26), m_listener->getLastPacketAddress());
+        CPPUNIT_ASSERT(m_listener->getLastDesignationCode() < 0);
+    }
+
+    void testInvalidDesignationPacket31()
+    {
+        std::uint8_t data[] = {
+            0x10, 0x02, 0x2C, 0xFF, 0xE4,
+            kEncodedHamming84Nibbles[9],
+            kEncodedHamming84Nibbles[15],
+            0x01,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        };
+
+        PesPacketReader reader(data, sizeof(data), nullptr, 0);
+        m_collector->processPacketData(reader);
+
+        CPPUNIT_ASSERT_EQUAL(1, m_listener->getCallCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(31), m_listener->getLastPacketAddress());
+        CPPUNIT_ASSERT(m_listener->getLastDesignationCode() < 0);
     }
 
     void testProcessPacketDataWithNoDesignationCodeForPacket0()

@@ -61,6 +61,10 @@ Database::~Database()
     {
         g_logger.warning("%s - exception suppressed: %s", __func__, e.what());
     }
+    catch (...)
+    {
+        g_logger.warning("%s - non-std exception suppressed", __func__);
+    }
 }
 
 void Database::epochReset()

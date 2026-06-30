@@ -104,7 +104,7 @@ public:
 
 private:
     /** Designation code. */
-    std::int8_t m_designationCode;
+    std::int8_t m_designationCode = -1;
 
     /** Triplet values. */
     std::uint32_t m_triplets[TRIPLET_COUNT];

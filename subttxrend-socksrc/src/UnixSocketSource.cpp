@@ -114,6 +114,11 @@ void UnixSocketSource::sourceLoop()
     createSocket();
     while(m_sourceRunning.load(std::memory_order_relaxed)) {
 
+        if (!m_socket) {
+            m_logger.oswarning(__LOGGER_FUNC__, " socket creation aborted, source stopping");
+            break;
+        }
+
         auto socketRestartNeeded = false;
 
         try {
@@ -139,6 +144,11 @@ void UnixSocketSource::sourceLoop()
             m_logger.oserror(__LOGGER_FUNC__, " restarting socket");
             m_socket.reset();
             createSocket();
+
+            if (!m_socket) {
+                m_logger.oswarning(__LOGGER_FUNC__, " socket recreation aborted during stop, leaving source loop");
+                break;
+            }
         }
     }
 }

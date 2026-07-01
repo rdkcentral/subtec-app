@@ -21,8 +21,6 @@
 
 #include <chrono>
 #include <cstdio>
-#include <cstdint>
-#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -43,6 +41,7 @@ CPPUNIT_TEST_SUITE(SmartFileTargetTest);
     CPPUNIT_TEST(testOpenWithValidPath);
     CPPUNIT_TEST(testOpenWhenAlreadyOpen);
     CPPUNIT_TEST(testOpenMultipleTimes);
+    CPPUNIT_TEST(testOpenDuringRecordingResetsState);
     CPPUNIT_TEST(testCloseWithoutOpen);
     CPPUNIT_TEST(testCloseMultipleTimes);
     CPPUNIT_TEST(testCloseAfterOpenThenReopen);
@@ -69,6 +68,7 @@ CPPUNIT_TEST_SUITE(SmartFileTargetTest);
     CPPUNIT_TEST(testWriteRegularPacketAfterFirstResetAllIsWritten);
     CPPUNIT_TEST(testWriteSecondResetAllStopsRecording);
     CPPUNIT_TEST(testWritePacketAfterSecondResetAllReturnsFalse);
+    CPPUNIT_TEST(testWriteFailurePropagates);
     CPPUNIT_TEST(testMultiplePacketsBeforeFirstResetAllAllSkipped);
     CPPUNIT_TEST(testMultiplePacketsBetweenResetAllsAllWritten);
     CPPUNIT_TEST(testMultiplePacketsAfterSecondResetAllAllRejected);
@@ -141,13 +141,6 @@ protected:
         packet.setSize(packet.getCapacity());
     }
 
-    static void createPacketWithData(DataPacket& packet, const std::vector<char>& data)
-    {
-        char* buffer = packet.getBuffer();
-        std::memcpy(buffer, data.data(), data.size());
-        packet.setSize(data.size());
-    }
-
     static std::vector<char> readFileContent(const std::string& path)
     {
         std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -196,9 +189,7 @@ protected:
         std::string longPath(4096, 'x');
         longPath += ".bin";
         SmartFileTarget target(longPath);
-        // Constructor accepts long path (may fail on open depending on OS limits)
-        // Just verify constructor doesn't crash
-        (void)target.open(); // Result doesn't matter, just testing constructor
+        CPPUNIT_ASSERT_EQUAL(false, target.open());
     }
 
     void testConstructorWithPathContainingSpaces()
@@ -213,8 +204,8 @@ protected:
     {
         const std::string path = makeTempFilePath("path_special!@#");
         SmartFileTarget target(path);
-        // Constructor succeeds, open may vary by OS
-        (void)target.open();
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+        target.close();
     }
 
     void testOpenWithValidPath()
@@ -244,6 +235,45 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, target.open());
         CPPUNIT_ASSERT_EQUAL(true, target.wantsMorePackets());
         target.close();
+    }
+
+    void testOpenDuringRecordingResetsState()
+    {
+        const std::string path = makeTempFilePath("open_during_recording_test");
+        SmartFileTarget target(path);
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+
+        DataPacket reset1(12);
+        createResetAllPacket(reset1);
+        CPPUNIT_ASSERT_EQUAL(true, target.writePacket(reset1));
+
+        DataPacket firstPacket(10);
+        createRegularPacket(firstPacket, 5);
+        CPPUNIT_ASSERT_EQUAL(true, target.writePacket(firstPacket));
+
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+        CPPUNIT_ASSERT_EQUAL(true, target.wantsMorePackets());
+
+        DataPacket skippedPacket(8);
+        createRegularPacket(skippedPacket, 7);
+        CPPUNIT_ASSERT_EQUAL(true, target.writePacket(skippedPacket));
+
+        DataPacket reset2(12);
+        createResetAllPacket(reset2);
+        CPPUNIT_ASSERT_EQUAL(true, target.writePacket(reset2));
+
+        DataPacket secondPacket(9);
+        createRegularPacket(secondPacket, 6);
+        CPPUNIT_ASSERT_EQUAL(true, target.writePacket(secondPacket));
+
+        target.close();
+
+        std::vector<char> content = readFileContent(path);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(43), content.size()); // 12 + 10 + 12 + 9
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(3), content[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(5), content[12]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(3), content[22]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(6), content[34]);
     }
 
     void testCloseWithoutOpen()
@@ -359,8 +389,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, target.open());
         target.close();
 
-        // Avoid asserting internal post-close state; verify the next session starts cleanly.
-        CPPUNIT_ASSERT_EQUAL(true, target.wantsMorePackets());
         CPPUNIT_ASSERT_EQUAL(true, target.open());
         CPPUNIT_ASSERT_EQUAL(true, target.wantsMorePackets());
         target.close();
@@ -672,6 +700,18 @@ protected:
         target.close();
     }
 
+    void testWriteFailurePropagates()
+    {
+        SmartFileTarget target("/dev/full");
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+
+        DataPacket reset(12);
+        createResetAllPacket(reset);
+        CPPUNIT_ASSERT_EQUAL(false, target.writePacket(reset));
+
+        target.close();
+    }
+
     void testMultiplePacketsBeforeFirstResetAllAllSkipped()
     {
         const std::string path = makeTempFilePath("multi_before_reset_test");
@@ -706,7 +746,7 @@ protected:
         for (int i = 0; i < 5; ++i)
         {
             DataPacket packet(10);
-            createRegularPacket(packet);
+            createRegularPacket(packet, static_cast<char>(10 + i));
             CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet));
             expectedSize += 10;
         }
@@ -721,6 +761,15 @@ protected:
         // Verify all packets between RESETs were written
         std::vector<char> content = readFileContent(path);
         CPPUNIT_ASSERT_EQUAL(expectedSize, content.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(3), content[0]);
+        for (int i = 0; i < 5; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(10 + i), content[12 + (i * 10)]);
+            for (int j = 1; j < 10; ++j)
+            {
+                CPPUNIT_ASSERT_EQUAL(static_cast<char>(j % 256), content[12 + (i * 10) + j]);
+            }
+        }
     }
 
     void testMultiplePacketsAfterSecondResetAllAllRejected()
@@ -984,6 +1033,11 @@ protected:
         // Only first RESET ALL written
         std::vector<char> content = readFileContent(path);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(12), content.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(3), content[0]);
+        for (size_t i = 1; i < 12; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0), content[i]);
+        }
     }
 
     void testCompleteRecordingSessionWritesCorrectContent()
@@ -1101,9 +1155,21 @@ protected:
         // Verify both files
         std::vector<char> content1 = readFileContent(path1);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(22), content1.size()); // 12 + 10
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(3), content1[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(5), content1[12]);
+        for (int i = 1; i < 10; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(i % 256), content1[12 + i]);
+        }
 
         std::vector<char> content2 = readFileContent(path2);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(27), content2.size()); // 12 + 15
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(3), content2[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(6), content2[12]);
+        for (int i = 1; i < 15; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(i % 256), content2[12 + i]);
+        }
     }
 
 private:

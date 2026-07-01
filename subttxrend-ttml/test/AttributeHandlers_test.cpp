@@ -17,6 +17,8 @@
 * limitations under the License.
 *****************************************************************************/
 
+#include <sstream>
+
 #include <cppunit/extensions/HelperMacros.h>
 #include "Parser/AttributeHandlers.hpp"
 
@@ -155,9 +157,7 @@ public:
         Attributes attrSet = { {"key:with:colon", "value,with,comma"}, {"key[bracket]", "value]bracket["} };
         std::ostringstream oss;
         oss << attrSet;
-        std::string out = oss.str();
-        CPPUNIT_ASSERT(out.find("[key:with:colon:value,with,comma], ") != std::string::npos);
-        CPPUNIT_ASSERT(out.find("[key[bracket]:value]bracket[], ") != std::string::npos);
+        CPPUNIT_ASSERT(oss.str() == "[key:with:colon:value,with,comma], [key[bracket]:value]bracket[], ");
     }
 
     void testStyleAttributeHandlerEmptyKeyValue()

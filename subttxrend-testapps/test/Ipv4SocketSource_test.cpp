@@ -33,6 +33,31 @@
 
 using namespace subttxrend::testapps;
 
+namespace
+{
+
+class ThreadJoiner
+{
+public:
+    explicit ThreadJoiner(std::thread& thread) :
+            m_thread(thread)
+    {
+    }
+
+    ~ThreadJoiner()
+    {
+        if (m_thread.joinable())
+        {
+            m_thread.join();
+        }
+    }
+
+private:
+    std::thread& m_thread;
+};
+
+}
+
 class Ipv4SocketSourceTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE(Ipv4SocketSourceTest);
@@ -61,23 +86,14 @@ CPPUNIT_TEST_SUITE(Ipv4SocketSourceTest);
     CPPUNIT_TEST(testReadPacketWithLargePayload);
     CPPUNIT_TEST(testReadPacketBufferTooSmallForPayload);
     CPPUNIT_TEST(testReadPacketLittleEndianSizeParsing);
+    CPPUNIT_TEST(testReadPacketShortHeader);
+    CPPUNIT_TEST(testReadPacketShortPayload);
     CPPUNIT_TEST(testReadPacketClientDisconnectReturnsZeroSize);
     CPPUNIT_TEST(testFullWorkflowConstructOpenReadClose);
     CPPUNIT_TEST(testReopenAfterClose);
     CPPUNIT_TEST(testMultiplePacketsWithDifferentSizes);
 
 CPPUNIT_TEST_SUITE_END();
-
-public:
-    void setUp() override
-    {
-        m_testPort = 0;
-    }
-
-    void tearDown() override
-    {
-        // Clean up any test resources
-    }
 
 protected:
     // Helper function to get an available port
@@ -107,12 +123,6 @@ protected:
     // Helper to create a client socket and connect
     int createClientSocket(const std::string& ip, unsigned short port)
     {
-        int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        if (sockfd < 0)
-        {
-            return -1;
-        }
-
         struct sockaddr_in serverAddr;
         memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin_family = AF_INET;
@@ -120,20 +130,27 @@ protected:
 
         if (inet_pton(AF_INET, ip.c_str(), &serverAddr.sin_addr) != 1)
         {
-            ::close(sockfd);
             return -1;
         }
 
-        // Give server time to listen
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-        if (connect(sockfd, reinterpret_cast<struct sockaddr*>(&serverAddr), sizeof(serverAddr)) < 0)
+        for (int attempt = 0; attempt < 20; ++attempt)
         {
+            int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+            if (sockfd < 0)
+            {
+                return -1;
+            }
+
+            if (connect(sockfd, reinterpret_cast<struct sockaddr*>(&serverAddr), sizeof(serverAddr)) == 0)
+            {
+                return sockfd;
+            }
+
             ::close(sockfd);
-            return -1;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
-        return sockfd;
+        return -1;
     }
 
     // Helper to send packet data
@@ -378,10 +395,10 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         CPPUNIT_ASSERT_EQUAL(false, source.readPacket(packet));
 
-        clientThread.join();
         source.close();
     }
 
@@ -407,11 +424,11 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         // Should fail because buffer can't hold payload
         CPPUNIT_ASSERT_EQUAL(false, source.readPacket(packet));
 
-        clientThread.join();
         source.close();
     }
 
@@ -437,6 +454,7 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(16), packet.getSize()); // 12 header + 4 payload
@@ -447,7 +465,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xCC), buffer[14]);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xDD), buffer[15]);
 
-        clientThread.join();
         source.close();
     }
 
@@ -472,11 +489,11 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(12), packet.getSize()); // Just header
 
-        clientThread.join();
         source.close();
     }
 
@@ -502,11 +519,11 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(5012), packet.getSize()); // 12 + 5000
 
-        clientThread.join();
         source.close();
     }
 
@@ -532,10 +549,10 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         CPPUNIT_ASSERT_EQUAL(false, source.readPacket(packet));
 
-        clientThread.join();
         source.close();
     }
 
@@ -585,6 +602,7 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(270), packet.getSize()); // 12 + 258
@@ -597,7 +615,62 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x5A), buffer[12]);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x5A), buffer[269]);
 
-        clientThread.join();
+        source.close();
+    }
+
+    void testReadPacketShortHeader()
+    {
+        unsigned short testPort = getAvailablePort();
+        std::string path = "127.0.0.1:" + std::to_string(testPort);
+        Ipv4SocketSource source(path);
+
+        CPPUNIT_ASSERT_EQUAL(true, source.open());
+
+        DataPacket packet(1024);
+
+        std::thread clientThread([testPort, this]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            int sock = createClientSocket("127.0.0.1", testPort);
+            if (sock >= 0)
+            {
+                std::vector<std::uint8_t> shortHeader = {0x01, 0x02, 0x03, 0x04};
+                sendPacketData(sock, shortHeader);
+                ::close(sock);
+            }
+        });
+        ThreadJoiner joiner(clientThread);
+
+        CPPUNIT_ASSERT_EQUAL(false, source.readPacket(packet));
+
+        source.close();
+    }
+
+    void testReadPacketShortPayload()
+    {
+        unsigned short testPort = getAvailablePort();
+        std::string path = "127.0.0.1:" + std::to_string(testPort);
+        Ipv4SocketSource source(path);
+
+        CPPUNIT_ASSERT_EQUAL(true, source.open());
+
+        DataPacket packet(1024);
+
+        std::thread clientThread([testPort, this]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            int sock = createClientSocket("127.0.0.1", testPort);
+            if (sock >= 0)
+            {
+                std::vector<std::uint8_t> payload = {0x10, 0x20, 0x30, 0x40};
+                auto packetData = makePacket(payload);
+                packetData.resize(14);
+                sendPacketData(sock, packetData);
+                ::close(sock);
+            }
+        });
+        ThreadJoiner joiner(clientThread);
+
+        CPPUNIT_ASSERT_EQUAL(false, source.readPacket(packet));
+
         source.close();
     }
 
@@ -630,11 +703,11 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getSize()); // EOF
 
-        clientThread.join();
         source.close();
     }
 
@@ -661,12 +734,11 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         // Read
         CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(15), packet.getSize());
-
-        clientThread.join();
 
         // Close
         source.close();
@@ -731,6 +803,7 @@ protected:
                 ::close(sock);
             }
         });
+        ThreadJoiner joiner(clientThread);
 
         // Read all three packets
         CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
@@ -742,12 +815,8 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(512), packet.getSize());
 
-        clientThread.join();
         source.close();
     }
-
-private:
-    unsigned short m_testPort;
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Ipv4SocketSourceTest);

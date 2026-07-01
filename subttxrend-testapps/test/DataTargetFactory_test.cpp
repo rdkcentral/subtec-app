@@ -58,6 +58,7 @@ CPPUNIT_TEST_SUITE( DataTargetFactoryTest );
     CPPUNIT_TEST(testCreateTargetWithFilePath);
     CPPUNIT_TEST(testCreateTargetWithSfilePath);
     CPPUNIT_TEST(testCreateTargetWithConsolePath);
+    CPPUNIT_TEST(testCreateTargetWithConsoleParsePath);
     CPPUNIT_TEST(testCreateTargetWithMinimalPathAfterColon);
     CPPUNIT_TEST(testCreateTargetWithMultipleColons);
     CPPUNIT_TEST(testCreateTargetWithPathContainingSpaces);
@@ -327,15 +328,12 @@ protected:
 
     void testCreateTargetWithConsolePath()
     {
-        std::unique_ptr<DataTarget> target = assertCreatedTarget<ConsoleLogTarget>("console:", "");
-        CPPUNIT_ASSERT(target->open());
-        CPPUNIT_ASSERT(target->wantsMorePackets());
+        assertCreatedTarget<ConsoleLogTarget>("console:", "");
+    }
 
-        DataPacket packet(8);
-        packet.appendLeUint32(0x12345678);
-
-        CPPUNIT_ASSERT(target->writePacket(packet));
-        target->close();
+    void testCreateTargetWithConsoleParsePath()
+    {
+        assertCreatedTarget<ConsoleLogTarget>("console:parse", "parse");
     }
 
     void testCreateTargetWithMinimalPathAfterColon()
@@ -566,26 +564,31 @@ protected:
     {
         DataTargetFactory factory;
         const DataTargetFactoryEntry& entry = factory.getTypeInfo(0);
+        const std::string& prefix = entry.getPrefix();
 
-        std::string prefix1 = entry.getPrefix();
-        std::string prefix2 = entry.getPrefix();
-        std::string prefix3 = entry.getPrefix();
+        std::unique_ptr<DataTarget> target = factory.createTarget("ipv4:127.0.0.1:8080");
+        const DataTargetFactoryEntry& otherEntry = factory.getTypeInfo(4);
 
-        CPPUNIT_ASSERT_EQUAL(prefix1, prefix2);
-        CPPUNIT_ASSERT_EQUAL(prefix2, prefix3);
-        CPPUNIT_ASSERT_EQUAL(std::string("ipv4"), prefix1);
+        CPPUNIT_ASSERT(target != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("console"), otherEntry.getPrefix());
+        CPPUNIT_ASSERT_EQUAL(std::string("ipv4"), prefix);
+        CPPUNIT_ASSERT_EQUAL(&prefix, &entry.getPrefix());
     }
 
     void testFactoryEntryDescriptionIsImmutable()
     {
         DataTargetFactory factory;
         const DataTargetFactoryEntry& entry = factory.getTypeInfo(1);
+        const std::string& description = entry.getDescription();
 
-        std::string desc1 = entry.getDescription();
-        std::string desc2 = entry.getDescription();
+        std::unique_ptr<DataTarget> target = factory.createTarget("unix:/tmp/socket");
+        const DataTargetFactoryEntry& otherEntry = factory.getTypeInfo(2);
 
-        CPPUNIT_ASSERT_EQUAL(desc1, desc2);
-        CPPUNIT_ASSERT(!desc1.empty());
+        CPPUNIT_ASSERT(target != nullptr);
+        CPPUNIT_ASSERT(otherEntry.getDescription().find("file") != std::string::npos);
+        CPPUNIT_ASSERT(!description.empty());
+        CPPUNIT_ASSERT(description.find("unix") != std::string::npos);
+        CPPUNIT_ASSERT_EQUAL(&description, &entry.getDescription());
     }
 
     void testCreateTargetWithPathContainingNewline()

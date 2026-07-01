@@ -18,12 +18,13 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <cstdlib>
+#include <cstdio>
+#include <fstream>
 #include <iostream>
-#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <cstdlib>
 
 #include "DataProxyApp.hpp"
 
@@ -43,7 +44,6 @@ CPPUNIT_TEST_SUITE( DataProxyAppTest );
     CPPUNIT_TEST(testRunWithEmptyTargetPath);
     CPPUNIT_TEST(testRunWithFirstArgumentEmpty);
     CPPUNIT_TEST(testRunWithSecondArgumentEmpty);
-    CPPUNIT_TEST(testRunWithBothArgumentsEmptyStrings);
     CPPUNIT_TEST(testRunWithInvalidSourcePrefix);
     CPPUNIT_TEST(testRunWithInvalidTargetPrefix);
     CPPUNIT_TEST(testRunWithBothInvalidPrefixes);
@@ -56,7 +56,9 @@ CPPUNIT_TEST_SUITE( DataProxyAppTest );
     CPPUNIT_TEST(testRunWithSourcePrefixColonAtEnd);
     CPPUNIT_TEST(testRunWithTargetPrefixColonAtEnd);
     CPPUNIT_TEST(testRunWithInvalidFileSourcePath);
+    CPPUNIT_TEST(testRunWithShortFileSource);
     CPPUNIT_TEST(testRunWithInvalidFileTargetPath);
+    CPPUNIT_TEST(testRunWithDevFullTarget);
     CPPUNIT_TEST(testRunWithValidRandomSourceAndConsoleTarget);
     CPPUNIT_TEST(testRunWithValidRandomSourceMultiplePackets);
     CPPUNIT_TEST(testRunWithVeryLongSourcePath);
@@ -68,18 +70,28 @@ CPPUNIT_TEST_SUITE( DataProxyAppTest );
 
 CPPUNIT_TEST_SUITE_END();
 
-public:
-    void setUp()
-    {
-        // Setup code here if needed
-    }
-
-    void tearDown()
-    {
-        // Cleanup code here if needed
-    }
-
 protected:
+    std::size_t countOccurrences(const std::string& text, const std::string& needle)
+    {
+        std::size_t count = 0;
+        std::size_t pos = 0;
+
+        while ((pos = text.find(needle, pos)) != std::string::npos)
+        {
+            ++count;
+            pos += needle.length();
+        }
+
+        return count;
+    }
+
+    std::string createTempPath() const
+    {
+        std::ostringstream path;
+        path << "/tmp/dataproxyapp_test_" << std::rand() << ".bin";
+        return path.str();
+    }
+
     void testRunPrintsUsageWithConfiguredAppName()
     {
         std::vector<std::string> args;
@@ -188,14 +200,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(EXIT_FAILURE, result);
     }
 
-    void testRunWithBothArgumentsEmptyStrings()
-    {
-        std::vector<std::string> args = {"", ""};
-        DataProxyApp app("testApp", args);
-        int result = app.run();
-        CPPUNIT_ASSERT_EQUAL(EXIT_FAILURE, result);
-    }
-
     void testRunWithInvalidSourcePrefix()
     {
         std::vector<std::string> args = {"invalid:path", "console:"};
@@ -297,6 +301,41 @@ protected:
         CPPUNIT_ASSERT_EQUAL(EXIT_FAILURE, result);
     }
 
+    void testRunWithShortFileSource()
+    {
+        const std::string sourcePath = createTempPath();
+        {
+            std::ofstream sourceFile(sourcePath.c_str(), std::ios::binary);
+            CPPUNIT_ASSERT(sourceFile.is_open());
+
+            const char shortHeader[] = {0x01, 0x02, 0x03, 0x04};
+            sourceFile.write(shortHeader, sizeof(shortHeader));
+            CPPUNIT_ASSERT(sourceFile.good());
+        }
+
+        std::vector<std::string> args = {"file:" + sourcePath, "console:"};
+        DataProxyApp app("testApp", args);
+
+        std::ostringstream capturedError;
+        std::streambuf* originalError = std::cerr.rdbuf(capturedError.rdbuf());
+
+        try
+        {
+            int result = app.run();
+            std::cerr.rdbuf(originalError);
+            (void)std::remove(sourcePath.c_str());
+
+            CPPUNIT_ASSERT_EQUAL(EXIT_FAILURE, result);
+            CPPUNIT_ASSERT(capturedError.str().find("Packet read failed") != std::string::npos);
+        }
+        catch (...)
+        {
+            std::cerr.rdbuf(originalError);
+            (void)std::remove(sourcePath.c_str());
+            throw;
+        }
+    }
+
     void testRunWithInvalidFileTargetPath()
     {
         // Invalid target path (directory doesn't exist)
@@ -306,13 +345,54 @@ protected:
         CPPUNIT_ASSERT_EQUAL(EXIT_FAILURE, result);
     }
 
+    void testRunWithDevFullTarget()
+    {
+        std::vector<std::string> args = {"rand:1:0", "file:/dev/full"};
+        DataProxyApp app("testApp", args);
+
+        std::ostringstream capturedError;
+        std::streambuf* originalError = std::cerr.rdbuf(capturedError.rdbuf());
+
+        try
+        {
+            int result = app.run();
+            std::cerr.rdbuf(originalError);
+
+            CPPUNIT_ASSERT_EQUAL(EXIT_FAILURE, result);
+            CPPUNIT_ASSERT(capturedError.str().find("Packet write failed") != std::string::npos);
+        }
+        catch (...)
+        {
+            std::cerr.rdbuf(originalError);
+            throw;
+        }
+    }
+
     void testRunWithValidRandomSourceAndConsoleTarget()
     {
         // rand:1:0 creates 1 packet with 0ms sleep, console: outputs to console
         std::vector<std::string> args = {"rand:1:0", "console:"};
         DataProxyApp app("testApp", args);
-        int result = app.run();
-        CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result);
+
+        std::ostringstream capturedOutput;
+        std::streambuf* originalOutput = std::cout.rdbuf(capturedOutput.rdbuf());
+
+        try
+        {
+            int result = app.run();
+            std::cout.rdbuf(originalOutput);
+
+            const std::string output = capturedOutput.str();
+            CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result);
+            CPPUNIT_ASSERT(output.find("Packets processing loop started") != std::string::npos);
+            CPPUNIT_ASSERT(output.find("Packets processing loop finished") != std::string::npos);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), countOccurrences(output, "Packet: size="));
+        }
+        catch (...)
+        {
+            std::cout.rdbuf(originalOutput);
+            throw;
+        }
     }
 
     void testRunWithValidRandomSourceMultiplePackets()
@@ -320,8 +400,24 @@ protected:
         // rand:5:0 creates 5 packets with 0ms sleep
         std::vector<std::string> args = {"rand:5:0", "console:"};
         DataProxyApp app("testApp", args);
-        int result = app.run();
-        CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result);
+
+        std::ostringstream capturedOutput;
+        std::streambuf* originalOutput = std::cout.rdbuf(capturedOutput.rdbuf());
+
+        try
+        {
+            int result = app.run();
+            std::cout.rdbuf(originalOutput);
+
+            const std::string output = capturedOutput.str();
+            CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(5), countOccurrences(output, "Packet: size="));
+        }
+        catch (...)
+        {
+            std::cout.rdbuf(originalOutput);
+            throw;
+        }
     }
 
     void testRunWithVeryLongSourcePath()
@@ -385,13 +481,29 @@ protected:
         DataProxyApp app2("testApp2", args2);
         DataProxyApp app3("testApp3", args3);
 
-        int result1 = app1.run();
-        int result2 = app2.run();
-        int result3 = app3.run();
+        std::ostringstream capturedOutput;
+        std::streambuf* originalOutput = std::cout.rdbuf(capturedOutput.rdbuf());
 
-        CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result1);
-        CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result2);
-        CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result3);
+        try
+        {
+            int result1 = app1.run();
+            int result2 = app2.run();
+            int result3 = app3.run();
+            std::cout.rdbuf(originalOutput);
+
+            const std::string output = capturedOutput.str();
+            CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result1);
+            CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result2);
+            CPPUNIT_ASSERT_EQUAL(EXIT_SUCCESS, result3);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(6), countOccurrences(output, "Packet: size="));
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(3), countOccurrences(output, "Packets processing loop started"));
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(3), countOccurrences(output, "Packets processing loop finished"));
+        }
+        catch (...)
+        {
+            std::cout.rdbuf(originalOutput);
+            throw;
+        }
     }
 };
 

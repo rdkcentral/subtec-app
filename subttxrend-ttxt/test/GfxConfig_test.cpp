@@ -19,7 +19,6 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <map>
-#include <climits>
 
 #include "GfxConfig.hpp"
 
@@ -46,11 +45,6 @@ public:
         {
             m_values.erase(key);
         }
-    }
-
-    void removeValue(const std::string& key)
-    {
-        m_values.erase(key);
     }
 
     void clear()
@@ -101,6 +95,11 @@ class GfxConfigTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testPartialConfigurationWindow);
     CPPUNIT_TEST(testPartialConfigurationGridCell);
     CPPUNIT_TEST(testPartialConfigurationFont);
+    CPPUNIT_TEST(testInvalidWindowFallback);
+    CPPUNIT_TEST(testInvalidGridFallback);
+    CPPUNIT_TEST(testInvalidFontSizeFallback);
+    CPPUNIT_TEST(testInvalidFlashFallback);
+    CPPUNIT_TEST(testInvalidAlphaFallback);
     CPPUNIT_TEST(testAllCustomValuesFullConfig);
     CPPUNIT_TEST(testAlphaOverflow);
     CPPUNIT_TEST(testMultipleInitWithPartialUpdates);
@@ -450,6 +449,64 @@ protected:
         CPPUNIT_ASSERT_EQUAL(24, static_cast<int>(config.getFontInfoG0G2().m_charSize.m_h));
     }
 
+    void testInvalidWindowFallback()
+    {
+        m_provider.setValue("WINDOW.W", "12px");
+        m_provider.setValue("WINDOW.H", "   ");
+
+        GfxConfig config;
+        config.init(&m_provider);
+
+        verifySize(config.getWindowSizePixels(), 1280, 720);
+    }
+
+    void testInvalidGridFallback()
+    {
+        m_provider.setValue("GRID_CELL.W", "abc");
+        m_provider.setValue("GRID_CELL.H", "99999999999999999999");
+
+        GfxConfig config;
+        config.init(&m_provider);
+
+        verifySize(config.getGridCellSizePixels(), 22, 26);
+    }
+
+    void testInvalidFontSizeFallback()
+    {
+        m_provider.setValue("FONT_G0_G2.NAME", "Teletext");
+        m_provider.setValue("FONT_G0_G2.W", "+");
+        m_provider.setValue("FONT_G0_G2.H", "-99999999999999999999");
+
+        GfxConfig config;
+        config.init(&m_provider);
+
+        CPPUNIT_ASSERT_EQUAL(std::string("Teletext"), config.getFontInfoG0G2().m_name);
+        CPPUNIT_ASSERT_EQUAL(34, static_cast<int>(config.getFontInfoG0G2().m_charSize.m_w));
+        CPPUNIT_ASSERT_EQUAL(24, static_cast<int>(config.getFontInfoG0G2().m_charSize.m_h));
+    }
+
+    void testInvalidFlashFallback()
+    {
+        // Trailing characters make the value invalid, so the default should be used.
+        m_provider.setValue("FLASH_PERIOD_MS", "200ms");
+
+        GfxConfig config;
+        config.init(&m_provider);
+
+        CPPUNIT_ASSERT_EQUAL(1000, config.getFlashPeriodMs());
+    }
+
+    void testInvalidAlphaFallback()
+    {
+        m_provider.setValue("BG_ALPHA", "99999999999999999999");
+
+        GfxConfig config;
+        config.init(&m_provider);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xFF),
+                            config.getDefaultBackgroundAlpha());
+    }
+
     void testAllCustomValuesFullConfig()
     {
         // Test with all values configured to non-default values
@@ -577,11 +634,12 @@ protected:
 
         // But char size is independent of glyph size
         CPPUNIT_ASSERT_EQUAL(100, static_cast<int>(config.getFontInfoG0G2().m_charSize.m_w));
+        CPPUNIT_ASSERT_EQUAL(100, static_cast<int>(config.getFontInfoG0G2().m_charSize.m_h));
     }
 
     void testConfigWithAllBoundaryValues()
     {
-        // Test configuration with all boundary values at once
+        // Test a representative minimum-valid configuration across all fields.
         m_provider.setValue("WINDOW.W", "1");
         m_provider.setValue("WINDOW.H", "1");
         m_provider.setValue("GRID_CELL.W", "1");
@@ -599,6 +657,7 @@ protected:
         verifySize(config.getGridCellSizePixels(), 1, 1);
         CPPUNIT_ASSERT_EQUAL(std::string(""), config.getFontInfoG0G2().m_name);
         CPPUNIT_ASSERT_EQUAL(1, static_cast<int>(config.getFontInfoG0G2().m_charSize.m_w));
+        CPPUNIT_ASSERT_EQUAL(1, static_cast<int>(config.getFontInfoG0G2().m_charSize.m_h));
         CPPUNIT_ASSERT_EQUAL(200, config.getFlashPeriodMs());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0),
                             config.getDefaultBackgroundAlpha());

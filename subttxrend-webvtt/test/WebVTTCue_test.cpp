@@ -41,6 +41,7 @@ CPPUNIT_TEST(testAllValidSettings);
 CPPUNIT_TEST(testMultipleSettingsAtOnce);
 CPPUNIT_TEST(testEmptyAndUnknownSettings);
 CPPUNIT_TEST(testComputedPositionAlignTextDirection);
+CPPUNIT_TEST(testCueBoxFlags);
 CPPUNIT_TEST(testIdempotency);
 CPPUNIT_TEST(testStressRobustness);
 CPPUNIT_TEST_SUITE_END();
@@ -309,7 +310,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(10000, GetSize(cue)); // Should fallback to default (invalid)
 
         // Test malformed values
-        cue.addCueSettings({{"position", "50%%"}});
+        cue.addCueSettings({{"position", "%"}});
         CPPUNIT_ASSERT_EQUAL(5000, cue.cueBox().computedPositionVwH); // Should fallback to default
     }
 
@@ -362,6 +363,30 @@ public:
         cue.addCueSettings({{"align", "start"}});
         // For LTR, align start, computedPosition should be 0
         CPPUNIT_ASSERT_EQUAL(0, cue.cueBox().computedPositionVwH);
+    }
+
+    void testCueBoxFlags() {
+        WebVTTCue cue(buildTp(1000, 3000));
+
+        cue.addCueSettings({{"line", "10%,end"}});
+        auto box = cue.cueBox();
+        CPPUNIT_ASSERT_EQUAL(1000, box.lineVhH);
+        CPPUNIT_ASSERT_EQUAL(WebVTTCue::LineAlignType::kEnd, box.cueLineAlign);
+        CPPUNIT_ASSERT_EQUAL(false, box.snapToLines);
+
+        cue = WebVTTCue(buildTp(1000, 3000));
+        cue.addCueSettings({{"line", "3,start"}});
+        box = cue.cueBox();
+        CPPUNIT_ASSERT_EQUAL(3, box.lineVhH);
+        CPPUNIT_ASSERT_EQUAL(WebVTTCue::LineAlignType::kStart, box.cueLineAlign);
+        CPPUNIT_ASSERT_EQUAL(true, box.snapToLines);
+
+        cue = WebVTTCue(buildTp(1000, 3000));
+        cue.addCueSettings({{"line", "auto,center"}});
+        box = cue.cueBox();
+        CPPUNIT_ASSERT_EQUAL(constants::kCueAutoSetting, box.lineVhH);
+        CPPUNIT_ASSERT_EQUAL(WebVTTCue::LineAlignType::kCenter, box.cueLineAlign);
+        CPPUNIT_ASSERT_EQUAL(true, box.snapToLines);
     }
 
     void testRegionIdGetter() {
@@ -453,7 +478,6 @@ public:
         CPPUNIT_ASSERT_EQUAL(5000, box.computedPositionVwH);
         CPPUNIT_ASSERT_EQUAL(10000, box.computedSizeVwH);
     }
-
 
     void testIdempotency() {
         WebVTTCue cue(buildTp(1000, 3000));

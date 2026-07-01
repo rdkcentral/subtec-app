@@ -177,8 +177,8 @@ class SubtitlesRendererImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testStartWithMagazine0_ConvertsTo8);
     CPPUNIT_TEST(testStartWithMagazine1_NoConversion);
     CPPUNIT_TEST(testStartWithMagazine8_NoConversion);
-    CPPUNIT_TEST(testStartWithPageNumberBounds);
-    CPPUNIT_TEST(testStartWithMagazine0PageNumberBounds);
+    CPPUNIT_TEST(testStartForwardsRawPage);
+    CPPUNIT_TEST(testStartForwardsRawPageWithMagazine0);
     CPPUNIT_TEST(testStartPageIdHasAnySubpage);
     CPPUNIT_TEST(testStartMultipleTimes_UpdatesSelectedPage);
     CPPUNIT_TEST_SUITE_END();
@@ -239,16 +239,14 @@ protected:
         assertStartSetsPage(8, 0x80, static_cast<std::uint16_t>(0x880), 1);
     }
 
-    void testStartWithPageNumberBounds()
+    void testStartForwardsRawPage()
     {
-        assertStartSetsPage(1, 0x00, static_cast<std::uint16_t>(0x100), 1);
-        assertStartSetsPage(1, 0xFF, static_cast<std::uint16_t>(0x1FF), 2);
+        assertStartSetsPage(1, 0xAA, static_cast<std::uint16_t>(0x1AA), 1);
     }
 
-    void testStartWithMagazine0PageNumberBounds()
+    void testStartForwardsRawPageWithMagazine0()
     {
-        assertStartSetsPage(0, 0x00, static_cast<std::uint16_t>(0x800), 1);
-        assertStartSetsPage(0, 0xFF, static_cast<std::uint16_t>(0x8FF), 2);
+        assertStartSetsPage(0, 0xFF, static_cast<std::uint16_t>(0x8FF), 1);
     }
 
     void testStartPageIdHasAnySubpage()

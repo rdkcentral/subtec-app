@@ -238,7 +238,7 @@ public:
     ttxdecoder::PageId getNextPageId(const ttxdecoder::PageId& inputPageId) const override
     {
         // Return page + 1
-        auto pageNum = inputPageId.getPage();
+        auto pageNum = inputPageId.getMagazinePage();
         if (pageNum < 0x899) {
             return ttxdecoder::PageId(pageNum + 1, ttxdecoder::PageId::ANY_SUBPAGE);
         }
@@ -248,7 +248,7 @@ public:
     ttxdecoder::PageId getPrevPageId(const ttxdecoder::PageId& inputPageId) const override
     {
         // Return page - 1
-        auto pageNum = inputPageId.getPage();
+        auto pageNum = inputPageId.getMagazinePage();
         if (pageNum > 0x100) {
             return ttxdecoder::PageId(pageNum - 1, ttxdecoder::PageId::ANY_SUBPAGE);
         }
@@ -298,6 +298,16 @@ public:
     }
 
     void setIgnorePts(bool ignorePts) override {}
+
+    ttxdecoder::PageId getCurrentPageId() const
+    {
+        return m_currentPageId;
+    }
+
+    void setControlInfo(std::uint8_t controlInfo)
+    {
+        m_controlInfo = controlInfo;
+    }
 
 private:
     ttxdecoder::PageId m_currentPageId;
@@ -383,6 +393,7 @@ public:
     void setNullWindow() { m_window.reset(); }
 
     std::shared_ptr<MockWindow> getMockWindow() const { return m_window; }
+    std::shared_ptr<MockTtxEngine> getMockTtxEngine() const { return m_ttxEngine; }
 
 private:
     std::shared_ptr<MockConfigProvider> m_config;
@@ -454,11 +465,19 @@ class GfxRendererTest : public CppUnit::TestFixture
     CPPUNIT_TEST(test_window_SizeSetOnShow);
     CPPUNIT_TEST(test_subtitle_InitShowHide);
     CPPUNIT_TEST(test_subtitle_DrawOperations);
+    CPPUNIT_TEST(test_subtitle_TransparentMode);
     CPPUNIT_TEST(test_mixed_NormalThenSubtitle);
     CPPUNIT_TEST(test_mixed_SubtitleThenNormal);
-    CPPUNIT_TEST(test_concurrent_InitShowBeforeShutdown);
-    CPPUNIT_TEST(test_concurrent_ShowDrawHide);
-    CPPUNIT_TEST(test_concurrent_MultipleDraws);
+    CPPUNIT_TEST(test_key_ReleasedIgnored);
+    CPPUNIT_TEST(test_key_SubtitleIgnored);
+    CPPUNIT_TEST(test_key_PauseToggle);
+    CPPUNIT_TEST(test_key_ZoomCycle);
+    CPPUNIT_TEST(test_key_BackgroundAlphaCycle);
+    CPPUNIT_TEST(test_key_DigitEntry);
+    CPPUNIT_TEST(test_key_NextPrev);
+    CPPUNIT_TEST(test_sequence_InitShowBeforeShutdown);
+    CPPUNIT_TEST(test_sequence_ShowDrawHide);
+    CPPUNIT_TEST(test_sequence_MultipleDraws);
     CPPUNIT_TEST(test_integration_FullWorkflow);
     CPPUNIT_TEST(test_integration_MultipleClients_Interleaved);
     CPPUNIT_TEST(test_integration_ErrorInMiddle);
@@ -471,11 +490,13 @@ class GfxRendererTest : public CppUnit::TestFixture
     CPPUNIT_TEST(test_edge_InitCountBoundary_100InitsWithOperations);
     CPPUNIT_TEST(test_edge_ClientSwitchingWithoutFullCleanup);
     CPPUNIT_TEST(test_edge_DrawWithBothFlagsAndNoFlags);
+    CPPUNIT_TEST(test_draw_SelectionTimeout);
+    CPPUNIT_TEST(test_draw_NewsflashTransparent);
     CPPUNIT_TEST(test_validation_AllPublicMethodsThrowWhenNotInit);
     CPPUNIT_TEST(test_validation_AllPublicMethodsWorkAfterInit);
     CPPUNIT_TEST(test_robustness_ExceptionDoesNotCorruptState);
     CPPUNIT_TEST(test_robustness_MultipleExceptionsRecovery);
-    CPPUNIT_TEST(test_coverage_AllErrorPathsCovered);
+    CPPUNIT_TEST(test_validation_AllCurrentErrorPathsCovered);
 
     CPPUNIT_TEST_SUITE_END();
 
@@ -1475,6 +1496,19 @@ protected:
         m_renderer->gfxShutdown();
     }
 
+    void test_subtitle_TransparentMode()
+    {
+        auto subtitleClient = std::make_shared<MockGfxRendererClient>(true);
+
+        m_renderer->gfxInit(subtitleClient.get());
+        m_renderer->gfxShow(subtitleClient.get());
+
+        CPPUNIT_ASSERT(m_renderer->m_transparentMode);
+
+        m_renderer->gfxHide(subtitleClient.get());
+        m_renderer->gfxShutdown();
+    }
+
     void test_mixed_NormalThenSubtitle()
     {
         auto subtitleClient = std::make_shared<MockGfxRendererClient>(true);
@@ -1509,7 +1543,201 @@ protected:
         m_renderer->gfxShutdown();
     }
 
-    void test_concurrent_InitShowBeforeShutdown()
+    void test_key_ReleasedIgnored()
+    {
+        m_renderer->gfxInit(m_client.get());
+        m_renderer->gfxShow(m_client.get());
+
+        auto mockWindow = m_client->getMockWindow();
+        mockWindow->resetCalls();
+
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::RELEASED, XKB_KEY_Right));
+
+        CPPUNIT_ASSERT(!m_renderer->m_paused);
+        CPPUNIT_ASSERT(!mockWindow->wasUpdateCalled());
+
+        m_renderer->gfxHide(m_client.get());
+        m_renderer->gfxShutdown();
+    }
+
+    void test_key_SubtitleIgnored()
+    {
+        auto subtitleClient = std::make_shared<MockGfxRendererClient>(true);
+
+        m_renderer->gfxInit(subtitleClient.get());
+        m_renderer->gfxShow(subtitleClient.get());
+
+        auto mockWindow = subtitleClient->getMockWindow();
+        mockWindow->resetCalls();
+
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Right));
+
+        CPPUNIT_ASSERT(!m_renderer->m_paused);
+        CPPUNIT_ASSERT(!mockWindow->wasUpdateCalled());
+
+        m_renderer->gfxHide(subtitleClient.get());
+        m_renderer->gfxShutdown();
+    }
+
+    void test_key_PauseToggle()
+    {
+        m_renderer->gfxInit(m_client.get());
+        m_renderer->gfxShow(m_client.get());
+
+        auto mockWindow = m_client->getMockWindow();
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Right));
+        CPPUNIT_ASSERT(m_renderer->m_paused);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Right));
+        CPPUNIT_ASSERT(!m_renderer->m_paused);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        m_renderer->gfxHide(m_client.get());
+        m_renderer->gfxShutdown();
+    }
+
+    void test_key_ZoomCycle()
+    {
+        m_renderer->gfxInit(m_client.get());
+        m_renderer->gfxShow(m_client.get());
+
+        auto mockWindow = m_client->getMockWindow();
+        CPPUNIT_ASSERT(m_renderer->m_zoomMode == ZoomMode::NONE);
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Left));
+        CPPUNIT_ASSERT(m_renderer->m_zoomMode == ZoomMode::TOP);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Left));
+        CPPUNIT_ASSERT(m_renderer->m_zoomMode == ZoomMode::BOTTOM);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Left));
+        CPPUNIT_ASSERT(m_renderer->m_zoomMode == ZoomMode::NONE);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        m_renderer->gfxHide(m_client.get());
+        m_renderer->gfxShutdown();
+    }
+
+    void test_key_BackgroundAlphaCycle()
+    {
+        m_renderer->gfxInit(m_client.get());
+        m_renderer->gfxShow(m_client.get());
+
+        auto mockWindow = m_client->getMockWindow();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xFF), m_renderer->m_bgAlpha);
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Return));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xCA), m_renderer->m_bgAlpha);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Return));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x80), m_renderer->m_bgAlpha);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Return));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x40), m_renderer->m_bgAlpha);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Return));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), m_renderer->m_bgAlpha);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Return));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xFF), m_renderer->m_bgAlpha);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        m_renderer->gfxHide(m_client.get());
+        m_renderer->gfxShutdown();
+    }
+
+    void test_key_DigitEntry()
+    {
+        m_renderer->gfxInit(m_client.get());
+        m_renderer->gfxShow(m_client.get());
+
+        auto mockWindow = m_client->getMockWindow();
+        auto mockTtxEngine = m_client->getMockTtxEngine();
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_0));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(1), m_renderer->m_newPageId);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_2));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x12), m_renderer->m_newPageId);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_3));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0), m_renderer->m_newPageId);
+        CPPUNIT_ASSERT(ttxdecoder::PageId(0x123, ttxdecoder::PageId::ANY_SUBPAGE)
+            == mockTtxEngine->getCurrentPageId());
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        m_renderer->gfxHide(m_client.get());
+        m_renderer->gfxShutdown();
+    }
+
+    void test_key_NextPrev()
+    {
+        m_client->setCurrentPage(ttxdecoder::PageId(0x123,
+            ttxdecoder::PageId::ANY_SUBPAGE));
+
+        m_renderer->gfxInit(m_client.get());
+        m_renderer->gfxShow(m_client.get());
+
+        auto mockWindow = m_client->getMockWindow();
+        auto mockTtxEngine = m_client->getMockTtxEngine();
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Up));
+        CPPUNIT_ASSERT(ttxdecoder::PageId(0x124, ttxdecoder::PageId::ANY_SUBPAGE)
+            == mockTtxEngine->getCurrentPageId());
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        mockWindow->resetCalls();
+        m_renderer->onKeyEvent(subttxrend::gfx::KeyEvent(
+            subttxrend::gfx::KeyEvent::Type::PRESSED, XKB_KEY_Down));
+        CPPUNIT_ASSERT(ttxdecoder::PageId(0x123, ttxdecoder::PageId::ANY_SUBPAGE)
+            == mockTtxEngine->getCurrentPageId());
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        m_renderer->gfxHide(m_client.get());
+        m_renderer->gfxShutdown();
+    }
+
+    void test_sequence_InitShowBeforeShutdown()
     {
         m_renderer->gfxInit(m_client.get());
         m_renderer->gfxShow(m_client.get());
@@ -1525,7 +1753,7 @@ protected:
         m_renderer->gfxShutdown();
     }
 
-    void test_concurrent_ShowDrawHide()
+    void test_sequence_ShowDrawHide()
     {
         m_renderer->gfxInit(m_client.get());
         m_renderer->gfxShow(m_client.get());
@@ -1534,7 +1762,7 @@ protected:
         m_renderer->gfxShutdown();
     }
 
-    void test_concurrent_MultipleDraws()
+    void test_sequence_MultipleDraws()
     {
         m_renderer->gfxInit(m_client.get());
         m_renderer->gfxShow(m_client.get());
@@ -1780,6 +2008,43 @@ protected:
         m_renderer->gfxShutdown();
     }
 
+    void test_draw_SelectionTimeout()
+    {
+        m_renderer->gfxInit(m_client.get());
+        m_renderer->gfxShow(m_client.get());
+
+        auto mockWindow = m_client->getMockWindow();
+        m_renderer->m_newPageId = 0x123;
+        m_renderer->m_lastDigitTime = GfxRenderer::SteadyClock::now()
+                - std::chrono::milliseconds(6000);
+
+        mockWindow->resetCalls();
+        m_renderer->gfxDraw(m_client.get(), false, false);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0), m_renderer->m_newPageId);
+        CPPUNIT_ASSERT(mockWindow->wasUpdateCalled());
+
+        m_renderer->gfxHide(m_client.get());
+        m_renderer->gfxShutdown();
+    }
+
+    void test_draw_NewsflashTransparent()
+    {
+        auto mockTtxEngine = m_client->getMockTtxEngine();
+        mockTtxEngine->setControlInfo(ttxdecoder::ControlInfo::NEWSFLASH);
+
+        m_renderer->gfxInit(m_client.get());
+        m_renderer->gfxShow(m_client.get());
+        CPPUNIT_ASSERT(m_renderer->m_transparentMode);
+
+        mockTtxEngine->setControlInfo(0);
+        m_renderer->gfxDraw(m_client.get(), false, true);
+        CPPUNIT_ASSERT(!m_renderer->m_transparentMode);
+
+        m_renderer->gfxHide(m_client.get());
+        m_renderer->gfxShutdown();
+    }
+
     void test_validation_AllPublicMethodsThrowWhenNotInit()
     {
         // Verify all public methods except getSingleton and gfxInit throw when not initialized
@@ -1895,7 +2160,8 @@ protected:
             clearPoisonedInitState();
         }
 
-        // Test that multiple exceptions don't corrupt state
+        // Test that repeated show/draw argument validation failures do not corrupt an
+        // otherwise valid initialized instance.
         m_renderer->gfxInit(m_client.get());
 
         // Cause multiple exceptions
@@ -1928,7 +2194,7 @@ protected:
             }
         }
 
-        // Verify still functional
+        // Verify still functional after both sets of failures.
         CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxShow(m_client.get()));
         CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxDraw(m_client.get(), true, true));
         CPPUNIT_ASSERT_NO_THROW(m_renderer->gfxHide(m_client.get()));
@@ -1943,9 +2209,10 @@ protected:
         }
     }
 
-    void test_coverage_AllErrorPathsCovered()
+    void test_validation_AllCurrentErrorPathsCovered()
     {
-        // Test all error conditions are properly validated
+        // Test the currently reachable public API error conditions in the existing
+        // implementation
 
         // 1. Null client errors
         CPPUNIT_ASSERT_THROW(m_renderer->gfxInit(nullptr), std::invalid_argument);
@@ -1996,7 +2263,6 @@ protected:
             m_renderer->gfxShutdown();
         }
     }
-
 
 private:
     GfxRenderer* m_renderer;

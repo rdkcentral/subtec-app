@@ -119,27 +119,36 @@ protected:
     {
         GfxTtxClut clut;
         clut.resetColors();
-        const std::uint32_t* array1 = clut.getArray();
-        std::uint32_t firstColor = array1[0];
+        const std::uint32_t* array = clut.getArray();
+        std::array<std::uint32_t, 32> snapshot = {{0}};
+
+        for (std::size_t i = 0; i < snapshot.size(); ++i)
+        {
+            snapshot[i] = array[i];
+        }
 
         clut.resetColors();
         const std::uint32_t* array2 = clut.getArray();
 
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Multiple resetColors calls should produce same result",
-                                     firstColor, array2[0]);
+                                     snapshot[0], array2[0]);
 
         // Verify all colors remain the same
-        for (std::size_t i = 0; i < clut.getSize(); ++i)
+        for (std::size_t i = 0; i < snapshot.size(); ++i)
         {
-            CPPUNIT_ASSERT_EQUAL(array1[i], array2[i]);
+            CPPUNIT_ASSERT_EQUAL(snapshot[i], array2[i]);
         }
     }
 
     void testResetColors_OverwritesCustomColors()
     {
         GfxTtxClut clut;
-        clut.setColor(0, 0x12345678);
-        clut.setColor(15, 0xAABBCCDD);
+        CPPUNIT_ASSERT(clut.setColor(0, 0x12345678));
+        CPPUNIT_ASSERT(clut.setColor(15, 0xAABBCCDD));
+
+        const std::uint32_t* customArray = clut.getArray();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x12345678), customArray[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xAABBCCDD), customArray[15]);
 
         clut.resetColors();
         const std::uint32_t* array = clut.getArray();

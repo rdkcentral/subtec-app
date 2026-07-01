@@ -22,7 +22,6 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdint>
-#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -146,108 +145,149 @@ protected:
 
     void testCompleteWorkflowOnSingleSource()
     {
-        // Validate the observable packet sequence on a single source instance.
+        const std::vector<std::uint8_t> content = {0x41, 0x42, 0x43};
+        writeFile(tempFilePath, content);
+        TtmlFileSource source(tempFilePath);
+        CPPUNIT_ASSERT(source.open());
+
+        DataPacket packet(1024);
+        DataPacket shortResetPacket(11);
+        CPPUNIT_ASSERT(!source.readPacket(shortResetPacket));
+
+        CPPUNIT_ASSERT(source.readPacket(packet));
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(12), packet.getSize());
+        std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(3), type);
+
+        std::uint32_t counter = readLeUint32(packet.getBuffer(), 4);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), counter);
+
+        std::uint32_t size = readLeUint32(packet.getBuffer(), 8);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), size);
+
+        const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x03), buf[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[2]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[3]);
+
+        DataPacket shortSelectionPacket(23);
+        CPPUNIT_ASSERT(!source.readPacket(shortSelectionPacket));
+
+        CPPUNIT_ASSERT(source.readPacket(packet));
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
+        type = readLeUint32(packet.getBuffer(), 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(7), type);
+
+        counter = readLeUint32(packet.getBuffer(), 4);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1), counter);
+
+        std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), payloadSize);
+
+        std::uint32_t channelId = readLeUint32(packet.getBuffer(), 12);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
+
+        std::uint32_t width = readLeUint32(packet.getBuffer(), 16);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(800), width);
+
+        std::uint32_t height = readLeUint32(packet.getBuffer(), 20);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(600), height);
+
+        buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x20), buf[16]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x03), buf[17]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[18]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[19]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x58), buf[20]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x02), buf[21]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[22]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[23]);
+
+        DataPacket shortTimestampPacket(23);
+        CPPUNIT_ASSERT(!source.readPacket(shortTimestampPacket));
+
+        CPPUNIT_ASSERT(source.readPacket(packet));
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
+        type = readLeUint32(packet.getBuffer(), 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(9), type);
+
+        counter = readLeUint32(packet.getBuffer(), 4);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2), counter);
+
+        payloadSize = readLeUint32(packet.getBuffer(), 8);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), payloadSize);
+
+        channelId = readLeUint32(packet.getBuffer(), 12);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
+
+        std::uint64_t timestamp = readLeUint64(packet.getBuffer(), 16);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), timestamp);
+
+        buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
+        for (int i = 16; i < 24; ++i)
         {
-            const std::vector<std::uint8_t> content = {0x41, 0x42, 0x43};
-            writeFile(tempFilePath, content);
-            TtmlFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(1024);
-
-            CPPUNIT_ASSERT(source.readPacket(packet));
-
-            // First packet should be RESET
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(12), packet.getSize());
-            std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(3), type);
-
-            std::uint32_t counter = readLeUint32(packet.getBuffer(), 4);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), counter);
-
-            std::uint32_t size = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), size);
-
-            CPPUNIT_ASSERT(source.readPacket(packet));
-
-            // Second packet should be SELECTION
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
-            type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(7), type);
-
-            counter = readLeUint32(packet.getBuffer(), 4);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1), counter);
-
-            std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), payloadSize);
-
-            std::uint32_t channelId = readLeUint32(packet.getBuffer(), 12);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
-
-            std::uint32_t width = readLeUint32(packet.getBuffer(), 16);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(800), width);
-
-            std::uint32_t height = readLeUint32(packet.getBuffer(), 20);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(600), height);
-
-            const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x20), buf[16]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x03), buf[17]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[18]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[19]);
-
-            CPPUNIT_ASSERT(source.readPacket(packet));
-
-            // Third packet should be TIMESTAMP
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
-            type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(9), type);
-
-            counter = readLeUint32(packet.getBuffer(), 4);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2), counter);
-
-            payloadSize = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), payloadSize);
-
-            channelId = readLeUint32(packet.getBuffer(), 12);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
-
-            std::uint64_t timestamp = readLeUint64(packet.getBuffer(), 16);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), timestamp);
-
-            buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
-            for (int i = 16; i < 24; ++i)
-            {
-                CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[i]);
-            }
-
-            CPPUNIT_ASSERT(source.readPacket(packet));
-
-            // Fourth packet should be DATA for the file content.
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(27), packet.getSize());
-            type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(8), type);
-
-            counter = readLeUint32(packet.getBuffer(), 4);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(3), counter);
-
-            payloadSize = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(15), payloadSize);
-
-            channelId = readLeUint32(packet.getBuffer(), 12);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
-
-            for (size_t i = 0; i < content.size(); ++i)
-            {
-                CPPUNIT_ASSERT_EQUAL(static_cast<char>(content[i]), packet.getBuffer()[24 + i]);
-            }
-
-            CPPUNIT_ASSERT(source.readPacket(packet));
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getSize());
-
-            source.close();
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[i]);
         }
 
+        DataPacket shortDataPacket(26);
+        CPPUNIT_ASSERT(!source.readPacket(shortDataPacket));
+
+        CPPUNIT_ASSERT(source.readPacket(packet));
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(27), packet.getSize());
+        type = readLeUint32(packet.getBuffer(), 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(8), type);
+
+        counter = readLeUint32(packet.getBuffer(), 4);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(3), counter);
+
+        payloadSize = readLeUint32(packet.getBuffer(), 8);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(15), payloadSize);
+
+        channelId = readLeUint32(packet.getBuffer(), 12);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
+
+        for (size_t i = 0; i < content.size(); ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(content[i]), packet.getBuffer()[24 + i]);
+        }
+
+        CPPUNIT_ASSERT(source.readPacket(packet));
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getSize());
+
+        source.close();
+
+        writeFile(tempFilePath, {0x41, 0x42});
+        TtmlFileSource closedSource(tempFilePath);
+        CPPUNIT_ASSERT(closedSource.open());
+        closedSource.close();
+        CPPUNIT_ASSERT(!closedSource.readPacket(packet));
+
+        writeFile(tempFilePath, {0x41, 0x42});
+        TtmlFileSource unopenedSource(tempFilePath);
+        CPPUNIT_ASSERT(!unopenedSource.readPacket(packet));
+
+        TtmlFileSource missingSource("/non/existent/path/file.xml");
+        CPPUNIT_ASSERT(!missingSource.open());
+        CPPUNIT_ASSERT(!missingSource.readPacket(packet));
+
+        writeFile(tempFilePath, {0x41, 0x42, 0x43});
+        TtmlFileSource removedSource(tempFilePath);
+        CPPUNIT_ASSERT(removedSource.open());
+        removeFileNoThrow(tempFilePath);
+        CPPUNIT_ASSERT(!removedSource.readPacket(packet));
+        removedSource.close();
+
+        writeFile(tempFilePath, {});
+        TtmlFileSource emptySource(tempFilePath);
+        CPPUNIT_ASSERT(emptySource.open());
+        CPPUNIT_ASSERT(emptySource.readPacket(packet));
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getSize());
+        emptySource.close();
     }
 };
 

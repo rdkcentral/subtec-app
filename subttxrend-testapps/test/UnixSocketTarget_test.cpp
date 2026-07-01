@@ -20,7 +20,6 @@
 #include <cppunit/extensions/HelperMacros.h>
 
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -28,7 +27,6 @@
 #include <chrono>
 #include <cstring>
 #include <vector>
-#include <cstdint>
 #include <string>
 
 #include "UnixSocketTarget.hpp"
@@ -546,6 +544,14 @@ protected:
         bool result = target.writePacket(packet);
         CPPUNIT_ASSERT_EQUAL(true, result);
 
+        char recvBuffer[16];
+        ssize_t received = receiveData(serverFd, recvBuffer, sizeof(recvBuffer), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(10), received);
+        for (int i = 0; i < 10; i++)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x42), recvBuffer[i]);
+        }
+
         target.close();
     }
 
@@ -564,6 +570,10 @@ protected:
         // Write should succeed (0 bytes written == 0 bytes requested)
         bool result = target.writePacket(packet);
         CPPUNIT_ASSERT_EQUAL(true, result);
+
+        char recvBuffer[1];
+        ssize_t received = receiveData(serverFd, recvBuffer, sizeof(recvBuffer), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(0), received);
 
         target.close();
     }
@@ -619,6 +629,11 @@ protected:
 
         bool result = target.writePacket(packet);
         CPPUNIT_ASSERT_EQUAL(true, result);
+
+        char recvBuffer[4];
+        ssize_t received = receiveData(serverFd, recvBuffer, sizeof(recvBuffer), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(1), received);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x99), recvBuffer[0]);
 
         target.close();
     }
@@ -680,6 +695,29 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet1));
         CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet2));
         CPPUNIT_ASSERT_EQUAL(true, target.writePacket(packet3));
+
+        char recvBuffer[32];
+
+        ssize_t received1 = receiveData(serverFd, recvBuffer, sizeof(recvBuffer), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(10), received1);
+        for (int i = 0; i < 10; i++)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x11), recvBuffer[i]);
+        }
+
+        ssize_t received2 = receiveData(serverFd, recvBuffer, sizeof(recvBuffer), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(20), received2);
+        for (int i = 0; i < 20; i++)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x22), recvBuffer[i]);
+        }
+
+        ssize_t received3 = receiveData(serverFd, recvBuffer, sizeof(recvBuffer), 2000);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(30), received3);
+        for (int i = 0; i < 30; i++)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x33), recvBuffer[i]);
+        }
 
         target.close();
     }

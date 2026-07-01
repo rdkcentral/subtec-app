@@ -27,8 +27,10 @@ class TtmlTimingTest : public CppUnit::TestFixture
 CPPUNIT_TEST_SUITE( TtmlTimingTest );
     CPPUNIT_TEST(testTimePointBasicOperations);
     CPPUNIT_TEST(testTimePointComparisonOperators);
+    CPPUNIT_TEST(testTimePointMsCtor);
     CPPUNIT_TEST(testTimePointToStrAndToMilliseconds);
     CPPUNIT_TEST(testTimePointInvalidInput);
+    CPPUNIT_TEST(testTimingDefaults);
     CPPUNIT_TEST(testTimingIsOverlappingAndIsContinuous);
     CPPUNIT_TEST(testTimingMerge);
     CPPUNIT_TEST(testTimingOperators);
@@ -37,16 +39,6 @@ CPPUNIT_TEST_SUITE( TtmlTimingTest );
 CPPUNIT_TEST_SUITE_END();
 
 public:
-    void setUp()
-    {
-        // noop
-    }
-
-    void tearDown()
-    {
-        // noop
-    }
-
     void testTimePointBasicOperations()
     {
         using namespace std::chrono;
@@ -95,6 +87,13 @@ public:
         CPPUNIT_ASSERT(t3 >= t2);
     }
 
+    void testTimePointMsCtor()
+    {
+        TimePoint t(3723004);
+        CPPUNIT_ASSERT_EQUAL(std::string("01:02:03.004"), t.toStr());
+        CPPUNIT_ASSERT_EQUAL(static_cast<long long>(3723004), static_cast<long long>(t.toMilliseconds().count()));
+    }
+
     void testTimePointToStrAndToMilliseconds()
     {
         TimePoint t(1h, 2min, 3s, 4ms);
@@ -120,6 +119,15 @@ public:
         CPPUNIT_ASSERT_EQUAL(std::string("01:01:00.000"), validLeapSecond.toStr());
     }
 
+    void testTimingDefaults()
+    {
+        const Timing timing;
+
+        CPPUNIT_ASSERT(timing.getStartTimeRef() == TimePoint{});
+        CPPUNIT_ASSERT(timing.getEndTimeRef() == TimePoint{});
+        CPPUNIT_ASSERT_EQUAL(std::string("00:00:00.000-00:00:00.000"), timing.toStr());
+    }
+
     void testTimingIsOverlappingAndIsContinuous()
     {
         Timing t1(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,1s,0ms));
@@ -127,9 +135,11 @@ public:
         Timing t3(TimePoint(0h,0min,1s,0ms), TimePoint(0h,0min,2s,0ms));
         Timing t4(TimePoint(0h,0min,2s,0ms), TimePoint(0h,0min,3s,0ms));
         CPPUNIT_ASSERT(t1.isOverlapping(t2));
+        CPPUNIT_ASSERT(t2.isOverlapping(t1));
         CPPUNIT_ASSERT(!t1.isOverlapping(t3));
         CPPUNIT_ASSERT(!t1.isOverlapping(t4));
         CPPUNIT_ASSERT(t1.isContinous(t3));
+        CPPUNIT_ASSERT(t3.isContinous(t1));
         CPPUNIT_ASSERT(!t1.isContinous(t4));
     }
 
@@ -137,9 +147,20 @@ public:
     {
         Timing t1(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,1s,0ms));
         Timing t2(TimePoint(0h,0min,0s,500ms), TimePoint(0h,0min,1s,500ms));
+        Timing t3(TimePoint(0h,0min,2s,0ms), TimePoint(0h,0min,3s,0ms));
+        Timing t4(TimePoint(0h,0min,2s,500ms), TimePoint(0h,0min,2s,800ms));
+
         t1.merge(t2);
         CPPUNIT_ASSERT(t1.getStartTimeRef() == TimePoint(0h,0min,0s,0ms));
         CPPUNIT_ASSERT(t1.getEndTimeRef() == TimePoint(0h,0min,1s,500ms));
+
+        t1.merge(t3);
+        CPPUNIT_ASSERT(t1.getStartTimeRef() == TimePoint(0h,0min,0s,0ms));
+        CPPUNIT_ASSERT(t1.getEndTimeRef() == TimePoint(0h,0min,3s,0ms));
+
+        t1.merge(t4);
+        CPPUNIT_ASSERT(t1.getStartTimeRef() == TimePoint(0h,0min,0s,0ms));
+        CPPUNIT_ASSERT(t1.getEndTimeRef() == TimePoint(0h,0min,3s,0ms));
     }
 
     void testTimingOperators()
@@ -147,9 +168,12 @@ public:
         Timing t1(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,1s,0ms));
         Timing t2(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,1s,0ms));
         Timing t3(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,2s,0ms));
+        Timing t4(TimePoint(0h,0min,1s,0ms), TimePoint(0h,0min,2s,0ms));
         CPPUNIT_ASSERT(t1 == t2);
         CPPUNIT_ASSERT(!(t1 == t3));
         CPPUNIT_ASSERT(t1 < t3);
+        CPPUNIT_ASSERT(t1 < t4);
+        CPPUNIT_ASSERT(!(t3 < t1));
     }
 
     void testTimingApplyOffset()
@@ -158,6 +182,10 @@ public:
         t.applyOffset(500);
         CPPUNIT_ASSERT(t.getStartTimeRef() == TimePoint(0h,0min,1s,500ms));
         CPPUNIT_ASSERT(t.getEndTimeRef() == TimePoint(0h,0min,2s,500ms));
+
+        t.applyOffset(-1000);
+        CPPUNIT_ASSERT(t.getStartTimeRef() == TimePoint(0h,0min,0s,500ms));
+        CPPUNIT_ASSERT(t.getEndTimeRef() == TimePoint(0h,0min,1s,500ms));
     }
 
     void testTimingToStr()
@@ -170,4 +198,3 @@ public:
 
 // Registers the fixture into the 'registry'
 CPPUNIT_TEST_SUITE_REGISTRATION( TtmlTimingTest );
-

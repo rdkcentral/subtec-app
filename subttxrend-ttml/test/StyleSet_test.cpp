@@ -29,15 +29,17 @@ class StyleSetTest : public CppUnit::TestFixture
 CPPUNIT_TEST_SUITE( StyleSetTest );
     CPPUNIT_TEST(checkDefaults);
     CPPUNIT_TEST(merging);
-    CPPUNIT_TEST(invalidColorParsing);
-    CPPUNIT_TEST(transparentBackgroundColor);
-    CPPUNIT_TEST(invalidFontSizeAndLineHeight);
-    CPPUNIT_TEST(outlineWithOnlyThickness);
-    CPPUNIT_TEST(outlineWithInvalidColorOrThickness);
-    CPPUNIT_TEST(unknownTextAlignAndDisplayAlign);
-    CPPUNIT_TEST(toStrOutput);
-    CPPUNIT_TEST(operatorEquality);
-    CPPUNIT_TEST(setAndGetStyleId);
+    CPPUNIT_TEST(testInvalidColorParsing);
+    CPPUNIT_TEST(testTransparentBackgroundColor);
+    CPPUNIT_TEST(testInvalidFontSizeAndLineHeight);
+    CPPUNIT_TEST(testCellUnitParsing);
+    CPPUNIT_TEST(testOutlineWithOnlyThickness);
+    CPPUNIT_TEST(testOutlineWithInvalidColorOrThickness);
+    CPPUNIT_TEST(testValidAlignParsing);
+    CPPUNIT_TEST(testUnknownTextAlignAndDisplayAlign);
+    CPPUNIT_TEST(testToStrOutput);
+    CPPUNIT_TEST(testOperatorEquality);
+    CPPUNIT_TEST(testSetAndGetStyleId);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -170,7 +172,7 @@ public:
         CPPUNIT_ASSERT((styleSet.getOutline() == outline));
     }
 
-    void invalidColorParsing()
+    void testInvalidColorParsing()
     {
         StyleSet styleSet;
         Attributes attrs = {
@@ -182,7 +184,7 @@ public:
         CPPUNIT_ASSERT(styleSet.getBackgroundColor() == subttxrend::gfx::ColorArgb::TRANSPARENT);
     }
 
-    void transparentBackgroundColor()
+    void testTransparentBackgroundColor()
     {
         StyleSet styleSet;
         Attributes attrs = {
@@ -192,7 +194,7 @@ public:
         CPPUNIT_ASSERT(styleSet.getBackgroundColor() == subttxrend::gfx::ColorArgb::BLACK);
     }
 
-    void invalidFontSizeAndLineHeight()
+    void testInvalidFontSizeAndLineHeight()
     {
         StyleSet styleSet;
         Attributes attrs = {
@@ -204,7 +206,19 @@ public:
         CPPUNIT_ASSERT((styleSet.getLineHeight() == DomainValue{DomainValue::Type::PERCENTAGE_HUNDREDTHS, 100*100}));
     }
 
-    void outlineWithOnlyThickness()
+    void testCellUnitParsing()
+    {
+        StyleSet styleSet;
+        Attributes attrs = {
+            {"fontSize", "0.80c"},
+            {"lineHeight", "1.25c"}
+        };
+        styleSet.merge(attrs);
+        CPPUNIT_ASSERT((styleSet.getFontSize() == DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 80}));
+        CPPUNIT_ASSERT((styleSet.getLineHeight() == DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 125}));
+    }
+
+    void testOutlineWithOnlyThickness()
     {
         StyleSet styleSet;
         Attributes attrs = {
@@ -215,7 +229,7 @@ public:
         CPPUNIT_ASSERT(styleSet.getOutline() == expected);
     }
 
-    void outlineWithInvalidColorOrThickness()
+    void testOutlineWithInvalidColorOrThickness()
     {
         StyleSet styleSet;
         Outline expected{DomainValue{DomainValue::Type::CELL_HUNDREDTHS, 0}, subttxrend::gfx::ColorArgb::BLACK};
@@ -233,7 +247,20 @@ public:
         CPPUNIT_ASSERT(styleSet.getOutline() == expected);
     }
 
-    void unknownTextAlignAndDisplayAlign()
+    void testValidAlignParsing()
+    {
+        StyleSet styleSet;
+
+        styleSet.merge({{"textAlign", "left"}, {"displayAlign", "center"}});
+        CPPUNIT_ASSERT(styleSet.getTextAlign() == StyleSet::TextAlign::LEFT);
+        CPPUNIT_ASSERT(styleSet.getDisplayAlign() == StyleSet::DisplayAlign::CENTER);
+
+        styleSet.merge({{"textAlign", "center"}, {"displayAlign", "after"}});
+        CPPUNIT_ASSERT(styleSet.getTextAlign() == StyleSet::TextAlign::CENTER);
+        CPPUNIT_ASSERT(styleSet.getDisplayAlign() == StyleSet::DisplayAlign::AFTER);
+    }
+
+    void testUnknownTextAlignAndDisplayAlign()
     {
         StyleSet styleSet;
         Attributes attrs = {
@@ -245,28 +272,78 @@ public:
         CPPUNIT_ASSERT(styleSet.getDisplayAlign() == StyleSet::DisplayAlign::BEFORE);
     }
 
-    void toStrOutput()
+    void testToStrOutput()
     {
         StyleSet styleSet;
         styleSet.setStyleId("myStyle");
+        styleSet.merge({
+            {"fontFamily", "MyFont"},
+            {"textAlign", "right"},
+            {"displayAlign", "after"},
+            {"textOutline", "2px"}
+        });
         std::string str = styleSet.toStr();
         CPPUNIT_ASSERT(str.find("[myStyle]:") != std::string::npos);
         CPPUNIT_ASSERT(str.find("font:") != std::string::npos);
         CPPUNIT_ASSERT(str.find("bg:") != std::string::npos);
+        CPPUNIT_ASSERT(str.find("MyFont") != std::string::npos);
+        CPPUNIT_ASSERT(str.find("lineH:") != std::string::npos);
+        CPPUNIT_ASSERT(str.find("text: right") != std::string::npos);
+        CPPUNIT_ASSERT(str.find("display: after") != std::string::npos);
+        CPPUNIT_ASSERT(str.find("outline:") != std::string::npos);
     }
 
-    void operatorEquality()
+    void testOperatorEquality()
     {
         StyleSet s1, s2;
         CPPUNIT_ASSERT(s1 == s2);
-        Attributes attrs = {{"color", "yellow"}};
-        s1.merge(attrs);
+
+        s1.merge({{"color", "yellow"}});
         CPPUNIT_ASSERT(!(s1 == s2));
-        s2.merge(attrs);
+        s2.merge({{"color", "yellow"}});
+        CPPUNIT_ASSERT(s1 == s2);
+
+        s1.merge({{"backgroundColor", "#11223344"}});
+        CPPUNIT_ASSERT(!(s1 == s2));
+        s2.merge({{"backgroundColor", "#11223344"}});
+        CPPUNIT_ASSERT(s1 == s2);
+
+        s1.merge({{"fontFamily", "AltFont"}});
+        CPPUNIT_ASSERT(!(s1 == s2));
+        s2.merge({{"fontFamily", "AltFont"}});
+        CPPUNIT_ASSERT(s1 == s2);
+
+        s1.merge({{"fontSize", "55%"}});
+        CPPUNIT_ASSERT(!(s1 == s2));
+        s2.merge({{"fontSize", "55%"}});
+        CPPUNIT_ASSERT(s1 == s2);
+
+        s1.merge({{"textAlign", "right"}});
+        CPPUNIT_ASSERT(!(s1 == s2));
+        s2.merge({{"textAlign", "right"}});
+        CPPUNIT_ASSERT(s1 == s2);
+
+        s1.merge({{"displayAlign", "after"}});
+        CPPUNIT_ASSERT(!(s1 == s2));
+        s2.merge({{"displayAlign", "after"}});
+        CPPUNIT_ASSERT(s1 == s2);
+
+        s1.merge({{"lineHeight", "120%"}});
+        CPPUNIT_ASSERT(!(s1 == s2));
+        s2.merge({{"lineHeight", "120%"}});
+        CPPUNIT_ASSERT(s1 == s2);
+
+        s1.merge({{"textOutline", "rgba(0,0,0,255) 2px"}});
+        CPPUNIT_ASSERT(!(s1 == s2));
+        s2.merge({{"textOutline", "rgba(0,0,0,255) 2px"}});
+        CPPUNIT_ASSERT(s1 == s2);
+
+        s1.setStyleId("left-id");
+        s2.setStyleId("right-id");
         CPPUNIT_ASSERT(s1 == s2);
     }
 
-    void setAndGetStyleId()
+    void testSetAndGetStyleId()
     {
         StyleSet styleSet;
         styleSet.setStyleId("style42");

@@ -154,7 +154,8 @@ public:
     enum class FontStripBehavior
     {
         RETURN_NULL,
-        RETURN_STRIP_LOAD_FAIL
+        RETURN_STRIP_LOAD_FAIL,
+        RETURN_STRIP_LOAD_OK
     };
 
     explicit MockGfxEngine(FontStripBehavior behavior) : m_behavior(behavior) {}
@@ -184,6 +185,8 @@ public:
             return nullptr;
         case FontStripBehavior::RETURN_STRIP_LOAD_FAIL:
             return std::make_shared<MockFontStrip>(false);
+        case FontStripBehavior::RETURN_STRIP_LOAD_OK:
+            return std::make_shared<MockFontStrip>(true);
         default:
             return nullptr;
         }
@@ -357,6 +360,11 @@ protected:
         model.refreshSelection(true, 0); // enables 4 cells in row 0
         GfxTtxClut clut;
         GfxTtxGrid grid(model, clut);
+        GfxConfig config;
+        FakeTtxEngine ttxEngine;
+        auto gfxEngine = std::make_shared<MockGfxEngine>(MockGfxEngine::FontStripBehavior::RETURN_STRIP_LOAD_OK);
+
+        grid.init(ttxEngine, gfxEngine, config);
 
         grid.addModeSettings(ZoomMode::NONE, RowRange(0, 1), Rect(0, 0, 400, 100));
 
@@ -364,6 +372,7 @@ protected:
         grid.draw(ZoomMode::NONE, ctx, 255);
 
         CPPUNIT_ASSERT_EQUAL(4, ctx.fillRectangleCalled);
+        CPPUNIT_ASSERT_EQUAL(4, ctx.drawGlyphCalled);
     }
 
     void testDraw_SecondCallWithoutChanges_DoesNotRedraw()
@@ -374,12 +383,18 @@ protected:
         model.refreshSelection(true, 0);
         GfxTtxClut clut;
         GfxTtxGrid grid(model, clut);
+        GfxConfig config;
+        FakeTtxEngine ttxEngine;
+        auto gfxEngine = std::make_shared<MockGfxEngine>(MockGfxEngine::FontStripBehavior::RETURN_STRIP_LOAD_OK);
+
+        grid.init(ttxEngine, gfxEngine, config);
 
         grid.addModeSettings(ZoomMode::NONE, RowRange(0, 1), Rect(0, 0, 400, 100));
 
         MockDrawContext ctx;
         grid.draw(ZoomMode::NONE, ctx, 255);
         CPPUNIT_ASSERT_EQUAL(4, ctx.fillRectangleCalled);
+        CPPUNIT_ASSERT_EQUAL(4, ctx.drawGlyphCalled);
 
         ctx.reset();
         grid.draw(ZoomMode::NONE, ctx, 255);

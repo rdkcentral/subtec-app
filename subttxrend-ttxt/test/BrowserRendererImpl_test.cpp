@@ -19,33 +19,153 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "BrowserRendererImpl.hpp"
+#include "TimeSource.hpp"
 #include <ttxdecoder/PageId.hpp>
 
+#include <subttxrend/common/ConfigProvider.hpp>
+#include <subttxrend/gfx/DrawContext.hpp>
+#include <subttxrend/gfx/Engine.hpp>
+#include <subttxrend/gfx/Window.hpp>
+
 using subttxrend::ttxt::BrowserRendererImpl;
+
+class MockDrawContext : public subttxrend::gfx::DrawContext
+{
+public:
+    void fillRectangle(subttxrend::gfx::ColorArgb,
+                       const subttxrend::gfx::Rectangle&) override {}
+    void drawUnderline(subttxrend::gfx::ColorArgb,
+                       const subttxrend::gfx::Rectangle&) override {}
+    void drawPixmap(const subttxrend::gfx::ClutBitmap&,
+                    const subttxrend::gfx::Rectangle&,
+                    const subttxrend::gfx::Rectangle&) override {}
+    void drawBitmap(const subttxrend::gfx::Bitmap&,
+                    const subttxrend::gfx::Rectangle&) override {}
+    void drawGlyph(const subttxrend::gfx::FontStripPtr&,
+                   std::int32_t,
+                   const subttxrend::gfx::Rectangle&,
+                   subttxrend::gfx::ColorArgb,
+                   subttxrend::gfx::ColorArgb) override {}
+    void drawString(subttxrend::gfx::PrerenderedFont&,
+                    const subttxrend::gfx::Rectangle&,
+                    const std::vector<subttxrend::gfx::GlyphData>&,
+                    subttxrend::gfx::ColorArgb,
+                    subttxrend::gfx::ColorArgb,
+                    int,
+                    int) override {}
+};
+
+class MockWindow : public subttxrend::gfx::Window
+{
+public:
+    MockWindow()
+    {
+        m_size.m_w = 1280;
+        m_size.m_h = 720;
+        m_bounds.m_x = 0;
+        m_bounds.m_y = 0;
+        m_bounds.m_w = 1280;
+        m_bounds.m_h = 720;
+    }
+
+    void setVisible(bool) override {}
+    void setSize(const subttxrend::gfx::Size& size) override { m_size = size; }
+    subttxrend::gfx::Size getSize() const override { return m_size; }
+    subttxrend::gfx::Size getPreferredSize() const override { return m_size; }
+    void update() override {}
+    void clear() override {}
+    subttxrend::gfx::DrawContext& getDrawContext() override { return m_drawContext; }
+    subttxrend::gfx::Rectangle getBounds() const override { return m_bounds; }
+    void setDrawDirection(subttxrend::gfx::DrawDirection) override {}
+    void addKeyEventListener(subttxrend::gfx::KeyEventListener*) override {}
+    void removeKeyEventListener(subttxrend::gfx::KeyEventListener*) override {}
+
+private:
+    subttxrend::gfx::Size m_size;
+    subttxrend::gfx::Rectangle m_bounds;
+    MockDrawContext m_drawContext;
+};
+
+class MockFontStrip : public subttxrend::gfx::FontStrip
+{
+public:
+    MockFontStrip(const subttxrend::gfx::Size&, std::size_t) {}
+
+    bool loadGlyph(std::int32_t,
+                   const std::uint8_t*,
+                   std::size_t) override
+    {
+        return true;
+    }
+
+    bool loadFont(const std::string&,
+                  const subttxrend::gfx::Size&,
+                  const subttxrend::gfx::FontStripMap&) override
+    {
+        return true;
+    }
+};
+
+class MockGfxEngine : public subttxrend::gfx::Engine
+{
+public:
+    void init(const std::string& = {}) override {}
+    void shutdown() override {}
+    void execute() override {}
+    subttxrend::gfx::WindowPtr createWindow() override { return nullptr; }
+    void attach(subttxrend::gfx::WindowPtr) override {}
+    void detach(subttxrend::gfx::WindowPtr) override {}
+    subttxrend::gfx::FontStripPtr createFontStrip(const subttxrend::gfx::Size& glyphSize,
+                                                  std::size_t glyphCount) override
+    {
+        return std::make_shared<MockFontStrip>(glyphSize, glyphCount);
+    }
+};
+
+class MockConfigProvider : public subttxrend::common::ConfigProvider
+{
+protected:
+    const char* getValue(const std::string&) const override { return nullptr; }
+};
+
+class MockTimeSource : public subttxrend::ttxt::TimeSource
+{
+public:
+    std::uint32_t getStc() override { return 0; }
+};
 
 class TestBrowserRendererImpl : public BrowserRendererImpl
 {
 public:
     TestBrowserRendererImpl()
-        : m_setCurrentPageCalls(0), m_lastPageId(0, 0x3F7F)
+        : m_setCurrentPageCalls(0), m_lastPageId(0, 0x3F7F), m_forwardToBase(false)
     {
     }
 
     int getSetCurrentPageCalls() const { return m_setCurrentPageCalls; }
     ttxdecoder::PageId getLastPageId() const { return m_lastPageId; }
+    void setForwardToBase(bool forwardToBase) { m_forwardToBase = forwardToBase; }
 
 protected:
     void setCurrentPage(const ttxdecoder::PageId& pageId) override
     {
         m_lastPageId = pageId;
         ++m_setCurrentPageCalls;
+
+        if (m_forwardToBase)
+        {
+            RendererImpl::setCurrentPage(pageId);
+        }
     }
 
 private:
     int m_setCurrentPageCalls;
     ttxdecoder::PageId m_lastPageId;
+    bool m_forwardToBase;
 };
 
 class BrowserRendererImplTest : public CppUnit::TestFixture
@@ -53,6 +173,9 @@ class BrowserRendererImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST_SUITE(BrowserRendererImplTest);
     CPPUNIT_TEST(testResetStartPage_SetsDefaultPage);
     CPPUNIT_TEST(testResetStartPage_RepeatedCallsKeepDefaultPage);
+    CPPUNIT_TEST(testStartMag0);
+    CPPUNIT_TEST(testStartPage);
+    CPPUNIT_TEST(testStartRepeat);
     CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -63,16 +186,39 @@ public:
 
     void tearDown() override
     {
+        if (m_renderer && m_isInitialized)
+        {
+            m_renderer->stop();
+            m_renderer->shutdown();
+        }
+
         m_renderer.reset();
+        m_gfxEngine.reset();
+        m_isInitialized = false;
     }
 
 protected:
+    void initRenderer()
+    {
+        if (!m_isInitialized)
+        {
+            m_gfxEngine = std::make_shared<MockGfxEngine>();
+            CPPUNIT_ASSERT_EQUAL(true,
+                                 m_renderer->init(&m_window,
+                                                  m_gfxEngine,
+                                                  &m_configProvider,
+                                                  &m_timeSource));
+            m_renderer->setForwardToBase(true);
+            m_isInitialized = true;
+        }
+    }
+
     void testResetStartPage_SetsDefaultPage()
     {
         CPPUNIT_ASSERT_NO_THROW(m_renderer->resetStartPage());
         ttxdecoder::PageId page = m_renderer->getLastPageId();
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0100), page.getMagazinePage());
-        CPPUNIT_ASSERT(page.isAnySubpage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0xFFFF), page.getSubpage());
         CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
     }
 
@@ -82,12 +228,56 @@ protected:
         m_renderer->resetStartPage();
         ttxdecoder::PageId page = m_renderer->getLastPageId();
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0100), page.getMagazinePage());
-        CPPUNIT_ASSERT(page.isAnySubpage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0xFFFF), page.getSubpage());
         CPPUNIT_ASSERT_EQUAL(2, m_renderer->getSetCurrentPageCalls());
+    }
+
+    void testStartMag0()
+    {
+        initRenderer();
+
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->start(0, 0x10));
+
+        ttxdecoder::PageId page = m_renderer->getLastPageId();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0810), page.getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0xFFFF), page.getSubpage());
+        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
+    }
+
+    void testStartPage()
+    {
+        initRenderer();
+
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->start(1, 0xAA));
+
+        ttxdecoder::PageId page = m_renderer->getLastPageId();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x01AA), page.getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0xFFFF), page.getSubpage());
+        CPPUNIT_ASSERT_EQUAL(1, m_renderer->getSetCurrentPageCalls());
+    }
+
+    void testStartRepeat()
+    {
+        initRenderer();
+
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->start(1, 0x10));
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->start(8, 0x20));
+
+        ttxdecoder::PageId page = m_renderer->getLastPageId();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0820), page.getMagazinePage());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0xFFFF), page.getSubpage());
+        CPPUNIT_ASSERT_EQUAL(2, m_renderer->getSetCurrentPageCalls());
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
     }
 
 private:
     std::unique_ptr<TestBrowserRendererImpl> m_renderer;
+    MockWindow m_window;
+    subttxrend::gfx::EnginePtr m_gfxEngine;
+    MockConfigProvider m_configProvider;
+    MockTimeSource m_timeSource;
+    bool m_isInitialized = false;
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(BrowserRendererImplTest);

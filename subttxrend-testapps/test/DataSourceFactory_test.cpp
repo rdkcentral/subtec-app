@@ -63,6 +63,9 @@ CPPUNIT_TEST_SUITE( DataSourceFactoryTest );
     CPPUNIT_TEST(testCreateSourceWithWvttnhPath);
     CPPUNIT_TEST(testCreateSourceWithSfilePath);
     CPPUNIT_TEST(testCreateSourceWithRandPath);
+    CPPUNIT_TEST(testRandAcceptsEmptyParams);
+    CPPUNIT_TEST(testRandRejectsBadParams);
+    CPPUNIT_TEST(testIpv4OpenNeedsPort);
     CPPUNIT_TEST(testCreateSourceWithMinimalPathAfterColon);
     CPPUNIT_TEST(testCreateSourceWithMultipleColons);
     CPPUNIT_TEST(testCreateSourceWithPathContainingSpaces);
@@ -334,8 +337,37 @@ protected:
         DataPacket packet(1024);
         CPPUNIT_ASSERT(source->readPacket(packet));
         CPPUNIT_ASSERT(packet.getSize() > 0);
+        CPPUNIT_ASSERT(source->readPacket(packet));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), packet.getSize());
 
         source->close();
+    }
+
+    void testRandAcceptsEmptyParams()
+    {
+        std::unique_ptr<DataSource> source = assertCreatedSource<RandomPacketSource>("rand:", "");
+
+        CPPUNIT_ASSERT(source->open());
+
+        DataPacket packet(1024);
+        CPPUNIT_ASSERT(source->readPacket(packet));
+        CPPUNIT_ASSERT(packet.getSize() > 0);
+
+        source->close();
+    }
+
+    void testRandRejectsBadParams()
+    {
+        std::unique_ptr<DataSource> source = assertCreatedSource<RandomPacketSource>("rand:bad", "bad");
+
+        CPPUNIT_ASSERT(!source->open());
+    }
+
+    void testIpv4OpenNeedsPort()
+    {
+        std::unique_ptr<DataSource> source = assertCreatedSource<Ipv4SocketSource>("ipv4:127.0.0.1", "127.0.0.1");
+
+        CPPUNIT_ASSERT(!source->open());
     }
 
     void testCreateSourceWithMinimalPathAfterColon()

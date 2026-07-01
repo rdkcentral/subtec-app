@@ -33,6 +33,7 @@ class WebVTTConfigTest : public CppUnit::TestFixture {
     CPPUNIT_TEST(testInitUsesDefaults);
     CPPUNIT_TEST(testDefaultFieldInitialization);
     CPPUNIT_TEST_SUITE_END();
+
 public:
     void testGetConfigFractionalReturnsDefault() {
         subttxrend::common::ConfigProvider stub;
@@ -40,9 +41,18 @@ public:
         double result = getConfigFractional(&stub, "ANY.KEY", 42, 10);
         CPPUNIT_ASSERT_EQUAL(42.0, result);
     }
+
     void testInitUsesDefaults() {
         subttxrend::common::ConfigProvider stub;
         WebVTTConfig config;
+        config.fontHeightH = 1;
+        config.lineHeightH = 2;
+        config.screenPadding = 3;
+        config.horizontalPaddingEm = 4.0f;
+        config.verticalPaddingEm = 5.0f;
+        config.fontFamily = "Before";
+        config.textColour = "Before";
+        config.bgColour = "Before";
         config.init(&stub);
 
         CPPUNIT_ASSERT_EQUAL(constants::kDefaultFontHeight, config.fontHeightH);

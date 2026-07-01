@@ -19,7 +19,6 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <stdexcept>
-#include <cstring>
 #include <limits>
 
 #include "DataPacket.hpp"
@@ -74,6 +73,7 @@ CPPUNIT_TEST_SUITE( DataPacketTest );
     CPPUNIT_TEST(testAppendLeUint64MaxValue);
     CPPUNIT_TEST(testAppendLeUint64ExactFit);
     CPPUNIT_TEST(testAppendLeUint64MultipleTimes);
+    CPPUNIT_TEST(testAppendLeUint64WithFourBytesLeftThrows);
     CPPUNIT_TEST(testAppendLeUint64WithSevenBytesRemainingThrows);
     CPPUNIT_TEST(testAppendLeUint64OnFullBufferThrows);
     CPPUNIT_TEST(testAppendZeroesWithCountZero);
@@ -169,11 +169,18 @@ protected:
     void testGetBufferAfterResetReturnsSamePointer()
     {
         DataPacket packet(10);
-        char* ptr1 = packet.getBuffer();
+        char* ptr = packet.getBuffer();
+        ptr[0] = 0x42;
         packet.setSize(5);
         packet.reset();
-        char* ptr2 = packet.getBuffer();
-        CPPUNIT_ASSERT_EQUAL(ptr1, ptr2);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getSize());
+        CPPUNIT_ASSERT(packet.getBuffer() != nullptr);
+
+        packet.appendLeUint32(0x01020304);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x04), packet.getBuffer()[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x03), packet.getBuffer()[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x02), packet.getBuffer()[2]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x01), packet.getBuffer()[3]);
     }
 
     void testGetCapacityReturnsZeroForZeroCapacity()
@@ -287,19 +294,25 @@ protected:
     void testSetSizeGreaterThanCapacityThrows()
     {
         DataPacket packet(10);
+        packet.setSize(3);
         CPPUNIT_ASSERT_THROW(packet.setSize(11), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), packet.getSize());
     }
 
     void testSetSizeToMaxSizeTThrows()
     {
         DataPacket packet(10);
+        packet.setSize(4);
         CPPUNIT_ASSERT_THROW(packet.setSize(std::numeric_limits<size_t>::max()), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), packet.getSize());
     }
 
     void testSetSizeToCapacityTimesTwoThrows()
     {
         DataPacket packet(50);
+        packet.setSize(7);
         CPPUNIT_ASSERT_THROW(packet.setSize(100), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(7), packet.getSize());
     }
 
     void testResetOnEmptyPacket()
@@ -429,6 +442,11 @@ protected:
         packet.appendZeroes(4); // 3 bytes remaining
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), packet.getSize());
         CPPUNIT_ASSERT_THROW(packet.appendLeUint32(0x12345678), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), packet.getSize());
+        for (int i = 0; i < 4; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x00), packet.getBuffer()[i]);
+        }
     }
 
     void testAppendLeUint32OnFullBufferThrows()
@@ -436,6 +454,7 @@ protected:
         DataPacket packet(10);
         packet.setSize(10);
         CPPUNIT_ASSERT_THROW(packet.appendLeUint32(0x12345678), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(10), packet.getSize());
     }
 
     void testAppendLeUint32OnZeroCapacityThrows()
@@ -512,12 +531,31 @@ protected:
         }
     }
 
+    void testAppendLeUint64WithFourBytesLeftThrows()
+    {
+        DataPacket packet(12);
+        packet.appendZeroes(8); // 4 bytes remaining
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(8), packet.getSize());
+
+        CPPUNIT_ASSERT_THROW(packet.appendLeUint64(0x123456789ABCDEF0ULL), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(8), packet.getSize());
+        for (int i = 0; i < 8; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x00), packet.getBuffer()[i]);
+        }
+    }
+
     void testAppendLeUint64WithSevenBytesRemainingThrows()
     {
         DataPacket packet(10);
         packet.appendZeroes(3); // 7 bytes remaining
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), packet.getSize());
         CPPUNIT_ASSERT_THROW(packet.appendLeUint64(0x123456789ABCDEF0ULL), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), packet.getSize());
+        for (int i = 0; i < 3; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x00), packet.getBuffer()[i]);
+        }
     }
 
     void testAppendLeUint64OnFullBufferThrows()
@@ -525,6 +563,7 @@ protected:
         DataPacket packet(10);
         packet.setSize(10);
         CPPUNIT_ASSERT_THROW(packet.appendLeUint64(0x123456789ABCDEF0ULL), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(10), packet.getSize());
     }
 
     void testAppendZeroesWithCountZero()
@@ -600,7 +639,13 @@ protected:
     void testAppendZeroesExceedingCapacityThrows()
     {
         DataPacket packet(10);
+        packet.appendLeUint32(0x12345678);
         CPPUNIT_ASSERT_THROW(packet.appendZeroes(11), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x78), packet.getBuffer()[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x56), packet.getBuffer()[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x34), packet.getBuffer()[2]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x12), packet.getBuffer()[3]);
     }
 
     void testAppendZeroesOnFullBufferThrows()
@@ -608,6 +653,7 @@ protected:
         DataPacket packet(10);
         packet.setSize(10);
         CPPUNIT_ASSERT_THROW(packet.appendZeroes(1), std::length_error);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(10), packet.getSize());
     }
 
     void testMixedAppendsUint32Uint64Zeros()
@@ -621,11 +667,15 @@ protected:
 
         const char* buffer = packet.getBuffer();
         // Verify uint32 (bytes 0-3)
-        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x11), buffer[0]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x11), buffer[3]);
+        for (int i = 0; i < 4; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x11), buffer[i]);
+        }
         // Verify uint64 (bytes 4-11)
-        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x22), buffer[4]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x22), buffer[11]);
+        for (int i = 4; i < 12; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x22), buffer[i]);
+        }
         // Verify zeros (bytes 12-14)
         CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x00), buffer[12]);
         CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x00), buffer[13]);
@@ -679,6 +729,14 @@ protected:
 
         packet.appendLeUint32(0x22222222);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(14), packet.getSize());
+        for (int i = 0; i < 4; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x11), packet.getBuffer()[i]);
+        }
+        for (int i = 10; i < 14; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x22), packet.getBuffer()[i]);
+        }
     }
 
     void testComplexLifecycle()
@@ -729,6 +787,11 @@ protected:
         // Verify uint64 at position 4-11 (little endian)
         CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x08), buffer[4]);
         CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x07), buffer[5]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x06), buffer[6]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x05), buffer[7]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x04), buffer[8]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x03), buffer[9]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x02), buffer[10]);
         CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x01), buffer[11]);
 
         // Verify zeros at position 12-13

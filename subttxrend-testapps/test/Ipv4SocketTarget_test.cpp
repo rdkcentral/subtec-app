@@ -20,7 +20,6 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include <string>
 #include <cstring>
-#include <limits>
 #include <vector>
 
 #include <arpa/inet.h>
@@ -57,6 +56,8 @@ CPPUNIT_TEST_SUITE(Ipv4SocketTargetTest);
     CPPUNIT_TEST(testOpenWithAlphabeticIp);
     CPPUNIT_TEST(testOpenWithWhitespaceInIp);
     CPPUNIT_TEST(testOpenMultipleTimesAfterFailure);
+    CPPUNIT_TEST(testOpenWhenConnectFails);
+    CPPUNIT_TEST(testOpenWhenAlreadyOpen);
     CPPUNIT_TEST(testCloseWhenNotOpen);
     CPPUNIT_TEST(testWantsMorePacketsOnUnopenedSocket);
     CPPUNIT_TEST(testWantsMorePacketsMultipleCalls);
@@ -68,17 +69,6 @@ CPPUNIT_TEST_SUITE(Ipv4SocketTargetTest);
     CPPUNIT_TEST(testWritePacketMultipleConsecutive);
 
 CPPUNIT_TEST_SUITE_END();
-
-public:
-    void setUp() override
-    {
-        // Setup code if needed
-    }
-
-    void tearDown() override
-    {
-        // Cleanup code if needed
-    }
 
 protected:
     void testConstructorWithValidIpPortFormat()
@@ -170,7 +160,7 @@ protected:
     {
         Ipv4SocketTarget target("192.168.1.1:8080:9090");
         bool result = target.open();
-        // Will parse first part as IP, second as port, likely fail in port parsing
+        // Malformed address must not open successfully.
         CPPUNIT_ASSERT_EQUAL(false, result);
     }
 
@@ -178,7 +168,7 @@ protected:
     {
         Ipv4SocketTarget target("127.0.0.1:65536");
         bool result = target.open();
-        // Port overflow - scanf may succeed but value will wrap or fail
+        // Out-of-range port text must not lead to a usable connection here.
         CPPUNIT_ASSERT_EQUAL(false, result);
     }
 
@@ -186,7 +176,7 @@ protected:
     {
         Ipv4SocketTarget target("127.0.0.1:-1");
         bool result = target.open();
-        // Negative port should fail parsing
+        // Negative port text must not lead to a usable connection here.
         CPPUNIT_ASSERT_EQUAL(false, result);
     }
 
@@ -202,7 +192,7 @@ protected:
     {
         Ipv4SocketTarget target("127.0.0.1:999999999");
         bool result = target.open();
-        // Extremely large port will overflow unsigned short
+        // Extremely large port text must not lead to a usable connection here.
         CPPUNIT_ASSERT_EQUAL(false, result);
     }
 
@@ -257,6 +247,72 @@ protected:
         CPPUNIT_ASSERT_EQUAL(false, result1);
         CPPUNIT_ASSERT_EQUAL(false, result2);
         CPPUNIT_ASSERT_EQUAL(false, result3);
+    }
+
+    void testOpenWhenConnectFails()
+    {
+        int serverFd = ::socket(AF_INET, SOCK_STREAM, 0);
+        CPPUNIT_ASSERT(serverFd >= 0);
+
+        struct sockaddr_in serverAddress;
+        std::memset(&serverAddress, 0, sizeof(serverAddress));
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        serverAddress.sin_port = 0;
+
+        CPPUNIT_ASSERT_EQUAL(0,
+                ::bind(serverFd,
+                        reinterpret_cast<struct sockaddr*>(&serverAddress),
+                        sizeof(serverAddress)));
+
+        socklen_t addressLength = sizeof(serverAddress);
+        CPPUNIT_ASSERT_EQUAL(0,
+                ::getsockname(serverFd,
+                        reinterpret_cast<struct sockaddr*>(&serverAddress),
+                        &addressLength));
+
+        const unsigned short port = ntohs(serverAddress.sin_port);
+        Ipv4SocketTarget target("127.0.0.1:" + std::to_string(port));
+
+        CPPUNIT_ASSERT_EQUAL(false, target.open());
+
+        (void) ::close(serverFd);
+    }
+
+    void testOpenWhenAlreadyOpen()
+    {
+        int serverFd = ::socket(AF_INET, SOCK_STREAM, 0);
+        CPPUNIT_ASSERT(serverFd >= 0);
+
+        struct sockaddr_in serverAddress;
+        std::memset(&serverAddress, 0, sizeof(serverAddress));
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        serverAddress.sin_port = 0;
+
+        CPPUNIT_ASSERT_EQUAL(0,
+                ::bind(serverFd,
+                        reinterpret_cast<struct sockaddr*>(&serverAddress),
+                        sizeof(serverAddress)));
+        CPPUNIT_ASSERT_EQUAL(0, ::listen(serverFd, 1));
+
+        socklen_t addressLength = sizeof(serverAddress);
+        CPPUNIT_ASSERT_EQUAL(0,
+                ::getsockname(serverFd,
+                        reinterpret_cast<struct sockaddr*>(&serverAddress),
+                        &addressLength));
+
+        const unsigned short port = ntohs(serverAddress.sin_port);
+        Ipv4SocketTarget target("127.0.0.1:" + std::to_string(port));
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+
+        int acceptedClientFd = ::accept(serverFd, nullptr, nullptr);
+        CPPUNIT_ASSERT(acceptedClientFd >= 0);
+
+        target.close();
+        (void) ::close(acceptedClientFd);
+        (void) ::close(serverFd);
     }
 
     void testCloseWhenNotOpen()
@@ -382,8 +438,34 @@ protected:
 
     void testWritePacketWhenSocketClosed()
     {
-        Ipv4SocketTarget target("127.0.0.1:9999");
-        (void)target.open();
+        int serverFd = ::socket(AF_INET, SOCK_STREAM, 0);
+        CPPUNIT_ASSERT(serverFd >= 0);
+
+        struct sockaddr_in serverAddress;
+        std::memset(&serverAddress, 0, sizeof(serverAddress));
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        serverAddress.sin_port = 0;
+
+        CPPUNIT_ASSERT_EQUAL(0,
+            ::bind(serverFd,
+                reinterpret_cast<struct sockaddr*>(&serverAddress),
+                sizeof(serverAddress)));
+        CPPUNIT_ASSERT_EQUAL(0, ::listen(serverFd, 1));
+
+        socklen_t addressLength = sizeof(serverAddress);
+        CPPUNIT_ASSERT_EQUAL(0,
+            ::getsockname(serverFd,
+                reinterpret_cast<struct sockaddr*>(&serverAddress),
+                &addressLength));
+
+        const unsigned short port = ntohs(serverAddress.sin_port);
+        Ipv4SocketTarget target("127.0.0.1:" + std::to_string(port));
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+
+        int acceptedClientFd = ::accept(serverFd, nullptr, nullptr);
+        CPPUNIT_ASSERT(acceptedClientFd >= 0);
+
         target.close();
 
         DataPacket packet(10);
@@ -391,13 +473,44 @@ protected:
         std::memset(buffer, 0x42, 10);
         packet.setSize(10);
         bool result = target.writePacket(packet);
-        // Writing to closed socket should fail
+
+        (void) ::close(acceptedClientFd);
+        (void) ::close(serverFd);
+
         CPPUNIT_ASSERT_EQUAL(false, result);
     }
 
     void testWritePacketMultipleConsecutive()
     {
-        Ipv4SocketTarget target("127.0.0.1:9999");
+        int serverFd = ::socket(AF_INET, SOCK_STREAM, 0);
+        CPPUNIT_ASSERT(serverFd >= 0);
+
+        struct sockaddr_in serverAddress;
+        std::memset(&serverAddress, 0, sizeof(serverAddress));
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        serverAddress.sin_port = 0;
+
+        CPPUNIT_ASSERT_EQUAL(0,
+            ::bind(serverFd,
+                reinterpret_cast<struct sockaddr*>(&serverAddress),
+                sizeof(serverAddress)));
+        CPPUNIT_ASSERT_EQUAL(0, ::listen(serverFd, 1));
+
+        socklen_t addressLength = sizeof(serverAddress);
+        CPPUNIT_ASSERT_EQUAL(0,
+            ::getsockname(serverFd,
+                reinterpret_cast<struct sockaddr*>(&serverAddress),
+                &addressLength));
+
+        std::vector<char> received(60, 0);
+
+        const unsigned short port = ntohs(serverAddress.sin_port);
+        Ipv4SocketTarget target("127.0.0.1:" + std::to_string(port));
+        CPPUNIT_ASSERT_EQUAL(true, target.open());
+
+        int acceptedClientFd = ::accept(serverFd, nullptr, nullptr);
+        CPPUNIT_ASSERT(acceptedClientFd >= 0);
 
         DataPacket packet1(10);
         char* buffer1 = packet1.getBuffer();
@@ -414,14 +527,36 @@ protected:
         std::memset(buffer3, 0x33, 30);
         packet3.setSize(30);
 
-        // All writes should fail on unopened socket
         bool result1 = target.writePacket(packet1);
         bool result2 = target.writePacket(packet2);
         bool result3 = target.writePacket(packet3);
 
-        CPPUNIT_ASSERT_EQUAL(false, result1);
-        CPPUNIT_ASSERT_EQUAL(false, result2);
-        CPPUNIT_ASSERT_EQUAL(false, result3);
+        ssize_t bytesReceived = ::recv(acceptedClientFd, received.data(),
+                received.size(), MSG_WAITALL);
+
+        target.close();
+        (void) ::close(acceptedClientFd);
+        (void) ::close(serverFd);
+
+        CPPUNIT_ASSERT_EQUAL(true, result1);
+        CPPUNIT_ASSERT_EQUAL(true, result2);
+        CPPUNIT_ASSERT_EQUAL(true, result3);
+        CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(received.size()), bytesReceived);
+
+        for (std::size_t i = 0; i < 10; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x11), received[i]);
+        }
+
+        for (std::size_t i = 10; i < 30; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x22), received[i]);
+        }
+
+        for (std::size_t i = 30; i < received.size(); ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x33), received[i]);
+        }
     }
 };
 

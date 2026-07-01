@@ -30,6 +30,7 @@ class WebVTTAttributesTest : public CppUnit::TestFixture {
 CPPUNIT_TEST_SUITE(WebVTTAttributesTest);
     CPPUNIT_TEST(testAttributes);
     CPPUNIT_TEST(testUpdateAttributes);
+    CPPUNIT_TEST(testCopyConstructor);
     CPPUNIT_TEST(testAllAttributeTypes);
     CPPUNIT_TEST(testDefaultValueForUnset);
     CPPUNIT_TEST(testBoundaryValues);
@@ -91,6 +92,29 @@ public:
         oldAttributes.update(newAttributes);
         CPPUNIT_ASSERT_EQUAL(true, oldAttributes.isSet(WebVTTAttributes::AttributeType::FONT_SIZE));
         CPPUNIT_ASSERT_EQUAL(integerValue2, oldAttributes.getInteger(WebVTTAttributes::AttributeType::FONT_SIZE));
+    }
+
+    void testCopyConstructor()
+    {
+        WebVTTAttributes originalAttributes;
+        originalAttributes.setInteger(WebVTTAttributes::AttributeType::FONT_SIZE, 10);
+        originalAttributes.setInteger(WebVTTAttributes::AttributeType::FONT_COLOR, 0x123456);
+
+        WebVTTAttributes copiedAttributes(originalAttributes);
+
+        CPPUNIT_ASSERT_EQUAL(true, copiedAttributes.isSet(WebVTTAttributes::AttributeType::FONT_SIZE));
+        CPPUNIT_ASSERT_EQUAL(true, copiedAttributes.isSet(WebVTTAttributes::AttributeType::FONT_COLOR));
+        CPPUNIT_ASSERT_EQUAL(uint32_t(10), copiedAttributes.getInteger(WebVTTAttributes::AttributeType::FONT_SIZE));
+        CPPUNIT_ASSERT_EQUAL(uint32_t(0x123456), copiedAttributes.getInteger(WebVTTAttributes::AttributeType::FONT_COLOR));
+
+        originalAttributes.reset();
+
+        CPPUNIT_ASSERT_EQUAL(false, originalAttributes.isSet(WebVTTAttributes::AttributeType::FONT_SIZE));
+        CPPUNIT_ASSERT_EQUAL(false, originalAttributes.isSet(WebVTTAttributes::AttributeType::FONT_COLOR));
+        CPPUNIT_ASSERT_EQUAL(true, copiedAttributes.isSet(WebVTTAttributes::AttributeType::FONT_SIZE));
+        CPPUNIT_ASSERT_EQUAL(true, copiedAttributes.isSet(WebVTTAttributes::AttributeType::FONT_COLOR));
+        CPPUNIT_ASSERT_EQUAL(uint32_t(10), copiedAttributes.getInteger(WebVTTAttributes::AttributeType::FONT_SIZE));
+        CPPUNIT_ASSERT_EQUAL(uint32_t(0x123456), copiedAttributes.getInteger(WebVTTAttributes::AttributeType::FONT_COLOR));
     }
 
     void testAllAttributeTypes()

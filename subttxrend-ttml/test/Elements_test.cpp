@@ -100,6 +100,7 @@ public:
         CPPUNIT_ASSERT(style.getStyleAttributes().at("color") == "red");
         CPPUNIT_ASSERT(style.getStyleAttributes().at("font") == "Arial");
     }
+
     // --- RegionElement ---
     void testRegionElementDefaultConstructor()
     {
@@ -165,6 +166,7 @@ public:
         CPPUNIT_ASSERT(region.getWidth().getValue() == 0);
         CPPUNIT_ASSERT(region.getHeight().getValue() == 0);
     }
+
     // --- ImageElement ---
     void testImageElementExpectTextContent()
     {
@@ -193,9 +195,19 @@ public:
     void testBodyElementParentConstructor()
     {
         auto parent = std::make_shared<BodyElement>();
+        parent->parseAttribute("", "begin", "00:00:01.100");
+        parent->parseAttribute("", "end", "00:00:02.200");
+        parent->parseAttribute("", "space", "preserve");
         parent->parseAttribute("", "style", "parentStyle");
+        parent->parseAttribute("", "region", "parentRegion");
         BodyElement child(parent);
+
+        CPPUNIT_ASSERT(child.getParent() == parent);
+        CPPUNIT_ASSERT(child.getWhiteSpaceHandling() == XmlSpace::PRESERVE);
         CPPUNIT_ASSERT(child.getStyleId() == "parentStyle");
+        CPPUNIT_ASSERT(child.getRegionId() == "parentRegion");
+        CPPUNIT_ASSERT(child.getTiming().getStartTimeRef() == TimePoint(1100));
+        CPPUNIT_ASSERT(child.getTiming().getEndTimeRef() == TimePoint(2200));
     }
 
     void testBodyElementExpectTextContent()
@@ -245,27 +257,19 @@ public:
     void testBodyElementFinalizeRemovesEmptyLines()
     {
         BodyElement body;
-        body.appendText("");       // Empty line
-        body.appendNewline();      // Forced line (should be preserved)
-        body.appendText("abc");    // Non-empty line
-        body.appendNewline();      // Another forced line
-        body.appendText("");       // Another empty line
+        body.appendText("");       // No-op on the initial non-forced empty line
+        body.appendNewline();      // Adds a forced empty line
+        body.appendText("abc");    // Appends to the current forced line
+        body.appendNewline();      // Adds another forced empty line
+        body.appendText("");       // No-op on the trailing forced empty line
         body.finalize();
-        
-        // Verify empty lines are removed but forced lines preserved
-        for (const auto& line : body.getTextLines()) {
-            CPPUNIT_ASSERT(!line.text.empty() || line.isForcedLine);
-        }
-        
-        // Should have at least one non-empty text line and forced lines
-        bool hasNonEmptyText = false;
-        bool hasForcedLine = false;
-        for (const auto& line : body.getTextLines()) {
-            if (!line.text.empty()) hasNonEmptyText = true;
-            if (line.isForcedLine) hasForcedLine = true;
-        }
-        CPPUNIT_ASSERT(hasNonEmptyText);
-        CPPUNIT_ASSERT(hasForcedLine);
+
+        const auto& lines = body.getTextLines();
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), lines.size());
+        CPPUNIT_ASSERT(lines[0].isForcedLine);
+        CPPUNIT_ASSERT_EQUAL(std::string("abc"), lines[0].text);
+        CPPUNIT_ASSERT(lines[1].isForcedLine);
+        CPPUNIT_ASSERT(lines[1].text.empty());
     }
 
     void testBodyElementParseAttributeDerived()
@@ -277,11 +281,18 @@ public:
         body.parseAttribute("", "style", "s1");
         body.parseAttribute("", "region", "r1");
         body.parseAttribute("", "backgroundImage", "#img1");
+        const Timing timing = body.getTiming();
+
+        CPPUNIT_ASSERT(timing.getStartTimeRef() == TimePoint(std::chrono::hours(1), std::chrono::minutes(2),
+                                                             std::chrono::seconds(3), std::chrono::milliseconds(4)));
+        CPPUNIT_ASSERT(timing.getEndTimeRef() == TimePoint(std::chrono::hours(1), std::chrono::minutes(2),
+                                                           std::chrono::seconds(4), std::chrono::milliseconds(5)));
         CPPUNIT_ASSERT(body.getWhiteSpaceHandling() == XmlSpace::PRESERVE);
         CPPUNIT_ASSERT(body.getStyleId() == "s1");
         CPPUNIT_ASSERT(body.getRegionId() == "r1");
         CPPUNIT_ASSERT(body.getBackgroundImageId() == "img1");
     }
+
     void testBodyElementWhitespaceHandlingDefault()
     {
         BodyElement body;
@@ -300,6 +311,7 @@ public:
         // Should preserve spaces
         CPPUNIT_ASSERT(body.getTextLines().back().text.find("  ") != std::string::npos);
     }
+
     // --- TTElement ---
     void testTTElementDefaultConstructor()
     {
@@ -364,4 +376,3 @@ public:
 };
 // Registers the fixture into the 'registry'
 CPPUNIT_TEST_SUITE_REGISTRATION( ElementsTest );
-

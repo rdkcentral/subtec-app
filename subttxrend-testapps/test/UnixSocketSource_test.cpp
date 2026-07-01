@@ -27,6 +27,7 @@
 #include <thread>
 #include <chrono>
 #include <cstring>
+#include <utility>
 #include <vector>
 #include <cstdint>
 #include <string>
@@ -56,6 +57,7 @@ CPPUNIT_TEST_SUITE(UnixSocketSourceTest);
     CPPUNIT_TEST(testOpenWithReadOnlyDirectory);
     CPPUNIT_TEST(testOpenVerifiesSocketFileCreated);
     CPPUNIT_TEST(testOpenWithPathAtBoundary);
+    CPPUNIT_TEST(testOpenWithPathAtLimitFails);
     CPPUNIT_TEST(testOpenAfterFailedOpenAttempt);
     CPPUNIT_TEST(testOpenAfterSuccessfulOpenAndClose);
     CPPUNIT_TEST(testCloseOnOpenSocket);
@@ -108,6 +110,35 @@ public:
     }
 
 protected:
+    class JoiningThread
+    {
+    public:
+        explicit JoiningThread(std::thread worker) :
+                m_worker(std::move(worker))
+        {
+            // noop
+        }
+
+        ~JoiningThread()
+        {
+            if (m_worker.joinable())
+            {
+                m_worker.join();
+            }
+        }
+
+        void join()
+        {
+            if (m_worker.joinable())
+            {
+                m_worker.join();
+            }
+        }
+
+    private:
+        std::thread m_worker;
+    };
+
     std::vector<std::string> m_createdSockets;
     std::vector<std::string> m_createdDirectories;
     int m_testSocketCounter;
@@ -131,6 +162,12 @@ protected:
                           "_" + std::to_string(m_testSocketCounter++);
         m_createdDirectories.push_back(path);
         return path;
+    }
+
+    std::string getPathWithLength(std::size_t length, char fill = 'x')
+    {
+        const std::string prefix = "/tmp/";
+        return prefix + std::string(length - prefix.size(), fill);
     }
 
     // Helper to send datagram to Unix socket
@@ -202,7 +239,7 @@ protected:
     {
         // Unix socket path limit is typically 108 bytes including null terminator
         // So 107 characters should be at the boundary
-        std::string boundaryPath = "/tmp/" + std::string(102, 'x');
+        std::string boundaryPath = getPathWithLength(sizeof(sockaddr_un().sun_path) - 1);
         UnixSocketSource source(boundaryPath);
         // Path at exact boundary should work
         bool openResult = source.open();
@@ -238,7 +275,7 @@ protected:
             CPPUNIT_ASSERT_EQUAL(true, source.open());
             // Destructor called with open socket
         }
-        // Socket should be cleaned up, no crash expected
+        // No crash expected
         CPPUNIT_ASSERT(true);
     }
 
@@ -372,11 +409,19 @@ protected:
     void testOpenWithPathAtBoundary()
     {
         // Path exactly at limit (107 characters for most systems)
-        std::string boundaryPath = "/tmp/" + std::string(102, 'a');
+        std::string boundaryPath = getPathWithLength(sizeof(sockaddr_un().sun_path) - 1, 'a');
         UnixSocketSource source(boundaryPath);
 
         CPPUNIT_ASSERT_EQUAL(true, source.open());
         source.close();
+    }
+
+    void testOpenWithPathAtLimitFails()
+    {
+        std::string limitPath = getPathWithLength(sizeof(sockaddr_un().sun_path), 'b');
+        UnixSocketSource source(limitPath);
+
+        CPPUNIT_ASSERT_EQUAL(false, source.open());
     }
 
     void testOpenAfterFailedOpenAttempt()
@@ -461,17 +506,21 @@ protected:
 
         // Send data in background thread
         std::vector<std::uint8_t> testData = {0x01, 0x02, 0x03, 0x04, 0x05};
-        std::thread senderThread([this, path, testData]() {
+        bool sendResult = false;
+        JoiningThread senderThread(std::thread([this, &sendResult, path, testData]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendDatagram(path, testData);
-        });
+            sendResult = sendDatagram(path, testData);
+        }));
 
         DataPacket packet(1024);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
+        bool readResult = source.readPacket(packet);
+        senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
+        CPPUNIT_ASSERT_EQUAL(true, readResult);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(5), packet.getSize());
         CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), testData.data(), 5));
 
-        senderThread.join();
         source.close();
     }
 
@@ -484,19 +533,25 @@ protected:
         std::vector<std::uint8_t> testData = {0xAA, 0xBB};
 
         // Send zero-length packet followed by real data
-        std::thread senderThread([this, path, testData]() {
+        bool emptySendResult = false;
+        bool sendResult = false;
+        JoiningThread senderThread(std::thread([this, &emptySendResult, &sendResult, path, testData]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendZeroLengthDatagram(path);
+            emptySendResult = sendZeroLengthDatagram(path);
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            sendDatagram(path, testData);
-        });
+            sendResult = sendDatagram(path, testData);
+        }));
 
         DataPacket packet(1024);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
+        bool readResult = source.readPacket(packet);
+        senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, emptySendResult);
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
+        CPPUNIT_ASSERT_EQUAL(true, readResult);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), packet.getSize());
         CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), testData.data(), 2));
 
-        senderThread.join();
         source.close();
     }
 
@@ -509,22 +564,34 @@ protected:
         std::vector<std::uint8_t> testData = {0x11, 0x22, 0x33};
 
         // Send multiple zero-length packets followed by real data
-        std::thread senderThread([this, path, testData]() {
+        bool emptySendResult1 = false;
+        bool emptySendResult2 = false;
+        bool emptySendResult3 = false;
+        bool sendResult = false;
+        JoiningThread senderThread(std::thread([this, &emptySendResult1, &emptySendResult2,
+                &emptySendResult3, &sendResult, path, testData]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendZeroLengthDatagram(path);
+            emptySendResult1 = sendZeroLengthDatagram(path);
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            sendZeroLengthDatagram(path);
+            emptySendResult2 = sendZeroLengthDatagram(path);
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            sendZeroLengthDatagram(path);
+            emptySendResult3 = sendZeroLengthDatagram(path);
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            sendDatagram(path, testData);
-        });
+            sendResult = sendDatagram(path, testData);
+        }));
 
         DataPacket packet(1024);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), packet.getSize());
-
+        bool readResult = source.readPacket(packet);
         senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, emptySendResult1);
+        CPPUNIT_ASSERT_EQUAL(true, emptySendResult2);
+        CPPUNIT_ASSERT_EQUAL(true, emptySendResult3);
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
+        CPPUNIT_ASSERT_EQUAL(true, readResult);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), testData.data(), 3));
+
         source.close();
     }
 
@@ -562,16 +629,21 @@ protected:
             largeData[i] = static_cast<std::uint8_t>(i % 256);
         }
 
-        std::thread senderThread([this, path, largeData]() {
+        bool sendResult = false;
+        JoiningThread senderThread(std::thread([this, &sendResult, path, largeData]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendDatagram(path, largeData);
-        });
+            sendResult = sendDatagram(path, largeData);
+        }));
 
         DataPacket packet(16384);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(8192), packet.getSize());
-
+        bool readResult = source.readPacket(packet);
         senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
+        CPPUNIT_ASSERT_EQUAL(true, readResult);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(8192), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), largeData.data(), largeData.size()));
+
         source.close();
     }
 
@@ -583,17 +655,21 @@ protected:
 
         std::vector<std::uint8_t> testData = {0x42};
 
-        std::thread senderThread([this, path, testData]() {
+        bool sendResult = false;
+        JoiningThread senderThread(std::thread([this, &sendResult, path, testData]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendDatagram(path, testData);
-        });
+            sendResult = sendDatagram(path, testData);
+        }));
 
         DataPacket packet(1);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
+        bool readResult = source.readPacket(packet);
+        senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
+        CPPUNIT_ASSERT_EQUAL(true, readResult);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), packet.getSize());
         CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x42), packet.getBuffer()[0]);
 
-        senderThread.join();
         source.close();
     }
 
@@ -605,19 +681,24 @@ protected:
 
         std::vector<std::uint8_t> testData = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-        std::thread senderThread([this, path, testData]() {
+        bool sendResult = false;
+        JoiningThread senderThread(std::thread([this, &sendResult, path, testData]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendDatagram(path, testData);
-        });
+            sendResult = sendDatagram(path, testData);
+        }));
 
         DataPacket packet(1024);
         size_t initialSize = packet.getSize();
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), initialSize);
 
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(10), packet.getSize());
-
+        bool readResult = source.readPacket(packet);
         senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
+        CPPUNIT_ASSERT_EQUAL(true, readResult);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(10), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), testData.data(), testData.size()));
+
         source.close();
     }
 
@@ -631,28 +712,42 @@ protected:
         std::vector<std::uint8_t> data2 = {0x03, 0x04, 0x05};
         std::vector<std::uint8_t> data3 = {0x06};
 
-        std::thread senderThread([this, path, data1, data2, data3]() {
+        bool sendResult1 = false;
+        bool sendResult2 = false;
+        bool sendResult3 = false;
+        JoiningThread senderThread(std::thread([this, &sendResult1, &sendResult2,
+                &sendResult3, path, data1, data2, data3]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendDatagram(path, data1);
+            sendResult1 = sendDatagram(path, data1);
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            sendDatagram(path, data2);
+            sendResult2 = sendDatagram(path, data2);
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            sendDatagram(path, data3);
-        });
+            sendResult3 = sendDatagram(path, data3);
+        }));
 
         DataPacket packet1(1024);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet1));
+        bool readResult1 = source.readPacket(packet1);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), packet1.getSize());
+        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet1.getBuffer(), data1.data(), data1.size()));
 
         DataPacket packet2(1024);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet2));
+        bool readResult2 = source.readPacket(packet2);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), packet2.getSize());
+        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet2.getBuffer(), data2.data(), data2.size()));
 
         DataPacket packet3(1024);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet3));
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), packet3.getSize());
-
+        bool readResult3 = source.readPacket(packet3);
         senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, sendResult1);
+        CPPUNIT_ASSERT_EQUAL(true, sendResult2);
+        CPPUNIT_ASSERT_EQUAL(true, sendResult3);
+        CPPUNIT_ASSERT_EQUAL(true, readResult1);
+        CPPUNIT_ASSERT_EQUAL(true, readResult2);
+        CPPUNIT_ASSERT_EQUAL(true, readResult3);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), packet3.getSize());
+        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet3.getBuffer(), data3.data(), data3.size()));
+
         source.close();
     }
 
@@ -665,17 +760,22 @@ protected:
         // Send 100 bytes but buffer can only hold 50
         std::vector<std::uint8_t> largeData(100, 0xAA);
 
-        std::thread senderThread([this, path, largeData]() {
+        bool sendResult = false;
+        JoiningThread senderThread(std::thread([this, &sendResult, path, largeData]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendDatagram(path, largeData);
-        });
+            sendResult = sendDatagram(path, largeData);
+        }));
 
         DataPacket packet(50);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
+        bool readResult = source.readPacket(packet);
+        senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
+        CPPUNIT_ASSERT_EQUAL(true, readResult);
         // Should truncate to buffer size
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(50), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), largeData.data(), packet.getSize()));
 
-        senderThread.join();
         source.close();
     }
 
@@ -695,17 +795,22 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, source.open());
 
         std::vector<std::uint8_t> testData = {0xDE, 0xAD, 0xBE, 0xEF};
-        std::thread senderThread([this, path, testData]() {
+        bool sendResult = false;
+        JoiningThread senderThread(std::thread([this, &sendResult, path, testData]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendDatagram(path, testData);
-        });
+            sendResult = sendDatagram(path, testData);
+        }));
 
         DataPacket packet(1024);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
+        bool readResult = source.readPacket(packet);
+        senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
+        CPPUNIT_ASSERT_EQUAL(true, readResult);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), testData.data(), testData.size()));
 
         source.close();
-        senderThread.join();
     }
 
     void testReopenAfterClose()
@@ -721,21 +826,23 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, source.open());
 
         std::vector<std::uint8_t> testData = {0x12, 0x34};
-        std::thread senderThread([this, path, testData]() {
+        bool sendResult = false;
+        JoiningThread senderThread(std::thread([this, &sendResult, path, testData]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendDatagram(path, testData);
-        });
+            sendResult = sendDatagram(path, testData);
+        }));
 
         DataPacket packet(1024);
-        CPPUNIT_ASSERT_EQUAL(true, source.readPacket(packet));
+        bool readResult = source.readPacket(packet);
+        senderThread.join();
+
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
+        CPPUNIT_ASSERT_EQUAL(true, readResult);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), testData.data(), testData.size()));
 
         source.close();
-        senderThread.join();
     }
-
-private:
-    unsigned short m_testPort;
 };
 
 // Register the test suite

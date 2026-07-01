@@ -115,12 +115,12 @@ class MockTtxEngine : public ttxdecoder::Engine
 public:
     MockTtxEngine()
     {
-        // Initialize with default G1 block mosaic mapping
-        // CharsetMappingArray size is 96 (CHARSET_MAPPING_SIZE)
+        // Use distinct block and separated mappings so reverse-map collisions
+        // are visible to the tests.
         for (std::size_t i = 0; i < m_blockMosaicMapping.size(); ++i)
         {
-            m_blockMosaicMapping[i] = 0x2500 + i;
-            m_separatedMosaicMapping[i] = 0x2500 + i;
+            m_blockMosaicMapping[i] = static_cast<std::uint16_t>(0x3000 + i);
+            m_separatedMosaicMapping[i] = static_cast<std::uint16_t>(0x3400 + i);
         }
     }
 
@@ -215,6 +215,10 @@ class GfxMosaicGeneratorTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testGenerateStripG1_SegmentFillingConsistency);
     CPPUNIT_TEST(testGenerateStripG1_BlockAndSeparatedIndex0AreEqual);
     CPPUNIT_TEST(testGenerateStripG1_SetBoundaryAt64);
+    CPPUNIT_TEST(testGenerateStripG1_SeparatedBit0Shape);
+    CPPUNIT_TEST(testGenerateStripG1_SeparatedGlyph3Shape);
+    CPPUNIT_TEST(testGenerateStripG1_ReverseMappingWorks);
+    CPPUNIT_TEST(testGenerateStripG1_SkipsCharsetGap);
     CPPUNIT_TEST(testGenerateStripG1_UsesUpdatedEngineMappings);
 
     CPPUNIT_TEST_SUITE_END();
@@ -236,10 +240,111 @@ protected:
     std::shared_ptr<MockTtxEngine> m_ttxEngine;
     std::shared_ptr<MockGfxEngine> m_gfxEngine;
 
+    static constexpr int GLYPH_WIDTH = 12;
+    static constexpr int GLYPH_HEIGHT = 10;
+
+    std::size_t mapCharsetIndex(std::size_t characterNumber) const
+    {
+        return (characterNumber < 32) ? characterNumber : characterNumber + 32;
+    }
+
+    std::uint16_t countFilledPixels(const std::vector<std::uint8_t>& glyph) const
+    {
+        std::uint16_t filled = 0;
+        for (const auto& byte : glyph)
+        {
+            if (byte == 0xFF)
+            {
+                ++filled;
+            }
+        }
+        return filled;
+    }
+
+    std::vector<std::uint8_t> buildExpectedGlyph(const std::vector<int>& segments,
+                                                 bool separated) const
+    {
+        std::vector<std::uint8_t> glyph(GLYPH_WIDTH * GLYPH_HEIGHT, 0x00);
+
+        const int startLeft = separated ? 1 : 0;
+        const int startRight = separated ? 7 : 6;
+        const int startTop = separated ? 1 : 0;
+        const int startMid = separated ? 4 : 3;
+        const int startBottom = 7;
+        const int segmentWidth = separated ? 4 : 6;
+        const int topHeight = separated ? 2 : 3;
+        const int midHeight = separated ? 2 : 4;
+        const int bottomHeight = separated ? 2 : 3;
+
+        for (int segment : segments)
+        {
+            int offsetX = 0;
+            int offsetY = 0;
+            int sizeY = 0;
+
+            switch (segment)
+            {
+            case 0:
+                offsetX = startLeft;
+                offsetY = startTop;
+                sizeY = topHeight;
+                break;
+            case 1:
+                offsetX = startRight;
+                offsetY = startTop;
+                sizeY = topHeight;
+                break;
+            case 2:
+                offsetX = startLeft;
+                offsetY = startMid;
+                sizeY = midHeight;
+                break;
+            case 3:
+                offsetX = startRight;
+                offsetY = startMid;
+                sizeY = midHeight;
+                break;
+            case 4:
+                offsetX = startLeft;
+                offsetY = startBottom;
+                sizeY = bottomHeight;
+                break;
+            case 5:
+                offsetX = startRight;
+                offsetY = startBottom;
+                sizeY = bottomHeight;
+                break;
+            default:
+                continue;
+            }
+
+            for (int y = 0; y < sizeY; ++y)
+            {
+                for (int x = 0; x < segmentWidth; ++x)
+                {
+                    glyph[(offsetY + y) * GLYPH_WIDTH + (offsetX + x)] = 0xFF;
+                }
+            }
+        }
+
+        return glyph;
+    }
+
+    void assertGlyphEquals(const std::vector<std::uint8_t>& actual,
+                           const std::vector<std::uint8_t>& expected) const
+    {
+        CPPUNIT_ASSERT_EQUAL(expected.size(), actual.size());
+        for (std::size_t i = 0; i < expected.size(); ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(expected[i], actual[i]);
+        }
+    }
+
     void testGenerateStripG1_ReturnsValidPair()
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         CPPUNIT_ASSERT(result.first != nullptr);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(128), result.second.getNeededGlyphCount());
     }
 
     void testGenerateStripG1_CreatesCorrectGlyphCount()
@@ -268,29 +373,34 @@ protected:
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
-        const auto& glyphData = mockStrip->getGlyphData(0);
-        CPPUNIT_ASSERT_EQUAL(false, glyphData.empty());
+        const auto& glyphData = mockStrip->getGlyphData(1);
+        CPPUNIT_ASSERT(countFilledPixels(glyphData) > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(1),
+                             result.second.toGlyphIndex(m_ttxEngine->getCharsetMapping(
+                                 ttxdecoder::Charset::G1_BLOCK_MOSAIC)[1]));
     }
 
     void testGenerateStripG1_SeparatedMosaicSetLoaded()
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
-        const auto& glyphData = mockStrip->getGlyphData(64);
-        CPPUNIT_ASSERT_EQUAL(false, glyphData.empty());
+        const auto& glyphData = mockStrip->getGlyphData(65);
+        CPPUNIT_ASSERT(countFilledPixels(glyphData) > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(65),
+                             result.second.toGlyphIndex(m_ttxEngine->getCharsetMapping(
+                                 ttxdecoder::Charset::G1_BLOCK_MOSAIC_SEPARATED)[1]));
     }
 
     void testGenerateStripG1_BlockMosaicCountIs64()
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
-        auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
-        std::uint16_t count = 0;
-        for (int i = 0; i < 64; ++i)
+        const auto& blockMapping = m_ttxEngine->getCharsetMapping(
+            ttxdecoder::Charset::G1_BLOCK_MOSAIC);
+        for (std::size_t i = 0; i < 64; ++i)
         {
-            if (!mockStrip->getGlyphData(i).empty())
-                count++;
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(i),
+                                 result.second.toGlyphIndex(blockMapping[mapCharsetIndex(i)]));
         }
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(64), count);
     }
 
     void testGenerateStripG1_ZeroSegmentIndexAllZeros()
@@ -342,13 +452,12 @@ protected:
         auto result2 = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip2 = m_gfxEngine->getLastCreatedFontStrip();
         CPPUNIT_ASSERT_EQUAL(mockStrip1->getTotalGlyphs(), mockStrip2->getTotalGlyphs());
-        // Compare glyph data element-by-element (can't use CPPUNIT_ASSERT_EQUAL with vectors)
-        const auto& data1 = mockStrip1->getGlyphData(32);
-        const auto& data2 = mockStrip2->getGlyphData(32);
-        CPPUNIT_ASSERT_EQUAL(data1.size(), data2.size());
-        for (std::size_t i = 0; i < data1.size(); ++i)
+        for (int glyphIndex = 0; glyphIndex < 128; ++glyphIndex)
         {
-            CPPUNIT_ASSERT_EQUAL(data1[i], data2[i]);
+            assertGlyphEquals(mockStrip1->getGlyphData(glyphIndex),
+                              mockStrip2->getGlyphData(glyphIndex));
+            CPPUNIT_ASSERT_EQUAL(result1.second.toCharacter(glyphIndex),
+                                 result2.second.toCharacter(glyphIndex));
         }
     }
 
@@ -407,18 +516,7 @@ protected:
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
         const auto& glyph1 = mockStrip->getGlyphData(1);
-        const auto& glyph0 = mockStrip->getGlyphData(0);
-        std::uint16_t topLeftFilled = 0;
-        for (int y = 0; y < 3; ++y)
-        {
-            for (int x = 0; x < 6; ++x)
-            {
-                if (glyph1[y * 12 + x] == 0xFF)
-                    topLeftFilled++;
-            }
-        }
-        CPPUNIT_ASSERT(topLeftFilled > 0);
-        CPPUNIT_ASSERT(glyph1 != glyph0);
+        assertGlyphEquals(glyph1, buildExpectedGlyph({0}, false));
     }
 
     void testGenerateStripG1_SegmentBit1BlockRendering()
@@ -426,18 +524,7 @@ protected:
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
         const auto& glyph2 = mockStrip->getGlyphData(2);
-        const auto& glyph1 = mockStrip->getGlyphData(1);
-        std::uint16_t topRightFilled = 0;
-        for (int y = 0; y < 3; ++y)
-        {
-            for (int x = 6; x < 12; ++x)
-            {
-                if (glyph2[y * 12 + x] == 0xFF)
-                    topRightFilled++;
-            }
-        }
-        CPPUNIT_ASSERT(topRightFilled > 0);
-        CPPUNIT_ASSERT(glyph2 != glyph1);
+        assertGlyphEquals(glyph2, buildExpectedGlyph({1}, false));
     }
 
     void testGenerateStripG1_SegmentBit2BlockRendering()
@@ -445,18 +532,7 @@ protected:
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
         const auto& glyph4 = mockStrip->getGlyphData(4);
-        const auto& glyph0 = mockStrip->getGlyphData(0);
-        std::uint16_t midLeftFilled = 0;
-        for (int y = 3; y < 7; ++y)
-        {
-            for (int x = 0; x < 6; ++x)
-            {
-                if (glyph4[y * 12 + x] == 0xFF)
-                    midLeftFilled++;
-            }
-        }
-        CPPUNIT_ASSERT(midLeftFilled > 0);
-        CPPUNIT_ASSERT(glyph4 != glyph0);
+        assertGlyphEquals(glyph4, buildExpectedGlyph({2}, false));
     }
 
     void testGenerateStripG1_SegmentBit3BlockRendering()
@@ -464,18 +540,7 @@ protected:
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
         const auto& glyph8 = mockStrip->getGlyphData(8);
-        const auto& glyph0 = mockStrip->getGlyphData(0);
-        std::uint16_t midRightFilled = 0;
-        for (int y = 3; y < 7; ++y)
-        {
-            for (int x = 6; x < 12; ++x)
-            {
-                if (glyph8[y * 12 + x] == 0xFF)
-                    midRightFilled++;
-            }
-        }
-        CPPUNIT_ASSERT(midRightFilled > 0);
-        CPPUNIT_ASSERT(glyph8 != glyph0);
+        assertGlyphEquals(glyph8, buildExpectedGlyph({3}, false));
     }
 
     void testGenerateStripG1_SegmentBit4BlockRendering()
@@ -483,16 +548,7 @@ protected:
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
         const auto& glyph16 = mockStrip->getGlyphData(16);
-        std::uint16_t botLeftFilled = 0;
-        for (int y = 7; y < 10; ++y)
-        {
-            for (int x = 0; x < 6; ++x)
-            {
-                if (glyph16[y * 12 + x] == 0xFF)
-                    botLeftFilled++;
-            }
-        }
-        CPPUNIT_ASSERT(botLeftFilled > 0);
+        assertGlyphEquals(glyph16, buildExpectedGlyph({4}, false));
     }
 
     void testGenerateStripG1_SegmentBit5BlockRendering()
@@ -500,16 +556,7 @@ protected:
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
         const auto& glyph32 = mockStrip->getGlyphData(32);
-        std::uint16_t botRightFilled = 0;
-        for (int y = 7; y < 10; ++y)
-        {
-            for (int x = 6; x < 12; ++x)
-            {
-                if (glyph32[y * 12 + x] == 0xFF)
-                    botRightFilled++;
-            }
-        }
-        CPPUNIT_ASSERT(botRightFilled > 0);
+        assertGlyphEquals(glyph32, buildExpectedGlyph({5}, false));
     }
 
     void testGenerateStripG1_Glyph3HasTwoSegments()
@@ -517,14 +564,7 @@ protected:
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
         const auto& glyph3 = mockStrip->getGlyphData(3);
-        const auto& glyph1 = mockStrip->getGlyphData(1);
-        const auto& glyph2 = mockStrip->getGlyphData(2);
-        std::uint16_t filled3 = 0, filled1 = 0, filled2 = 0;
-        for (const auto& byte : glyph3) if (byte == 0xFF) filled3++;
-        for (const auto& byte : glyph1) if (byte == 0xFF) filled1++;
-        for (const auto& byte : glyph2) if (byte == 0xFF) filled2++;
-        CPPUNIT_ASSERT(filled3 > filled1);
-        CPPUNIT_ASSERT(filled3 > filled2);
+        assertGlyphEquals(glyph3, buildExpectedGlyph({0, 1}, false));
     }
 
     void testGenerateStripG1_Glyph7HasThreeSegments()
@@ -532,37 +572,31 @@ protected:
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
         const auto& glyph7 = mockStrip->getGlyphData(7);
-        const auto& glyph3 = mockStrip->getGlyphData(3);
-        std::uint16_t filled7 = 0, filled3 = 0;
-        for (const auto& byte : glyph7) if (byte == 0xFF) filled7++;
-        for (const auto& byte : glyph3) if (byte == 0xFF) filled3++;
-        CPPUNIT_ASSERT(filled7 > filled3);
+        assertGlyphEquals(glyph7, buildExpectedGlyph({0, 1, 2}, false));
     }
 
     void testGenerateStripG1_BlockSegmentGlyphsProgressive()
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
-        std::vector<std::uint16_t> pixelCounts;
-        for (int i = 0; i < 64; ++i)
-        {
-            std::uint16_t count = 0;
-            const auto& data = mockStrip->getGlyphData(i);
-            for (const auto& byte : data) if (byte == 0xFF) count++;
-            pixelCounts.push_back(count);
-        }
-        CPPUNIT_ASSERT(pixelCounts[63] > pixelCounts[0]);
-        CPPUNIT_ASSERT(pixelCounts[32] >= pixelCounts[0]);
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(0)) < countFilledPixels(mockStrip->getGlyphData(1)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(1)) < countFilledPixels(mockStrip->getGlyphData(3)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(3)) < countFilledPixels(mockStrip->getGlyphData(7)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(7)) < countFilledPixels(mockStrip->getGlyphData(15)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(15)) < countFilledPixels(mockStrip->getGlyphData(31)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(31)) < countFilledPixels(mockStrip->getGlyphData(63)));
     }
 
     void testGenerateStripG1_SeparatedSegmentGlyphsProgressive()
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
-        std::uint16_t filled64 = 0, filled127 = 0;
-        for (const auto& byte : mockStrip->getGlyphData(64)) if (byte == 0xFF) filled64++;
-        for (const auto& byte : mockStrip->getGlyphData(127)) if (byte == 0xFF) filled127++;
-        CPPUNIT_ASSERT(filled127 > filled64);
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(64)) < countFilledPixels(mockStrip->getGlyphData(65)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(65)) < countFilledPixels(mockStrip->getGlyphData(67)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(67)) < countFilledPixels(mockStrip->getGlyphData(71)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(71)) < countFilledPixels(mockStrip->getGlyphData(79)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(79)) < countFilledPixels(mockStrip->getGlyphData(95)));
+        CPPUNIT_ASSERT(countFilledPixels(mockStrip->getGlyphData(95)) < countFilledPixels(mockStrip->getGlyphData(127)));
     }
 
     void testGenerateStripG1_SegmentCombinationsCreateUniqueness()
@@ -581,32 +615,36 @@ protected:
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
-        std::uint16_t count1 = 0, count3 = 0;
-        for (const auto& byte : mockStrip->getGlyphData(1)) if (byte == 0xFF) count1++;
-        for (const auto& byte : mockStrip->getGlyphData(3)) if (byte == 0xFF) count3++;
+        std::uint16_t count1 = countFilledPixels(mockStrip->getGlyphData(1));
+        std::uint16_t count2 = countFilledPixels(mockStrip->getGlyphData(2));
+        std::uint16_t count3 = countFilledPixels(mockStrip->getGlyphData(3));
         CPPUNIT_ASSERT(count3 > count1);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(count1 + count2), count3);
     }
 
     void testGenerateStripG1_SeparatedGlyph3PixelCountGreaterThanGlyph1()
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
-        std::uint16_t count1 = 0, count3 = 0;
-        for (const auto& byte : mockStrip->getGlyphData(65)) if (byte == 0xFF) count1++;
-        for (const auto& byte : mockStrip->getGlyphData(67)) if (byte == 0xFF) count3++;
+        std::uint16_t count1 = countFilledPixels(mockStrip->getGlyphData(65));
+        std::uint16_t count2 = countFilledPixels(mockStrip->getGlyphData(66));
+        std::uint16_t count3 = countFilledPixels(mockStrip->getGlyphData(67));
         CPPUNIT_ASSERT(count3 > count1);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(count1 + count2), count3);
     }
 
     void testGenerateStripG1_SegmentFillingConsistency()
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
-        std::uint16_t count1 = 0, count3 = 0, count2 = 0;
-        for (const auto& byte : mockStrip->getGlyphData(1)) if (byte == 0xFF) count1++;
-        for (const auto& byte : mockStrip->getGlyphData(2)) if (byte == 0xFF) count2++;
-        for (const auto& byte : mockStrip->getGlyphData(3)) if (byte == 0xFF) count3++;
-        CPPUNIT_ASSERT(count3 >= count1);
-        CPPUNIT_ASSERT(count3 >= count2);
+        const auto& glyph1 = mockStrip->getGlyphData(1);
+        const auto& glyph2 = mockStrip->getGlyphData(2);
+        const auto& glyph3 = mockStrip->getGlyphData(3);
+        for (std::size_t i = 0; i < glyph3.size(); ++i)
+        {
+            const std::uint8_t expected = (glyph1[i] == 0xFF || glyph2[i] == 0xFF) ? 0xFF : 0x00;
+            CPPUNIT_ASSERT_EQUAL(expected, glyph3[i]);
+        }
     }
 
     void testGenerateStripG1_BlockAndSeparatedIndex0AreEqual()
@@ -626,11 +664,63 @@ protected:
     void testGenerateStripG1_SetBoundaryAt64()
     {
         auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
+        const auto& blockMapping = m_ttxEngine->getCharsetMapping(
+            ttxdecoder::Charset::G1_BLOCK_MOSAIC);
+        const auto& separatedMapping = m_ttxEngine->getCharsetMapping(
+            ttxdecoder::Charset::G1_BLOCK_MOSAIC_SEPARATED);
+
+        CPPUNIT_ASSERT(blockMapping[95] != separatedMapping[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(63),
+                             result.second.toGlyphIndex(blockMapping[95]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(64),
+                             result.second.toGlyphIndex(separatedMapping[0]));
+    }
+
+    void testGenerateStripG1_SeparatedBit0Shape()
+    {
+        auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
         auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
-        const auto& last_block = mockStrip->getGlyphData(63);
-        const auto& first_sep = mockStrip->getGlyphData(64);
-        CPPUNIT_ASSERT(!last_block.empty());
-        CPPUNIT_ASSERT(!first_sep.empty());
+        const auto& glyph65 = mockStrip->getGlyphData(65);
+        assertGlyphEquals(glyph65, buildExpectedGlyph({0}, true));
+    }
+
+    void testGenerateStripG1_SeparatedGlyph3Shape()
+    {
+        auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
+        auto mockStrip = m_gfxEngine->getLastCreatedFontStrip();
+        const auto& glyph67 = mockStrip->getGlyphData(67);
+        assertGlyphEquals(glyph67, buildExpectedGlyph({0, 1}, true));
+    }
+
+    void testGenerateStripG1_ReverseMappingWorks()
+    {
+        auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
+        const auto& blockMapping = m_ttxEngine->getCharsetMapping(
+            ttxdecoder::Charset::G1_BLOCK_MOSAIC);
+        const auto& separatedMapping = m_ttxEngine->getCharsetMapping(
+            ttxdecoder::Charset::G1_BLOCK_MOSAIC_SEPARATED);
+
+        for (std::size_t i = 0; i < 64; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(i),
+                                 result.second.toGlyphIndex(blockMapping[mapCharsetIndex(i)]));
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(64 + i),
+                                 result.second.toGlyphIndex(separatedMapping[mapCharsetIndex(i)]));
+        }
+    }
+
+    void testGenerateStripG1_SkipsCharsetGap()
+    {
+        auto result = GfxMosaicGenerator::generateStripG1(*m_ttxEngine, m_gfxEngine);
+        const auto& blockMapping = m_ttxEngine->getCharsetMapping(
+            ttxdecoder::Charset::G1_BLOCK_MOSAIC);
+        const auto& separatedMapping = m_ttxEngine->getCharsetMapping(
+            ttxdecoder::Charset::G1_BLOCK_MOSAIC_SEPARATED);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1), result.second.toGlyphIndex(blockMapping[32]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1), result.second.toGlyphIndex(blockMapping[63]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1), result.second.toGlyphIndex(separatedMapping[32]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1), result.second.toGlyphIndex(separatedMapping[63]));
     }
 
     void testGenerateStripG1_UsesUpdatedEngineMappings()
@@ -660,6 +750,16 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(separatedMapping[31]), result.second.toCharacter(95));
         CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(separatedMapping[64]), result.second.toCharacter(96));
         CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(separatedMapping[95]), result.second.toCharacter(127));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(0), result.second.toGlyphIndex(blockMapping[0]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(31), result.second.toGlyphIndex(blockMapping[31]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(32), result.second.toGlyphIndex(blockMapping[64]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(63), result.second.toGlyphIndex(blockMapping[95]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(64), result.second.toGlyphIndex(separatedMapping[0]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(95), result.second.toGlyphIndex(separatedMapping[31]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(96), result.second.toGlyphIndex(separatedMapping[64]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(127), result.second.toGlyphIndex(separatedMapping[95]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1), result.second.toGlyphIndex(blockMapping[32]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1), result.second.toGlyphIndex(separatedMapping[32]));
     }
 };
 

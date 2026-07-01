@@ -18,15 +18,239 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <set>
 #include "CharsetHandler.hpp"
 #include <ttxdecoder/Property.hpp>
 
 using namespace subttxrend::ttxt;
 
+namespace
+{
+
+ttxdecoder::CharsetMappingArray makeCharsetMapping(std::uint16_t character)
+{
+    ttxdecoder::CharsetMappingArray mapping;
+    mapping.fill(character);
+    return mapping;
+}
+
+const std::uint16_t ALL_DIACRITICS[] = {
+    ttxdecoder::Property::VALUE_DIACRITIC_GRAVE,
+    ttxdecoder::Property::VALUE_DIACRITIC_ACUTE,
+    ttxdecoder::Property::VALUE_DIACRITIC_CIRCUMFLEX,
+    ttxdecoder::Property::VALUE_DIACRITIC_TILDE,
+    ttxdecoder::Property::VALUE_DIACRITIC_MACRON,
+    ttxdecoder::Property::VALUE_DIACRITIC_BREVE,
+    ttxdecoder::Property::VALUE_DIACRITIC_DOT_ABOVE,
+    ttxdecoder::Property::VALUE_DIACRITIC_UMLAUT,
+    ttxdecoder::Property::VALUE_DIACRITIC_DOT_BELOW,
+    ttxdecoder::Property::VALUE_DIACRITIC_RING,
+    ttxdecoder::Property::VALUE_DIACRITIC_CEDILLA,
+    ttxdecoder::Property::VALUE_DIACRITIC_UNDERLINE,
+    ttxdecoder::Property::VALUE_DIACRITIC_DOUBLE_ACUTE,
+    ttxdecoder::Property::VALUE_DIACRITIC_OGONEK,
+    ttxdecoder::Property::VALUE_DIACRITIC_CARON
+};
+
+class FakeEngine : public ttxdecoder::Engine
+{
+public:
+    FakeEngine()
+        : m_defaultMapping(makeCharsetMapping(0x0020)),
+          m_g0Latin(makeCharsetMapping(0x0041)),
+          m_g0Arabic(makeCharsetMapping(0x0043)),
+          m_g0Cyrillic1(makeCharsetMapping(0x0049)),
+          m_g0Cyrillic2(makeCharsetMapping(0x004F)),
+          m_g0Cyrillic3(makeCharsetMapping(0x0055)),
+          m_g0Greek(makeCharsetMapping(0x0059)),
+          m_g0Hebrew(makeCharsetMapping(0x0061)),
+          m_g0Farsi(makeCharsetMapping(0x0065)),
+          m_g2Latin(makeCharsetMapping(0x0069)),
+          m_g2Arabic(makeCharsetMapping(0x006F)),
+          m_g2Cyrillic(makeCharsetMapping(0x0075)),
+          m_g2Greek(makeCharsetMapping(0x0077)),
+          m_g2Farsi(makeCharsetMapping(0x0079))
+    {
+    }
+
+    void setCharsetChar(ttxdecoder::Charset charset, std::uint16_t character)
+    {
+        getMutableCharsetMapping(charset).fill(character);
+    }
+
+    void resetAcquisition() override {}
+    std::uint32_t process() override { return 0; }
+    bool addPesPacket(const std::uint8_t* packet, std::uint16_t length) override
+    {
+        (void)packet;
+        (void)length;
+        return true;
+    }
+    void setCurrentPageId(const ttxdecoder::PageId& pageId) override
+    {
+        (void)pageId;
+    }
+    ttxdecoder::PageId getNextPageId(const ttxdecoder::PageId& inputPageId) const override
+    {
+        (void)inputPageId;
+        return ttxdecoder::PageId();
+    }
+    ttxdecoder::PageId getPrevPageId(const ttxdecoder::PageId& inputPageId) const override
+    {
+        (void)inputPageId;
+        return ttxdecoder::PageId();
+    }
+    ttxdecoder::PageId getPageId(ttxdecoder::PageIdType type) const override
+    {
+        (void)type;
+        return ttxdecoder::PageId();
+    }
+    const ttxdecoder::DecodedPage& getPage() const override
+    {
+        return m_page;
+    }
+    void setNavigationMode(ttxdecoder::NavigationMode navigationMode) override
+    {
+        (void)navigationMode;
+    }
+    ttxdecoder::NavigationState getNavigationState() const override
+    {
+        return ttxdecoder::NavigationState::DEFAULT;
+    }
+    void getTopLinkText(std::uint16_t magazine,
+                        std::uint32_t linkType,
+                        std::uint16_t* linkbuffer) const override
+    {
+        (void)magazine;
+        (void)linkType;
+        (void)linkbuffer;
+    }
+    std::uint8_t getScreenColorIndex() const override { return 0; }
+    std::uint8_t getRowColorIndex(std::uint8_t row) const override
+    {
+        (void)row;
+        return 0;
+    }
+    bool getColors(std::array<std::uint32_t, 16>& colors) const override
+    {
+        colors.fill(0);
+        return true;
+    }
+    const ttxdecoder::CharsetMappingArray& getCharsetMapping(ttxdecoder::Charset charset) const override
+    {
+        switch (charset)
+        {
+        case ttxdecoder::Charset::G0_LATIN:
+            return m_g0Latin;
+        case ttxdecoder::Charset::G0_ARABIC:
+            return m_g0Arabic;
+        case ttxdecoder::Charset::G0_CYRILLIC1:
+            return m_g0Cyrillic1;
+        case ttxdecoder::Charset::G0_CYRILLIC2:
+            return m_g0Cyrillic2;
+        case ttxdecoder::Charset::G0_CYRILLIC3:
+            return m_g0Cyrillic3;
+        case ttxdecoder::Charset::G0_GREEK:
+            return m_g0Greek;
+        case ttxdecoder::Charset::G0_HEBREW:
+            return m_g0Hebrew;
+        case ttxdecoder::Charset::G0_FARSI:
+            return m_g0Farsi;
+        case ttxdecoder::Charset::G2_LATIN:
+            return m_g2Latin;
+        case ttxdecoder::Charset::G2_ARABIC:
+            return m_g2Arabic;
+        case ttxdecoder::Charset::G2_CYRILLIC:
+            return m_g2Cyrillic;
+        case ttxdecoder::Charset::G2_GREEK:
+            return m_g2Greek;
+        case ttxdecoder::Charset::G2_FARSI:
+            return m_g2Farsi;
+        default:
+            return m_defaultMapping;
+        }
+    }
+    void setCharsetMapping(ttxdecoder::Charset charset,
+                           const ttxdecoder::CharsetMappingArray& mappingArray) override
+    {
+        getMutableCharsetMapping(charset) = mappingArray;
+    }
+    void setDefaultPrimaryNationalCharset(std::uint8_t index,
+                                          ttxdecoder::NationalCharset charset) override
+    {
+        (void)index;
+        (void)charset;
+    }
+    void setDefaultSecondaryNationalCharset(std::uint8_t index,
+                                            ttxdecoder::NationalCharset charset) override
+    {
+        (void)index;
+        (void)charset;
+    }
+    uint8_t getPageControlInfo() const override { return 0; }
+    void setIgnorePts(bool ignorePts) override { (void)ignorePts; }
+
+private:
+    ttxdecoder::CharsetMappingArray& getMutableCharsetMapping(ttxdecoder::Charset charset)
+    {
+        switch (charset)
+        {
+        case ttxdecoder::Charset::G0_LATIN:
+            return m_g0Latin;
+        case ttxdecoder::Charset::G0_ARABIC:
+            return m_g0Arabic;
+        case ttxdecoder::Charset::G0_CYRILLIC1:
+            return m_g0Cyrillic1;
+        case ttxdecoder::Charset::G0_CYRILLIC2:
+            return m_g0Cyrillic2;
+        case ttxdecoder::Charset::G0_CYRILLIC3:
+            return m_g0Cyrillic3;
+        case ttxdecoder::Charset::G0_GREEK:
+            return m_g0Greek;
+        case ttxdecoder::Charset::G0_HEBREW:
+            return m_g0Hebrew;
+        case ttxdecoder::Charset::G0_FARSI:
+            return m_g0Farsi;
+        case ttxdecoder::Charset::G2_LATIN:
+            return m_g2Latin;
+        case ttxdecoder::Charset::G2_ARABIC:
+            return m_g2Arabic;
+        case ttxdecoder::Charset::G2_CYRILLIC:
+            return m_g2Cyrillic;
+        case ttxdecoder::Charset::G2_GREEK:
+            return m_g2Greek;
+        case ttxdecoder::Charset::G2_FARSI:
+            return m_g2Farsi;
+        default:
+            return m_defaultMapping;
+        }
+    }
+
+    ttxdecoder::DecodedPage m_page;
+    ttxdecoder::CharsetMappingArray m_defaultMapping;
+    ttxdecoder::CharsetMappingArray m_g0Latin;
+    ttxdecoder::CharsetMappingArray m_g0Arabic;
+    ttxdecoder::CharsetMappingArray m_g0Cyrillic1;
+    ttxdecoder::CharsetMappingArray m_g0Cyrillic2;
+    ttxdecoder::CharsetMappingArray m_g0Cyrillic3;
+    ttxdecoder::CharsetMappingArray m_g0Greek;
+    ttxdecoder::CharsetMappingArray m_g0Hebrew;
+    ttxdecoder::CharsetMappingArray m_g0Farsi;
+    ttxdecoder::CharsetMappingArray m_g2Latin;
+    ttxdecoder::CharsetMappingArray m_g2Arabic;
+    ttxdecoder::CharsetMappingArray m_g2Cyrillic;
+    ttxdecoder::CharsetMappingArray m_g2Greek;
+    ttxdecoder::CharsetMappingArray m_g2Farsi;
+};
+
+} // namespace
+
 class CharsetHandlerTest : public CppUnit::TestFixture
 {
     CPPUNIT_TEST_SUITE(CharsetHandlerTest);
     CPPUNIT_TEST(testDefaultConstructor);
+    CPPUNIT_TEST(testInitBuildsMapping);
+    CPPUNIT_TEST(testInitResetsMapping);
     CPPUNIT_TEST(testCharA_WithGrave);
     CPPUNIT_TEST(testCharA_WithAcute);
     CPPUNIT_TEST(testCharA_WithCircumflex);
@@ -69,6 +293,7 @@ class CharsetHandlerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCharLowerA_WithRing);
     CPPUNIT_TEST(testCharLowerA_AdditionalMappings);
     CPPUNIT_TEST(testUnsupportedBaseCharactersRemainUnchanged);
+    CPPUNIT_TEST(testOtherUnsupportedBaseChars);
     CPPUNIT_TEST(testUnsupportedCharactersRemainUnchanged);
     CPPUNIT_TEST(testUnsupportedDiacriticsRemainUnchanged);
     CPPUNIT_TEST(testCharG_WithAcute);
@@ -238,6 +463,31 @@ protected:
         }
     }
 
+    void addExpectedDiacriticCharacters(std::set<std::uint16_t>& expectedChars,
+                                        std::uint16_t character)
+    {
+        for (const auto diacriticProperty : ALL_DIACRITICS)
+        {
+            expectedChars.insert(CharsetHandler::getDiacriticCharacterCode(
+                character, diacriticProperty));
+        }
+    }
+
+    void assertMappingContains(const subttxrend::gfx::FontStripMap& mapping,
+                               std::uint16_t character)
+    {
+        const auto glyphIndex = mapping.toGlyphIndex(character);
+        CPPUNIT_ASSERT(glyphIndex >= 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(character),
+                             mapping.toCharacter(static_cast<std::uint16_t>(glyphIndex)));
+    }
+
+    void assertMappingMissing(const subttxrend::gfx::FontStripMap& mapping,
+                              std::uint16_t character)
+    {
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1), mapping.toGlyphIndex(character));
+    }
+
     void testDefaultConstructor()
     {
         CharsetHandler handler;
@@ -245,6 +495,56 @@ protected:
         const auto& mapping = handler.getMapping();
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), mapping.getNeededGlyphCount());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::int32_t>(-1), mapping.toGlyphIndex(0x0041));
+    }
+
+    void testInitBuildsMapping()
+    {
+        const std::uint16_t baseChars[] = {
+            0x0041, 0x0043, 0x0049, 0x004F, 0x0055, 0x0059, 0x0061,
+            0x0065, 0x0069, 0x006F, 0x0075, 0x0077, 0x0079
+        };
+        std::set<std::uint16_t> expectedChars;
+        for (const auto character : baseChars)
+        {
+            expectedChars.insert(character);
+            addExpectedDiacriticCharacters(expectedChars, character);
+        }
+
+        FakeEngine engine;
+        CharsetHandler handler;
+
+        handler.init(engine);
+
+        const auto& mapping = handler.getMapping();
+        CPPUNIT_ASSERT_EQUAL(expectedChars.size(), mapping.getNeededGlyphCount());
+
+        for (const auto character : baseChars)
+        {
+            assertMappingContains(mapping, character);
+        }
+
+        assertMappingContains(mapping, 0x00C0);
+        assertMappingContains(mapping, 0x0106);
+        assertMappingContains(mapping, 0x1EF9);
+        assertMappingMissing(mapping, 0x0042);
+    }
+
+    void testInitResetsMapping()
+    {
+        FakeEngine engine;
+        CharsetHandler handler;
+
+        handler.init(engine);
+        assertMappingContains(handler.getMapping(), 0x0041);
+        assertMappingContains(handler.getMapping(), 0x00C0);
+
+        engine.setCharsetChar(ttxdecoder::Charset::G0_LATIN, 0x0042);
+        handler.init(engine);
+
+        const auto& mapping = handler.getMapping();
+        assertMappingContains(mapping, 0x0042);
+        assertMappingMissing(mapping, 0x0041);
+        assertMappingMissing(mapping, 0x00C0);
     }
 
     void testCharA_WithGrave()
@@ -568,6 +868,25 @@ protected:
         assertUnchangedForDiacritics(0x004D, diacritics);
         assertUnchangedForDiacritics(0x0050, diacritics);
         assertUnchangedForDiacritics(0x0051, diacritics);
+    }
+
+    void testOtherUnsupportedBaseChars()
+    {
+        const std::uint16_t diacritics[] = {
+            ttxdecoder::Property::VALUE_DIACRITIC_ACUTE,
+            ttxdecoder::Property::VALUE_DIACRITIC_GRAVE,
+            ttxdecoder::Property::VALUE_DIACRITIC_CARON
+        };
+
+        assertUnchangedForDiacritics(0x0056, diacritics);
+        assertUnchangedForDiacritics(0x0058, diacritics);
+        assertUnchangedForDiacritics(0x0062, diacritics);
+        assertUnchangedForDiacritics(0x0066, diacritics);
+        assertUnchangedForDiacritics(0x006D, diacritics);
+        assertUnchangedForDiacritics(0x0070, diacritics);
+        assertUnchangedForDiacritics(0x0071, diacritics);
+        assertUnchangedForDiacritics(0x0076, diacritics);
+        assertUnchangedForDiacritics(0x0078, diacritics);
     }
 
     void testUnsupportedCharactersRemainUnchanged()

@@ -640,6 +640,8 @@ Special Characters
         WebVTTDocument doc;
         CPPUNIT_ASSERT_NO_THROW(std::tie(list, std::ignore) = doc.parseCueList(notext));
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.size());
+        CPPUNIT_ASSERT_EQUAL(TimePoint(89000), list.front()->startTime());
+        CPPUNIT_ASSERT_EQUAL(TimePoint(91000), list.front()->endTime());
         CPPUNIT_ASSERT_EQUAL((std::size_t)0, list.front()->lines().size());
     }
 
@@ -652,7 +654,12 @@ Special Characters
         std::istringstream iss(oss.str());
         CPPUNIT_ASSERT_NO_THROW(std::tie(list, std::ignore) = doc.parseCueList(iss));
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.size());
-        CPPUNIT_ASSERT_EQUAL((std::size_t)100, list.front()->lines().size());
+        const auto lines = list.front()->lines();
+        CPPUNIT_ASSERT_EQUAL(TimePoint(89000), list.front()->startTime());
+        CPPUNIT_ASSERT_EQUAL(TimePoint(91000), list.front()->endTime());
+        CPPUNIT_ASSERT_EQUAL((std::size_t)100, lines.size());
+        CPPUNIT_ASSERT_EQUAL(std::string("line0"), lines.front());
+        CPPUNIT_ASSERT_EQUAL(std::string("line99"), lines.back());
     }
 
     void testDuplicateRegionIds() {
@@ -677,7 +684,13 @@ Special Characters
         // Only one region with id 'foo' should exist
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, regionMap.size());
         CPPUNIT_ASSERT(regionMap.count("foo"));
+        const auto region = regionMap.at("foo");
+        CPPUNIT_ASSERT_EQUAL(std::string("foo"), region.id);
+        CPPUNIT_ASSERT_EQUAL(3000, region.width_vw_h);
+        CPPUNIT_ASSERT_EQUAL(TimePoint(89000), list.front()->startTime());
+        CPPUNIT_ASSERT_EQUAL(std::string("foo"), list.front()->regionId());
     }
+
     void testCueWithUnknownRegion() {
         std::istringstream unknown(
             "WEBVTT\n"
@@ -695,6 +708,7 @@ Special Characters
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.front()->lines().size());
         CPPUNIT_ASSERT_EQUAL(std::string("Text"), list.front()->lines().front());
     }
+
     void testRegionWithInvalidFields() {
         std::istringstream bad(
             "WEBVTT\n"
@@ -716,7 +730,18 @@ Special Characters
         CPPUNIT_ASSERT_NO_THROW(std::tie(list, regionMap) = doc.parseCueList(bad));
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.size());
         CPPUNIT_ASSERT(regionMap.count("foo"));
+        const auto region = regionMap.at("foo");
+        CPPUNIT_ASSERT_EQUAL(std::string("foo"), region.id);
+        CPPUNIT_ASSERT_EQUAL(10000, region.width_vw_h);
+        CPPUNIT_ASSERT_EQUAL(3, region.lines);
+        const Region::Position defaultAnchor{0, 10000};
+        CPPUNIT_ASSERT(defaultAnchor == region.region_anchor);
+        CPPUNIT_ASSERT(defaultAnchor == region.viewport_anchor);
+        CPPUNIT_ASSERT(Region::Scroll::kDefault == region.scroll);
+        CPPUNIT_ASSERT_EQUAL(std::string("foo"), list.front()->regionId());
+        CPPUNIT_ASSERT_EQUAL(std::string("Text"), list.front()->lines().front());
     }
+
     void testXTimestampMapInvalidFields() {
         std::istringstream bad(
             "WEBVTT\n"
@@ -729,11 +754,13 @@ Special Characters
         WebVTTDocument doc;
         CPPUNIT_ASSERT_NO_THROW(std::tie(list, std::ignore) = doc.parseCueList(bad));
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.size());
+        CPPUNIT_ASSERT_EQUAL(std::string(""), list.front()->regionId());
         CPPUNIT_ASSERT_EQUAL(TimePoint(89000), list.front()->startTime());
         CPPUNIT_ASSERT_EQUAL(TimePoint(91000), list.front()->endTime());
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, list.front()->lines().size());
         CPPUNIT_ASSERT_EQUAL(std::string("Text"), list.front()->lines().front());
     }
+
     void testDuplicateCueIdentifiers() {
         std::istringstream dup(
             "WEBVTT\n"
@@ -760,6 +787,8 @@ Special Characters
         CPPUNIT_ASSERT_EQUAL(TimePoint(93000), (*secondCue)->endTime());
         CPPUNIT_ASSERT_EQUAL((std::size_t)1, (*secondCue)->lines().size());
         CPPUNIT_ASSERT_EQUAL(std::string("Text2"), (*secondCue)->lines().front());
+        CPPUNIT_ASSERT((*firstCue)->endTime() == (*secondCue)->startTime());
+        CPPUNIT_ASSERT((*firstCue)->lines().front() != (*secondCue)->lines().front());
     }
 };
 

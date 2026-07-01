@@ -20,11 +20,11 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include <memory>
 #include "GfxTtxGridModel.hpp"
-#include "GfxTtxClut.hpp"
 #include <ttxdecoder/Engine.hpp>
 #include <ttxdecoder/DecodedPage.hpp>
 #include <ttxdecoder/PageId.hpp>
 #include <ttxdecoder/ControlInfo.hpp>
+#include <ttxdecoder/Property.hpp>
 
 using subttxrend::ttxt::GfxTtxGridModel;
 using subttxrend::ttxt::GfxTtxGridCell;
@@ -44,7 +44,7 @@ class MockTtxEngine : public ttxdecoder::Engine
 {
 public:
     MockTtxEngine()
-        : m_currentPageId(1, 0x100)
+        : m_currentPageId(0x100, 0)
     {
         // Initialize default page
         m_decodedPage = ttxdecoder::DecodedPage();
@@ -53,6 +53,12 @@ public:
     void setPageControlInfo(std::uint8_t controlInfo)
     {
         m_pageControlInfo = controlInfo;
+        m_decodedPage.setPageControlInfo(controlInfo);
+    }
+
+    ttxdecoder::DecodedPage& page()
+    {
+        return m_decodedPage;
     }
 
     void setCurrentPageId(const ttxdecoder::PageId& pageId) override
@@ -137,9 +143,21 @@ class GfxTtxGridModelTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testMarkChangedByColorWithColorZero);
     CPPUNIT_TEST(testMarkChangedByColorWithColorMax);
     CPPUNIT_TEST(testRefreshSelectionNormalWithZeroPage);
+    CPPUNIT_TEST(testRefreshSelectionHiddenHeader);
+    CPPUNIT_TEST(testRefreshSelectionUnknownPage);
     CPPUNIT_TEST(testRefreshSelectionPaused);
     CPPUNIT_TEST(testRefreshSelectionWithNewPageId);
     CPPUNIT_TEST(testRefreshSelectionWithMaxPageId);
+    CPPUNIT_TEST(testRefreshHeaderSuppressed);
+    CPPUNIT_TEST(testRefreshPageInhibited);
+    CPPUNIT_TEST(testRefreshPageSubtitlesMode);
+    CPPUNIT_TEST(testRefreshPageRevealConcealed);
+    CPPUNIT_TEST(testRefreshPageFlash);
+    CPPUNIT_TEST(testRefreshPageLinks);
+    CPPUNIT_TEST(testRefreshPageDisablesCell);
+    CPPUNIT_TEST(testRefreshPageDoubleHeight);
+    CPPUNIT_TEST(testRefreshPageDoubleSize);
+    CPPUNIT_TEST(testRefreshPageHidesNeighbors);
 
     CPPUNIT_TEST_SUITE_END();
 
@@ -491,6 +509,40 @@ protected:
         CPPUNIT_ASSERT_EQUAL(COLOR_INDEX_BLACK, cell0->getBgColor());
     }
 
+    void testRefreshSelectionHiddenHeader()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        m_model->refreshSelection(false, 0);
+        assertSelectionText("P100");
+
+        for (std::int32_t col = 0; col < 4; ++col)
+        {
+            drainDirty(*requireCell(col, 0));
+        }
+
+        m_mockEngine->setCurrentPageId(ttxdecoder::PageId(0x222, 0));
+        m_mockEngine->setPageControlInfo(ttxdecoder::ControlInfo::SUPRESS_HEADER);
+
+        m_model->refreshSelection(false, 0);
+
+        assertSelectionText("P100");
+        CPPUNIT_ASSERT_EQUAL(false, requireCell(0, 0)->startRedraw());
+    }
+
+    void testRefreshSelectionUnknownPage()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        m_mockEngine->setCurrentPageId(ttxdecoder::PageId(0, 0));
+
+        m_model->refreshSelection(false, 0);
+
+        assertSelectionText("P???");
+    }
+
     void testRefreshSelectionPaused()
     {
         m_model.reset(new GfxTtxGridModel(Size(40, 25)));
@@ -524,8 +576,226 @@ protected:
         assertSelectionText("PFFF");
     }
 
+    void testRefreshHeaderSuppressed()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(0, 0, 'A', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK, 0);
+
+        m_model->refreshHeader(false);
+
+        CPPUNIT_ASSERT_EQUAL(true, requireCell(0, 0)->isEnabled());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('A'), requireCell(0, 0)->getChar());
+
+        m_mockEngine->setPageControlInfo(ttxdecoder::ControlInfo::SUPRESS_HEADER);
+        setPageCell(0, 0, 'B', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK, 0);
+
+        m_model->refreshHeader(false);
+
+        CPPUNIT_ASSERT_EQUAL(false, requireCell(0, 0)->isEnabled());
+    }
+
+    void testRefreshPageInhibited()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(1, 0, 'A', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK, 0);
+
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(true, requireCell(0, 1)->isEnabled());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('A'), requireCell(0, 1)->getChar());
+
+        m_mockEngine->setPageControlInfo(ttxdecoder::ControlInfo::INHIBIT_DISPLAY);
+        setPageCell(1, 0, 'B', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK, 0);
+
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(false, requireCell(0, 1)->isEnabled());
+    }
+
+    void testRefreshPageSubtitlesMode()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(1, 0, 'A', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK, 0);
+
+        m_model->refreshPage(true);
+
+        CPPUNIT_ASSERT_EQUAL(false, requireCell(0, 1)->isEnabled());
+
+        m_mockEngine->setPageControlInfo(ttxdecoder::ControlInfo::SUBTITLE);
+
+        m_model->refreshPage(true);
+
+        CPPUNIT_ASSERT_EQUAL(true, requireCell(0, 1)->isEnabled());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('A'), requireCell(0, 1)->getChar());
+    }
+
+    void testRefreshPageRevealConcealed()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(1, 0, 'A', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK,
+                ttxdecoder::Property::VALUE_CONCEALED);
+
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('*'), requireCell(0, 1)->getChar());
+
+        m_model->setRevealEnabled(true);
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('A'), requireCell(0, 1)->getChar());
+    }
+
+    void testRefreshPageFlash()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(1, 0, 'A', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK,
+                ttxdecoder::Property::VALUE_FLASH);
+
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(COLOR_INDEX_WHITE, requireCell(0, 1)->getFgColor());
+
+        m_model->setFlashEnabled(true);
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(COLOR_INDEX_BLACK, requireCell(0, 1)->getFgColor());
+    }
+
+    void testRefreshPageLinks()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(24, 0, ' ', COLOR_INDEX_BLACK, COLOR_INDEX_BLACK, 0);
+        m_mockEngine->page().setColourKeyLink(ttxdecoder::DecodedPage::Link::RED,
+                ttxdecoder::PageId(0x100, 0));
+        m_mockEngine->page().setColourKeyLink(ttxdecoder::DecodedPage::Link::GREEN,
+                ttxdecoder::PageId(0x200, 0));
+        m_mockEngine->page().setColourKeyLink(ttxdecoder::DecodedPage::Link::YELLOW,
+                ttxdecoder::PageId(0x300, 0));
+        m_mockEngine->page().setColourKeyLink(ttxdecoder::DecodedPage::Link::CYAN,
+                ttxdecoder::PageId(0x400, 0));
+
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('1'), requireCell(3, 24)->getChar());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('2'), requireCell(13, 24)->getChar());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('3'), requireCell(23, 24)->getChar());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('4'), requireCell(33, 24)->getChar());
+    }
+
+    void testRefreshPageDisablesCell()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(1, 0, 'A', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK,
+                ttxdecoder::Property::VALUE_DOUBLE_HEIGHT);
+
+        m_model->refreshPage(false);
+
+        const auto* cell = requireCell(0, 1);
+        CPPUNIT_ASSERT_EQUAL(true, cell->isEnabled());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), cell->getXMultiplier());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(2), cell->getYMultiplier());
+
+        setPageCell(1, 0, '\0', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK, 0);
+
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(false, cell->isEnabled());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), cell->getXMultiplier());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), cell->getYMultiplier());
+
+        setPageCell(1, 0, 'B', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK,
+                ttxdecoder::Property::VALUE_HIDDEN
+                | ttxdecoder::Property::VALUE_DOUBLE_HEIGHT);
+
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(false, cell->isEnabled());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), cell->getXMultiplier());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), cell->getYMultiplier());
+    }
+
+    void testRefreshPageDoubleHeight()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(1, 0, 'A', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK,
+                ttxdecoder::Property::VALUE_DOUBLE_HEIGHT);
+
+        m_model->refreshPage(false);
+
+        const auto* cell = requireCell(0, 1);
+        CPPUNIT_ASSERT_EQUAL(true, cell->isEnabled());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('A'), cell->getChar());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(1), cell->getXMultiplier());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(2), cell->getYMultiplier());
+    }
+
+    void testRefreshPageDoubleSize()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(1, 0, 'A', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK,
+                ttxdecoder::Property::VALUE_DOUBLE_WIDTH
+                | ttxdecoder::Property::VALUE_DOUBLE_HEIGHT);
+
+        m_model->refreshPage(false);
+
+        const auto* cell = requireCell(0, 1);
+        CPPUNIT_ASSERT_EQUAL(true, cell->isEnabled());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>('A'), cell->getChar());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(2), cell->getXMultiplier());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(2), cell->getYMultiplier());
+    }
+
+    void testRefreshPageHidesNeighbors()
+    {
+        m_model.reset(new GfxTtxGridModel(Size(40, 25)));
+        m_model->init(m_mockEngine.get());
+
+        setPageCell(1, 0, 'A', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK,
+                ttxdecoder::Property::VALUE_DOUBLE_WIDTH
+                | ttxdecoder::Property::VALUE_DOUBLE_HEIGHT);
+        setPageCell(2, 0, 'B', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK, 0);
+        setPageCell(2, 1, 'C', COLOR_INDEX_WHITE, COLOR_INDEX_BLACK, 0);
+
+        m_model->refreshPage(false);
+
+        CPPUNIT_ASSERT_EQUAL(false, requireCell(0, 2)->startRedraw());
+        CPPUNIT_ASSERT_EQUAL(false, requireCell(1, 2)->startRedraw());
+    }
+
 
 private:
+    void setPageCell(std::size_t row,
+                     std::size_t col,
+                     std::uint16_t ch,
+                     std::uint8_t fgColor,
+                     std::uint8_t bgColor,
+                     std::uint16_t properties)
+    {
+        auto& segment = m_mockEngine->page().getRow(row).m_levelOnePageSegment;
+        segment.m_charArray[col] = ch;
+        segment.m_fgColorIndexArray[col] = fgColor;
+        segment.m_bgColorIndexArray[col] = bgColor;
+        segment.m_propertiesArray[col] = properties;
+    }
+
     const GfxTtxGridCell* requireCell(std::int32_t col,
                                       std::int32_t row) const
     {
@@ -549,7 +819,6 @@ private:
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(expected[col]), cell->getChar());
         }
     }
-
 
     std::unique_ptr<GfxTtxGridModel> m_model;
     std::unique_ptr<MockTtxEngine> m_mockEngine;

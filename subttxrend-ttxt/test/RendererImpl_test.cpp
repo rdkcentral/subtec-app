@@ -185,7 +185,6 @@ public:
     virtual ~MockTimeSource() = default;
 
     std::uint32_t getStc() override { return m_stc; }
-    void setStc(std::uint32_t stc) { m_stc = stc; }
 
 private:
     std::uint32_t m_stc;
@@ -230,11 +229,13 @@ class RendererImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testIsMutedAfterConstruction);
     CPPUNIT_TEST(testProcessDataWhenNotStarted);
     CPPUNIT_TEST(testProcessDataWhenStartedAndNotMuted);
+    CPPUNIT_TEST(testProcessDataNoSecondRedraw);
     CPPUNIT_TEST(testProcessDataWhenStartedAndMuted);
     CPPUNIT_TEST(testAddPesPacketWhenStarted);
     CPPUNIT_TEST(testAddPesPacketWhenNotStarted);
     CPPUNIT_TEST(testAddPesPacketWithNullBuffer);
     CPPUNIT_TEST(testAddPesPacketWithZeroLength);
+    CPPUNIT_TEST(testFalseModeStartProcess);
     CPPUNIT_TEST(testSetCurrentPageMultipleTimes);
     CPPUNIT_TEST(testLifecycleInitStartStopShutdown);
     CPPUNIT_TEST(testLifecycleInitStartMuteUnmuteStop);
@@ -584,6 +585,22 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, m_window->wasUpdateCalled());
     }
 
+    void testProcessDataNoSecondRedraw()
+    {
+        m_renderer.reset(new TestableRendererImpl(true));
+        initRenderer();
+
+        CPPUNIT_ASSERT_NO_THROW(m_renderer->callStartInternal());
+
+        m_window->resetCalls();
+        m_renderer->processData();
+        CPPUNIT_ASSERT_EQUAL(true, m_window->wasUpdateCalled());
+
+        m_window->resetCalls();
+        m_renderer->processData();
+        CPPUNIT_ASSERT_EQUAL(false, m_window->wasUpdateCalled());
+    }
+
     void testProcessDataWhenStartedAndMuted()
     {
         m_renderer.reset(new TestableRendererImpl(true));
@@ -646,6 +663,25 @@ protected:
         CPPUNIT_ASSERT_EQUAL(false, result);
     }
 
+    void testFalseModeStartProcess()
+    {
+        m_renderer.reset(new TestableRendererImpl(false));
+        initRenderer();
+
+        CPPUNIT_ASSERT_NO_THROW(m_renderer->callStartInternal());
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
+        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
+        CPPUNIT_ASSERT_EQUAL(true, m_window->isVisible());
+
+        m_window->resetCalls();
+        m_renderer->processData();
+        CPPUNIT_ASSERT_EQUAL(true, m_window->wasUpdateCalled());
+
+        std::array<std::uint8_t, 7> pes = { 0x00, 0x00, 0x01, 0xBD, 0x00, 0x01, 0x00 };
+        bool result = m_renderer->addPesPacket(pes.data(), static_cast<std::uint16_t>(pes.size()));
+        CPPUNIT_ASSERT_EQUAL(true, result);
+    }
+
     void testSetCurrentPageMultipleTimes()
     {
         m_renderer.reset(new TestableRendererImpl(true));
@@ -659,7 +695,20 @@ protected:
         CPPUNIT_ASSERT_NO_THROW(m_renderer->setCurrentPage(pageId2));
         CPPUNIT_ASSERT_NO_THROW(m_renderer->setCurrentPage(pageId3));
 
-        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isStarted());
+        CPPUNIT_ASSERT_NO_THROW(m_renderer->callStartInternal());
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
+        CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
+
+        m_window->resetCalls();
+        m_renderer->processData();
+        CPPUNIT_ASSERT_EQUAL(true, m_window->wasUpdateCalled());
+
+        CPPUNIT_ASSERT_NO_THROW(m_renderer->setCurrentPage(pageId2));
+        m_window->resetCalls();
+        m_renderer->processData();
+        CPPUNIT_ASSERT_EQUAL(false, m_window->wasUpdateCalled());
+
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
         CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
     }
 

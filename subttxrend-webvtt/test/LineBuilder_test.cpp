@@ -38,8 +38,11 @@ CPPUNIT_TEST(TestFontSizes);
 CPPUNIT_TEST(TestLineBreaking);
 CPPUNIT_TEST(TestStyleTags);
 CPPUNIT_TEST(TestColorTags);
+CPPUNIT_TEST(TestNestedTags);
 CPPUNIT_TEST(TestEscapedCharacters);
 CPPUNIT_TEST(TestRegionHandling);
+CPPUNIT_TEST(TestRegionScrollUp);
+CPPUNIT_TEST(TestRegionLineLimit);
 CPPUNIT_TEST(TestOpacityAndEdgeColor);
 CPPUNIT_TEST(TestUnknownStyleFallback);
 CPPUNIT_TEST_SUITE_END();
@@ -409,11 +412,35 @@ std::istringstream auto_empty(
 )");
         LineBuilder builder{1920, 1080};
         auto output = buildOutputLines(builder, color_cue);
-        auto limeToken = findToken(output, "lime");
+        const std::string texts[] = {"lime", "on", "red"};
 
-        CPPUNIT_ASSERT(limeToken != nullptr);
-        CPPUNIT_ASSERT(Style::kLime == limeToken->style.textColour());
-        CPPUNIT_ASSERT(Style::kRed == limeToken->style.bgColour());
+        for (const auto &text : texts)
+        {
+            const auto *token = findToken(output, text);
+            CPPUNIT_ASSERT(token != nullptr);
+            CPPUNIT_ASSERT(Style::kLime == token->style.textColour());
+            CPPUNIT_ASSERT(Style::kRed == token->style.bgColour());
+        }
+    }
+
+    void TestNestedTags() {
+        // Nested tags should propagate both font style and color to all tokens.
+        std::istringstream nested_cue(R"(WEBVTT
+
+00:01:00.000 --> 00:01:10.000
+<b><c.red>red bold</c></b>
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, nested_cue);
+        const std::string texts[] = {"red", "bold"};
+
+        for (const auto &text : texts)
+        {
+            const auto *token = findToken(output, text);
+            CPPUNIT_ASSERT(token != nullptr);
+            CPPUNIT_ASSERT_EQUAL(Style::FontStyleType::kBold, token->style.fontStyle());
+            CPPUNIT_ASSERT(Style::kRed == token->style.textColour());
+        }
     }
 
     void TestEscapedCharacters() {
@@ -426,10 +453,7 @@ std::istringstream auto_empty(
         LineBuilder builder{1920, 1080};
         auto output = buildOutputLines(builder, esc_cue);
         std::string rendered = renderOutputLines(output);
-        CPPUNIT_ASSERT(rendered.find("<tag>") != std::string::npos);
-        CPPUNIT_ASSERT(rendered.find("&") != std::string::npos);
-        CPPUNIT_ASSERT(rendered.find("\"test\"") != std::string::npos);
-        CPPUNIT_ASSERT(rendered.find("'ok'") != std::string::npos);
+        CPPUNIT_ASSERT_EQUAL(std::string("<tag> & \"test\" 'ok'\n"), rendered);
     }
 
     void TestRegionHandling() {
@@ -444,7 +468,7 @@ regionanchor:0%,100%
 viewportanchor:10%,90%
 scroll:up
 
-00:01:00.000 --> 00:01:10.000 region:region1
+00:01:00.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
 Regioned text
 )");
         LineBuilder builder{1920, 1080};
@@ -454,8 +478,68 @@ Regioned text
         CPPUNIT_ASSERT_EQUAL(std::size_t{1}, output.size());
 
         const auto &line = output.front();
+        const auto expectedX = converter.vwToWidthPixels(1000) + converter.screenPaddingWidthPixels();
         const auto expectedY = converter.vhToHeightPixels(9000 - converter.lineHeightVh());
+        CPPUNIT_ASSERT_EQUAL(expectedX, line.lineRectangle.m_x);
         CPPUNIT_ASSERT_EQUAL(expectedY, line.lineRectangle.m_y);
+    }
+
+    void TestRegionScrollUp() {
+        // Region scroll-up should keep the newest lines when the line limit is exceeded.
+        std::istringstream region_cue(R"(WEBVTT
+
+REGION
+id:region1
+width:50%
+lines:2
+regionanchor:0%,100%
+viewportanchor:10%,90%
+scroll:up
+
+00:01:00.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+one
+
+00:01:01.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+two
+
+00:01:02.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+three
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, region_cue, true);
+        std::string rendered = renderOutputLines(output);
+
+        CPPUNIT_ASSERT_EQUAL(std::size_t{2}, output.size());
+        CPPUNIT_ASSERT_EQUAL(std::string("two\nthree\n"), rendered);
+    }
+
+    void TestRegionLineLimit() {
+        // Region without scroll should stop once the line limit is reached.
+        std::istringstream region_cue(R"(WEBVTT
+
+REGION
+id:region1
+width:50%
+lines:2
+regionanchor:0%,100%
+viewportanchor:10%,90%
+
+00:01:00.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+one
+
+00:01:01.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+two
+
+00:01:02.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+three
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, region_cue, true);
+        std::string rendered = renderOutputLines(output);
+
+        CPPUNIT_ASSERT_EQUAL(std::size_t{2}, output.size());
+        CPPUNIT_ASSERT_EQUAL(std::string("three\ntwo\n"), rendered);
+        CPPUNIT_ASSERT(rendered.find("one") == std::string::npos);
     }
 
     void TestOpacityAndEdgeColor() {

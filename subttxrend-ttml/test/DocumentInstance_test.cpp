@@ -41,12 +41,12 @@ CPPUNIT_TEST_SUITE( DocumentInstanceTest );
     CPPUNIT_TEST(multiSpanRegionCase1);
     CPPUNIT_TEST(multiSpanRegionCase2);
     CPPUNIT_TEST(defaultWhitespaceHandling);
-    CPPUNIT_TEST(multipleEntitiesInOneTimeline);
-    CPPUNIT_TEST(multipleTimelineEntries);
-    CPPUNIT_TEST(emptyDocument);
-    CPPUNIT_TEST(malformedAttributeHandling);
-    CPPUNIT_TEST(styleAttributeParsing);
-    CPPUNIT_TEST(deeplyNestedElements);
+    CPPUNIT_TEST(testMultipleEntitiesInOneTimeline);
+    CPPUNIT_TEST(testMultipleTimelineEntries);
+    CPPUNIT_TEST(testEmptyDocument);
+    CPPUNIT_TEST(testMalformedAttributeHandling);
+    CPPUNIT_TEST(testStyleAttributeParsing);
+    CPPUNIT_TEST(testDeeplyNestedElements);
     CPPUNIT_TEST(testStartElementCreatesCorrectTypes);
     CPPUNIT_TEST(testEndElementFinalizesValidContent);
     CPPUNIT_TEST(testApplyWhitespaceHandlingRemovesLeadingTrailingSpaces);
@@ -58,7 +58,7 @@ CPPUNIT_TEST_SUITE( DocumentInstanceTest );
     CPPUNIT_TEST(testNewEntityWithEmptyEntities);
     CPPUNIT_TEST(testApplyWhitespaceHandlingEmptyAndMixed);
     CPPUNIT_TEST(testNewLineWithNoTextLines);
-    CPPUNIT_TEST(testCircularReferences);
+    CPPUNIT_TEST(testNewLineTrimsPreviousLine);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -903,7 +903,7 @@ public:
       CPPUNIT_ASSERT(fifthChunk.m_text == "456");
     }
 
-    void multipleEntitiesInOneTimeline()
+    void testMultipleEntitiesInOneTimeline()
     {
         DocumentInstance doc{};
 
@@ -937,12 +937,19 @@ public:
 
         auto firstDoc = timeline.front();
         CPPUNIT_ASSERT(firstDoc.m_entites.size() == 2);
+        CPPUNIT_ASSERT(firstDoc.m_timing == Timing(TimePoint{0}, TimePoint{10000}));
 
         CPPUNIT_ASSERT(firstDoc.m_entites[0].m_region->getId() == "region1");
+        CPPUNIT_ASSERT(firstDoc.m_entites[0].m_textLines.size() == 1);
+        CPPUNIT_ASSERT(firstDoc.m_entites[0].m_textLines[0].size() == 1);
+        CPPUNIT_ASSERT(firstDoc.m_entites[0].m_textLines[0][0].m_text == "text1");
         CPPUNIT_ASSERT(firstDoc.m_entites[1].m_region->getId() == "region2");
+        CPPUNIT_ASSERT(firstDoc.m_entites[1].m_textLines.size() == 1);
+        CPPUNIT_ASSERT(firstDoc.m_entites[1].m_textLines[0].size() == 1);
+        CPPUNIT_ASSERT(firstDoc.m_entites[1].m_textLines[0][0].m_text == "text2");
     }
 
-    void multipleTimelineEntries()
+    void testMultipleTimelineEntries()
     {
         DocumentInstance doc{};
 
@@ -965,22 +972,24 @@ public:
         CPPUNIT_ASSERT(timeline.size() == 2);
 
         auto firstDoc = timeline.front();
+        CPPUNIT_ASSERT(firstDoc.m_timing == Timing(TimePoint{0}, TimePoint{5000}));
         CPPUNIT_ASSERT(firstDoc.m_entites.size() == 1);
         CPPUNIT_ASSERT(firstDoc.m_entites[0].m_textLines[0][0].m_text == "first");
 
         auto secondDoc = timeline.back();
+        CPPUNIT_ASSERT(secondDoc.m_timing == Timing(TimePoint{5000}, TimePoint{10000}));
         CPPUNIT_ASSERT(secondDoc.m_entites.size() == 1);
         CPPUNIT_ASSERT(secondDoc.m_entites[0].m_textLines[0][0].m_text == "second");
     }
 
-    void emptyDocument()
+    void testEmptyDocument()
     {
         DocumentInstance doc{};
         auto timeline = doc.generateTimeline();
         CPPUNIT_ASSERT(timeline.empty());
     }
 
-    void malformedAttributeHandling()
+    void testMalformedAttributeHandling()
     {
         DocumentInstance doc{};
 
@@ -1000,7 +1009,7 @@ public:
         CPPUNIT_ASSERT(timeline.empty());
     }
 
-    void styleAttributeParsing()
+    void testStyleAttributeParsing()
     {
         DocumentInstance doc{};
 
@@ -1029,7 +1038,7 @@ public:
         CPPUNIT_ASSERT(textChunk.m_style.getBackgroundColor() == subttxrend::gfx::ColorArgb::YELLOW);
     }
 
-    void deeplyNestedElements()
+    void testDeeplyNestedElements()
     {
         DocumentInstance doc{};
 
@@ -1072,11 +1081,23 @@ public:
     void testStartElementCreatesCorrectTypes()
     {
         DocumentInstance doc;
-        CPPUNIT_ASSERT(dynamic_cast<StyleElement*>(doc.startElement("style").get()) != nullptr);
-        CPPUNIT_ASSERT(dynamic_cast<RegionElement*>(doc.startElement("region").get()) != nullptr);
-        CPPUNIT_ASSERT(dynamic_cast<ImageElement*>(doc.startElement("image").get()) != nullptr);
-        CPPUNIT_ASSERT(dynamic_cast<BodyElement*>(doc.startElement("body").get()) != nullptr);
-        CPPUNIT_ASSERT(dynamic_cast<TTElement*>(doc.startElement("tt").get()) != nullptr);
+        auto style = doc.startElement("style");
+        CPPUNIT_ASSERT(dynamic_cast<StyleElement*>(style.get()) != nullptr);
+
+        auto region = doc.startElement("region");
+        CPPUNIT_ASSERT(dynamic_cast<RegionElement*>(region.get()) != nullptr);
+
+        auto image = doc.startElement("image");
+        CPPUNIT_ASSERT(dynamic_cast<ImageElement*>(image.get()) != nullptr);
+        CPPUNIT_ASSERT(doc.getCurrentImageElement() == image);
+
+        auto body = doc.startElement("body");
+        CPPUNIT_ASSERT(dynamic_cast<BodyElement*>(body.get()) != nullptr);
+        CPPUNIT_ASSERT(doc.getCurrentElement() == body);
+
+        auto root = doc.startElement("tt");
+        CPPUNIT_ASSERT(dynamic_cast<TTElement*>(root.get()) != nullptr);
+        CPPUNIT_ASSERT(doc.startElement("tt") == root);
     }
 
     void testEndElementFinalizesValidContent()
@@ -1104,18 +1125,22 @@ public:
     {
         DocumentInstance doc;
         IntermediateDocument::TextLine line;
-        IntermediateDocument::TextChunk chunk1, chunk2;
+        IntermediateDocument::TextChunk chunk1, chunk2, chunk3;
         chunk1.m_text = "foo ";
-        chunk1.m_whitespaceHandling = XmlSpace::DEFAULT;
-        chunk2.m_text = " bar";
+        chunk1.m_whitespaceHandling = XmlSpace::PRESERVE;
+        chunk2.m_text = " bar ";
         chunk2.m_whitespaceHandling = XmlSpace::DEFAULT;
+        chunk3.m_text = "baz";
+        chunk3.m_whitespaceHandling = XmlSpace::PRESERVE;
         line.push_back(chunk1);
         line.push_back(chunk2);
+        line.push_back(chunk3);
 
         doc.applyWhitespaceHandling(line);
 
-        CPPUNIT_ASSERT(line.front().m_text == "foo");
-        CPPUNIT_ASSERT(line.back().m_text == " bar");
+        CPPUNIT_ASSERT(line[0].m_text == "foo ");
+        CPPUNIT_ASSERT(line[1].m_text == "bar ");
+        CPPUNIT_ASSERT(line[2].m_text == "baz");
     }
 
     void testStartElementUnknownName()
@@ -1225,34 +1250,23 @@ public:
         IntermediateDocument::Entity entity;
         doc.newLine(entity);
         CPPUNIT_ASSERT(entity.m_textLines.size() == 1);
+        CPPUNIT_ASSERT(entity.m_textLines.front().empty());
     }
 
-    void testCircularReferences() {
+    void testNewLineTrimsPreviousLine()
+    {
         DocumentInstance doc;
-        // Create a document with circular style references
-        // This is just to ensure no infinite loops
-        doc.startElement("tt");
-        auto style1 = doc.startElement("style");
-        style1->parseAttribute("", "id", "style1");
-        style1->parseAttribute("", "style", "style2"); // Reference style2
-        doc.endElement();
+        IntermediateDocument::Entity entity;
 
-        auto style2 = doc.startElement("style");
-        style2->parseAttribute("", "id", "style2");
-        style2->parseAttribute("", "style", "style1"); // Reference style1
-        doc.endElement();
+        entity.m_textLines.emplace_back();
+        entity.m_textLines.back().push_back({"trim me ", StyleSet{}, false, XmlSpace::DEFAULT});
 
-        auto div = doc.startElement("div");
-        div->parseAttribute("", "style", "style1");
-        div->parseAttribute("", "begin", "00:00:00");
-        div->parseAttribute("", "end", "00:00:10");
-        div->appendText("text");
-        doc.endElement();
-        doc.endElement();
+        doc.newLine(entity);
 
-        // Should not enter infinite loop
-        auto timeline = doc.generateTimeline();
-        CPPUNIT_ASSERT(timeline.size() == 1);
+        CPPUNIT_ASSERT(entity.m_textLines.size() == 2);
+        CPPUNIT_ASSERT(entity.m_textLines[0].size() == 1);
+        CPPUNIT_ASSERT(entity.m_textLines[0][0].m_text == "trim me");
+        CPPUNIT_ASSERT(entity.m_textLines[1].empty());
     }
 };
 

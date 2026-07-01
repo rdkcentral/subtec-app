@@ -40,26 +40,26 @@ CPPUNIT_TEST_SUITE(WebvttFileSourceTest);
     CPPUNIT_TEST(testConstructorWithSpecialCharactersInPath);
     CPPUNIT_TEST(testConstructorWithNonExistentPath);
     CPPUNIT_TEST(testCompleteWorkflowOnSingleSource);
-
+    CPPUNIT_TEST(testDataPath);
+    CPPUNIT_TEST(testReadGuards);
+    CPPUNIT_TEST(testCloseBehavior);
+    CPPUNIT_TEST(testStatAfterOpen);
 CPPUNIT_TEST_SUITE_END();
 
 public:
     void setUp() override
     {
-        // Generate unique temp file path for each test
         tempFilePath = makeTempFilePath("webvtt_test");
     }
 
     void tearDown() override
     {
-        // Clean up temp file
         removeFileNoThrow(tempFilePath);
     }
 
 protected:
     std::string tempFilePath;
 
-    // Helper methods
     static std::string makeTempFilePath(const std::string& baseName)
     {
         auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -110,11 +110,11 @@ protected:
                (static_cast<std::uint64_t>(ptr[7]) << 56);
     }
 
-    // Constructor tests
     void testConstructorWithValidPath()
     {
         WebvttFileSource source("/tmp/test.vtt");
         CPPUNIT_ASSERT_EQUAL(std::string("/tmp/test.vtt"), source.getPath());
+        CPPUNIT_ASSERT_EQUAL(-1, source.getFileHandle());
     }
 
     void testConstructorWithEmptyPath()
@@ -144,198 +144,201 @@ protected:
         CPPUNIT_ASSERT_EQUAL(std::string("/non/existent/path/file.vtt"), source.getPath());
     }
 
-    // Comprehensive test that validates the observable packet sequence.
-    // The current production implementation keeps packet sequencing state in
-    // function-local statics, so the ordered readPacket() coverage stays
-    // within one test method to avoid inter-test interference. This method
-    // mixes a reused source instance with fresh instances, depending on the
-    // specific behavior being exercised.
     void testCompleteWorkflowOnSingleSource()
     {
+        const std::vector<std::uint8_t> content = {0x41, 0x42, 0x43};
         WebvttFileSource source(tempFilePath);
 
-        // PHASE 1-4: Validate the packet sequence using one source instance.
+        writeFile(tempFilePath, content);
+        CPPUNIT_ASSERT(source.open());
+
+        DataPacket packet(1024);
+        DataPacket shortResetPacket(11);
+        CPPUNIT_ASSERT(!source.readPacket(shortResetPacket));
+
+        CPPUNIT_ASSERT(source.readPacket(packet));
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(12), packet.getSize());
+
+        std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(3), type);
+
+        std::uint32_t counter = readLeUint32(packet.getBuffer(), 4);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), counter);
+
+        std::uint32_t size = readLeUint32(packet.getBuffer(), 8);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), size);
+
+        const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x03), buf[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[2]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[3]);
+
+        DataPacket shortSelectionPacket(23);
+        CPPUNIT_ASSERT(!source.readPacket(shortSelectionPacket));
+
+        CPPUNIT_ASSERT(source.readPacket(packet));
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
+
+        type = readLeUint32(packet.getBuffer(), 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(16), type);
+
+        counter = readLeUint32(packet.getBuffer(), 4);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1), counter);
+
+        std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), payloadSize);
+
+        std::uint32_t channelId = readLeUint32(packet.getBuffer(), 12);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
+
+        std::uint32_t width = readLeUint32(packet.getBuffer(), 16);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1920), width);
+
+        std::uint32_t height = readLeUint32(packet.getBuffer(), 20);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1080), height);
+
+        buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x80), buf[16]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x07), buf[17]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[18]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[19]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x38), buf[20]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x04), buf[21]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[22]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[23]);
+
+        DataPacket shortTimestampPacket(23);
+        CPPUNIT_ASSERT(!source.readPacket(shortTimestampPacket));
+
+        CPPUNIT_ASSERT(source.readPacket(packet));
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
+
+        type = readLeUint32(packet.getBuffer(), 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(18), type);
+
+        counter = readLeUint32(packet.getBuffer(), 4);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2), counter);
+
+        payloadSize = readLeUint32(packet.getBuffer(), 8);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), payloadSize);
+
+        channelId = readLeUint32(packet.getBuffer(), 12);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
+
+        std::uint64_t timestamp = readLeUint64(packet.getBuffer(), 16);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), timestamp);
+
+        buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
+        for (int i = 16; i < 24; ++i)
         {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(1024);
-            CPPUNIT_ASSERT(source.readPacket(packet));
-
-            // First packet should be RESET
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(12), packet.getSize());
-            std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(3), type); // RESET_ALL type
-
-            std::uint32_t counter = readLeUint32(packet.getBuffer(), 4);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), counter);
-
-            std::uint32_t size = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), size);
-
-            // Verify little-endian encoding for type (3 = 0x03)
-            const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x03), buf[0]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[1]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[2]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[3]);
-
-            CPPUNIT_ASSERT(source.readPacket(packet));
-
-            // Second packet should be SELECTION
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
-            type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(16), type); // WVTT_SELECTION type
-
-            counter = readLeUint32(packet.getBuffer(), 4);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1), counter);
-
-            std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), payloadSize);
-
-            std::uint32_t channelId = readLeUint32(packet.getBuffer(), 12);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
-
-            std::uint32_t width = readLeUint32(packet.getBuffer(), 16);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1920), width);
-
-            std::uint32_t height = readLeUint32(packet.getBuffer(), 20);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1080), height);
-
-            // Verify little-endian encoding for width (1920 = 0x780)
-            buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x80), buf[16]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x07), buf[17]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[18]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[19]);
-
-            // Verify little-endian encoding for height (1080 = 0x438)
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x38), buf[20]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x04), buf[21]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[22]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[23]);
-
-            CPPUNIT_ASSERT(source.readPacket(packet));
-
-            // Third packet should be TIMESTAMP
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24), packet.getSize());
-            type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(18), type); // WVTT_TIMESTAMP type
-
-            counter = readLeUint32(packet.getBuffer(), 4);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2), counter);
-
-            payloadSize = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), payloadSize);
-
-            channelId = readLeUint32(packet.getBuffer(), 12);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
-
-            std::uint64_t timestamp = readLeUint64(packet.getBuffer(), 16);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), timestamp);
-
-            // Verify little-endian encoding for timestamp (all zeroes)
-            buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
-            for (int i = 16; i < 24; ++i)
-            {
-                CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[i]);
-            }
-
-            CPPUNIT_ASSERT(source.readPacket(packet));
-
-            // Fourth packet should be DATA for the file content.
-            type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type); // WVTT_DATA type
-
-            counter = readLeUint32(packet.getBuffer(), 4);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(3), counter);
-
-            payloadSize = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(15), payloadSize);
-
-            channelId = readLeUint32(packet.getBuffer(), 12);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
-
-            timestamp = readLeUint64(packet.getBuffer(), 16);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), timestamp);
-
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(27), packet.getSize());
-            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x41), packet.getBuffer()[24]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x42), packet.getBuffer()[25]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x43), packet.getBuffer()[26]);
-
-            source.close();
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[i]);
         }
 
-        // PHASE 5: Validate DATA packet with empty file
+        CPPUNIT_ASSERT(source.readPacket(packet));
+
+        type = readLeUint32(packet.getBuffer(), 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type);
+
+        counter = readLeUint32(packet.getBuffer(), 4);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(3), counter);
+
+        payloadSize = readLeUint32(packet.getBuffer(), 8);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(15), payloadSize);
+
+        channelId = readLeUint32(packet.getBuffer(), 12);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
+
+        timestamp = readLeUint64(packet.getBuffer(), 16);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), timestamp);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(27), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x41), packet.getBuffer()[24]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x42), packet.getBuffer()[25]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x43), packet.getBuffer()[26]);
+
+        CPPUNIT_ASSERT(source.readPacket(packet));
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getSize());
+
+        source.close();
+    }
+
+    void testDataPath()
+    {
         {
             writeFile(tempFilePath, {});
+            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(1024);
             CPPUNIT_ASSERT(source.readPacket(packet));
-
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getSize());
 
             source.close();
         }
 
-        // PHASE 6: Validate DATA packet with 1-byte file
         {
             writeFile(tempFilePath, {0x42});
+            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(1024);
             CPPUNIT_ASSERT(source.readPacket(packet));
-
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(25), packet.getSize());
+
             std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type); // WVTT_DATA type
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type);
 
             std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1 + 4 + 8), payloadSize); // fileSize + channelId + dataOffset
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(13), payloadSize);
 
             std::uint32_t channelId = readLeUint32(packet.getBuffer(), 12);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
 
             std::uint64_t dataOffset = readLeUint64(packet.getBuffer(), 16);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), dataOffset);
-
-            // Verify file content
             CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x42), packet.getBuffer()[24]);
 
             source.close();
         }
 
-        // PHASE 7: Validate DATA packet with small file and specific content
         {
-            std::vector<std::uint8_t> content = {0x01, 0x02, 0x03, 0x04, 0x05};
+            std::vector<std::uint8_t> content(100, 0x41);
             writeFile(tempFilePath, content);
+            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
-            DataPacket packet(1024);
-            CPPUNIT_ASSERT(source.readPacket(packet));
-
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(29), packet.getSize()); // 24 + 5
-
-            std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type); // WVTT_DATA type
-
-            // Verify payload size in header
-            std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(5 + 4 + 8), payloadSize); // fileSize + channelId + dataOffset
-
-            // Verify file content preserved
-            const char* buf = packet.getBuffer();
-            for (size_t i = 0; i < content.size(); ++i)
-            {
-                CPPUNIT_ASSERT_EQUAL(static_cast<char>(content[i]), buf[24 + i]);
-            }
+            DataPacket packet(50);
+            CPPUNIT_ASSERT(!source.readPacket(packet));
 
             source.close();
         }
 
-        // PHASE 8: Validate DATA packet with binary content (all byte values)
+        {
+            writeFile(tempFilePath, {0x41});
+            WebvttFileSource source(tempFilePath);
+            CPPUNIT_ASSERT(source.open());
+
+            DataPacket packet(0);
+            CPPUNIT_ASSERT(!source.readPacket(packet));
+
+            source.close();
+        }
+
+        {
+            writeFile(tempFilePath, {0x41, 0x42});
+            WebvttFileSource source(tempFilePath);
+            CPPUNIT_ASSERT(source.open());
+
+            DataPacket packet(26);
+            CPPUNIT_ASSERT(source.readPacket(packet));
+            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(26), packet.getSize());
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x41), packet.getBuffer()[24]);
+            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x42), packet.getBuffer()[25]);
+
+            source.close();
+        }
+
         {
             std::vector<std::uint8_t> content(256);
             for (int i = 0; i < 256; ++i)
@@ -343,17 +346,13 @@ protected:
                 content[i] = static_cast<std::uint8_t>(i);
             }
             writeFile(tempFilePath, content);
+            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(2048);
             CPPUNIT_ASSERT(source.readPacket(packet));
+            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(280), packet.getSize());
 
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(280), packet.getSize()); // 24 + 256
-
-            std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type); // WVTT_DATA type
-
-            // Verify all bytes preserved correctly
             const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
             for (size_t i = 0; i < content.size(); ++i)
             {
@@ -363,23 +362,18 @@ protected:
             source.close();
         }
 
-        // PHASE 9: Validate DATA packet with larger file
         {
             std::vector<std::uint8_t> content(10000, 0x55);
             writeFile(tempFilePath, content);
+            WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(20000);
             CPPUNIT_ASSERT(source.readPacket(packet));
+            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(10024), packet.getSize());
 
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(10024), packet.getSize()); // 24 + 10000
-
-            std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type); // WVTT_DATA type
-
-            // Verify content
             const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
-            for (size_t i = 0; i < 100; ++i) // Spot check first 100 bytes
+            for (size_t i = 0; i < 100; ++i)
             {
                 CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x55), buf[24 + i]);
             }
@@ -387,88 +381,6 @@ protected:
             source.close();
         }
 
-        // PHASE 10: Test insufficient capacity for DATA packet
-        {
-            std::vector<std::uint8_t> content(100, 0x41);
-            writeFile(tempFilePath, content);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(50); // Insufficient: need 124 bytes (24 + 100)
-            bool result = source.readPacket(packet);
-            CPPUNIT_ASSERT(!result); // Should fail
-
-            source.close();
-        }
-
-        // PHASE 11: Test zero capacity
-        {
-            writeFile(tempFilePath, {0x41});
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(0);
-            bool result = source.readPacket(packet);
-            CPPUNIT_ASSERT(!result); // Should fail
-
-            source.close();
-        }
-
-        // PHASE 12: Test exact capacity boundary for DATA packet
-        {
-            writeFile(tempFilePath, {0x41, 0x42});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(26); // Exact capacity for DATA (24 + 2)
-            bool result = source.readPacket(packet);
-            CPPUNIT_ASSERT(result); // Should succeed
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(26), packet.getSize());
-
-            // Verify content
-            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x41), packet.getBuffer()[24]);
-            CPPUNIT_ASSERT_EQUAL(static_cast<char>(0x42), packet.getBuffer()[25]);
-
-            source.close();
-        }
-
-        // PHASE 13: Test readPacket after close (file handle = -1)
-        {
-            writeFile(tempFilePath, {0x41, 0x42});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-            source.close();
-
-            DataPacket packet(1024);
-            bool result = source.readPacket(packet);
-            CPPUNIT_ASSERT(!result); // Should fail because file is closed
-        }
-
-        // PHASE 14: Test readPacket without calling open first
-        {
-            writeFile(tempFilePath, {0x41, 0x42});
-            WebvttFileSource source(tempFilePath);
-            // Don't call open()
-
-            DataPacket packet(1024);
-            bool result = source.readPacket(packet);
-            CPPUNIT_ASSERT(!result); // Should fail because file is not open
-        }
-
-        // PHASE 15: Test EOF after reading file
-        {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            DataPacket packet(1024);
-            CPPUNIT_ASSERT(source.readPacket(packet)); // DATA packet with content
-            CPPUNIT_ASSERT(source.readPacket(packet)); // Should return EOF
-
-            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getSize());
-
-            source.close();
-        }
-
-        // PHASE 16: Test with valid WebVTT content
         {
             std::string webvttContent = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello World\n\n00:00:05.000 --> 00:00:08.000\nSubtitle Test\n";
             std::vector<std::uint8_t> content(webvttContent.begin(), webvttContent.end());
@@ -478,21 +390,15 @@ protected:
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(10240);
-            CPPUNIT_ASSERT(source.readPacket(packet)); // DATA packet
-
+            CPPUNIT_ASSERT(source.readPacket(packet));
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24 + webvttContent.size()), packet.getSize());
 
-            std::uint32_t type = readLeUint32(packet.getBuffer(), 0);
-            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(17), type); // WVTT_DATA type
-
-            // Verify WebVTT content preserved
             std::string readContent(packet.getBuffer() + 24, webvttContent.size());
             CPPUNIT_ASSERT_EQUAL(webvttContent, readContent);
 
             source.close();
         }
 
-        // PHASE 17: Test with WebVTT metadata and cue settings
         {
             std::string webvttContent = "WEBVTT - Test File\nKind: captions\nLanguage: en\n\n00:00:01.000 --> 00:00:04.000 align:middle line:90%\n<v Speaker>Test Caption</v>\n";
             std::vector<std::uint8_t> content(webvttContent.begin(), webvttContent.end());
@@ -502,18 +408,15 @@ protected:
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(10240);
-            CPPUNIT_ASSERT(source.readPacket(packet)); // DATA packet
-
+            CPPUNIT_ASSERT(source.readPacket(packet));
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24 + webvttContent.size()), packet.getSize());
 
-            // Verify content integrity
             std::string readContent(packet.getBuffer() + 24, webvttContent.size());
             CPPUNIT_ASSERT_EQUAL(webvttContent, readContent);
 
             source.close();
         }
 
-        // PHASE 18: Test with special WebVTT characters and formatting
         {
             std::string webvttContent = "WEBVTT\n\nNOTE Test note\n\n00:00:01.000 --> 00:00:04.000\n<b>Bold</b> <i>Italic</i> <u>Underline</u>\n";
             std::vector<std::uint8_t> content(webvttContent.begin(), webvttContent.end());
@@ -523,9 +426,8 @@ protected:
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(10240);
-            CPPUNIT_ASSERT(source.readPacket(packet)); // DATA packet
+            CPPUNIT_ASSERT(source.readPacket(packet));
 
-            // Verify HTML tags preserved
             std::string readContent(packet.getBuffer() + 24, webvttContent.size());
             CPPUNIT_ASSERT_EQUAL(webvttContent, readContent);
             CPPUNIT_ASSERT(readContent.find("<b>Bold</b>") != std::string::npos);
@@ -535,49 +437,6 @@ protected:
             source.close();
         }
 
-        // PHASE 19: Test open() with non-existent file
-        {
-            WebvttFileSource source("/non/existent/path/file.vtt");
-            bool openResult = source.open();
-            CPPUNIT_ASSERT(!openResult); // Should fail
-
-            // Verify subsequent readPacket fails
-            DataPacket packet(1024);
-            bool readResult = source.readPacket(packet);
-            CPPUNIT_ASSERT(!readResult); // Should fail
-        }
-
-        // PHASE 20: Test close() and verify file handle invalidation
-        {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            // Verify file handle is valid (not -1)
-            int fileHandle = source.getFileHandle();
-            CPPUNIT_ASSERT(fileHandle != -1);
-
-            source.close();
-
-            // Verify file handle is now invalid
-            fileHandle = source.getFileHandle();
-            CPPUNIT_ASSERT_EQUAL(-1, fileHandle);
-        }
-
-        // PHASE 21: Test multiple close() calls
-        {
-            writeFile(tempFilePath, {0x41, 0x42, 0x43});
-            WebvttFileSource source(tempFilePath);
-            CPPUNIT_ASSERT(source.open());
-
-            source.close();
-            source.close(); // Second close should not crash
-
-            int fileHandle = source.getFileHandle();
-            CPPUNIT_ASSERT_EQUAL(-1, fileHandle);
-        }
-
-        // PHASE 22: Test with UTF-8 encoded WebVTT content
         {
             std::string webvttContent = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\n";
             webvttContent += "Hello 世界 🌍 Testing UTF-8\n";
@@ -588,30 +447,26 @@ protected:
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(10240);
-            CPPUNIT_ASSERT(source.readPacket(packet)); // DATA packet
-
+            CPPUNIT_ASSERT(source.readPacket(packet));
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(24 + webvttContent.size()), packet.getSize());
 
-            // Verify UTF-8 content preserved byte-for-byte
             std::string readContent(packet.getBuffer() + 24, webvttContent.size());
             CPPUNIT_ASSERT_EQUAL(webvttContent, readContent);
 
             source.close();
         }
 
-        // PHASE 23: Test DATA packet channelId field is always 0
         {
             writeFile(tempFilePath, {0xAA, 0xBB, 0xCC, 0xDD});
             WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(1024);
-            CPPUNIT_ASSERT(source.readPacket(packet)); // DATA packet
+            CPPUNIT_ASSERT(source.readPacket(packet));
 
             std::uint32_t channelId = readLeUint32(packet.getBuffer(), 12);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), channelId);
 
-            // Verify hardcoded to 0 in little-endian
             const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[12]);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x00), buf[13]);
@@ -621,19 +476,17 @@ protected:
             source.close();
         }
 
-        // PHASE 24: Test DATA packet dataOffset field is always 0
         {
             writeFile(tempFilePath, {0xFF, 0xEE, 0xDD});
             WebvttFileSource source(tempFilePath);
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(1024);
-            CPPUNIT_ASSERT(source.readPacket(packet)); // DATA packet
+            CPPUNIT_ASSERT(source.readPacket(packet));
 
             std::uint64_t dataOffset = readLeUint64(packet.getBuffer(), 16);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0), dataOffset);
 
-            // Verify all 8 bytes are zero
             const std::uint8_t* buf = reinterpret_cast<const std::uint8_t*>(packet.getBuffer());
             for (int i = 16; i < 24; ++i)
             {
@@ -643,7 +496,6 @@ protected:
             source.close();
         }
 
-        // PHASE 25: Test DATA packet size calculation formula
         {
             std::vector<std::uint8_t> content = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
             writeFile(tempFilePath, content);
@@ -651,17 +503,82 @@ protected:
             CPPUNIT_ASSERT(source.open());
 
             DataPacket packet(1024);
-            CPPUNIT_ASSERT(source.readPacket(packet)); // DATA packet
+            CPPUNIT_ASSERT(source.readPacket(packet));
 
-            // Size should be: fileSize (7) + channelId (4) + dataOffset (8) = 19
             std::uint32_t payloadSize = readLeUint32(packet.getBuffer(), 8);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(19), payloadSize);
-
-            // Total packet size should be: header (24) + fileSize (7) = 31
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(31), packet.getSize());
 
             source.close();
         }
+    }
+
+    void testReadGuards()
+    {
+        {
+            writeFile(tempFilePath, {0x41, 0x42});
+            WebvttFileSource source(tempFilePath);
+            CPPUNIT_ASSERT(source.open());
+            source.close();
+
+            DataPacket packet(1024);
+            CPPUNIT_ASSERT(!source.readPacket(packet));
+        }
+
+        {
+            writeFile(tempFilePath, {0x41, 0x42});
+            WebvttFileSource source(tempFilePath);
+
+            DataPacket packet(1024);
+            CPPUNIT_ASSERT(!source.readPacket(packet));
+        }
+
+        {
+            WebvttFileSource source("/non/existent/path/file.vtt");
+            CPPUNIT_ASSERT(!source.open());
+
+            DataPacket packet(1024);
+            CPPUNIT_ASSERT(!source.readPacket(packet));
+        }
+    }
+
+    void testCloseBehavior()
+    {
+        {
+            writeFile(tempFilePath, {0x41, 0x42, 0x43});
+            WebvttFileSource source(tempFilePath);
+            CPPUNIT_ASSERT(source.open());
+            CPPUNIT_ASSERT(source.getFileHandle() != -1);
+
+            source.close();
+            CPPUNIT_ASSERT_EQUAL(-1, source.getFileHandle());
+        }
+
+        {
+            writeFile(tempFilePath, {0x41, 0x42, 0x43});
+            WebvttFileSource source(tempFilePath);
+            CPPUNIT_ASSERT(source.open());
+
+            source.close();
+            source.close();
+
+            CPPUNIT_ASSERT_EQUAL(-1, source.getFileHandle());
+        }
+    }
+
+    void testStatAfterOpen()
+    {
+        writeFile(tempFilePath, {0x41, 0x42, 0x43});
+
+        WebvttFileSource source(tempFilePath);
+        CPPUNIT_ASSERT(source.open());
+
+        removeFileNoThrow(tempFilePath);
+
+        DataPacket packet(1024);
+        CPPUNIT_ASSERT(!source.readPacket(packet));
+
+        source.close();
     }
 };
 

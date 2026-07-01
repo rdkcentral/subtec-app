@@ -439,6 +439,8 @@ private:
     {
         const std::string path = makeTempFilePath("SmartFileSource_invalid_timestamp_header");
 
+        auto ts1 = makeTimestampPacket(1000U, 1U, 0U);
+
         // Create a packet with size 24, type 2, but bytes[1-3] of type field not all zero
         // SmartFileSource checks: (data[0] == 2) && (data[1] == 0) && (data[2] == 0) && (data[3] == 0)
         // If any of bytes 1-3 are non-zero, it should NOT be treated as a timestamp packet.
@@ -449,14 +451,18 @@ private:
         // Corrupt byte[1] of the type field (which is at packet index 1)
         invalidPacket[1] = 0x01; // Now type bytes are [0x02, 0x01, 0x00, 0x00]
 
-        writeFile(path, {invalidPacket});
+        writeFile(path, {ts1, invalidPacket});
 
         SmartFileSource source(path);
         CPPUNIT_ASSERT(source.open());
 
         DataPacket packet(1024);
 
-        // This should be treated as a non-timestamp packet (no sleep)
+        (void)measureReadMs(source, packet);
+
+        // This should be treated as a non-timestamp packet. If it were treated as
+        // a timestamp packet, the zero timestamp after the previous 1000ms value
+        // would cause an unsigned underflow in the timestamp delta path.
         const std::uint64_t elapsedMs = measureReadMs(source, packet);
         CPPUNIT_ASSERT(elapsedMs < 200U);
 
@@ -550,10 +556,15 @@ private:
 
         const std::uint64_t elapsed2 = measureReadMs(source, packet); // Second: small sleep
         const std::uint64_t elapsed3 = measureReadMs(source, packet); // Third: small sleep
+        const std::uint64_t totalElapsed = elapsed2 + elapsed3;
 
-        // Both should have some delay (but keep threshold loose for CI)
+        // SmartFileSource samples the clock before sleeping, so the pacing for
+        // consecutive packets may be distributed unevenly across reads.
+        // Validate cumulative pacing instead of requiring both reads to sleep.
         CPPUNIT_ASSERT(elapsed2 < 500U);
         CPPUNIT_ASSERT(elapsed3 < 500U);
+        CPPUNIT_ASSERT(totalElapsed >= 80U);
+        CPPUNIT_ASSERT(totalElapsed < 700U);
 
         source.close();
         removeFileNoThrow(path);
@@ -611,31 +622,24 @@ private:
     {
         const std::string path = makeTempFilePath("SmartFileSource_byte_order");
 
-        // Create a timestamp with a specific pattern to verify byte order
-        // 0x0102030405060708 in little-endian should be bytes: 08 07 06 05 04 03 02 01
-        std::uint64_t timestamp = 0x0102030405060708ULL;
-        auto ts = makeTimestampPacket(timestamp, 1U, 0U);
+        std::vector<std::uint8_t> zeroTimestampPayload(12, 0);
+        std::vector<std::uint8_t> littleEndian256Payload(12, 0);
+        littleEndian256Payload[1] = 0x01; // timestamp bytes 00 01 00 00 00 00 00 00 => 256 ms
 
-        // Verify the timestamp bytes are in little-endian order in the packet
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x08), ts[12]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x07), ts[13]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x06), ts[14]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x05), ts[15]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x04), ts[16]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x03), ts[17]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x02), ts[18]);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x01), ts[19]);
+        auto ts1 = makePacket(2U, 1U, zeroTimestampPayload);
+        auto ts2 = makePacket(2U, 2U, littleEndian256Payload);
 
-        writeFile(path, {ts});
+        writeFile(path, {ts1, ts2});
 
         SmartFileSource source(path);
         CPPUNIT_ASSERT(source.open());
 
         DataPacket packet(1024);
-        CPPUNIT_ASSERT(source.readPacket(packet));
+        (void)measureReadMs(source, packet);
 
-        // Verify the packet was read correctly
-        CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), ts.data(), ts.size()));
+        const std::uint64_t elapsedMs = measureReadMs(source, packet);
+        CPPUNIT_ASSERT(elapsedMs >= 100U);
+        CPPUNIT_ASSERT(elapsedMs < 1000U);
 
         source.close();
         removeFileNoThrow(path);

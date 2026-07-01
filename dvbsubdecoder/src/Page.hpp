@@ -77,7 +77,8 @@ public:
      *
      * Creates empty page (page is reset on initialization).
      */
-    Page()
+    Page() :
+        m_regionRefs{}
     {
         reset();
     }

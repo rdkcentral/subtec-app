@@ -58,7 +58,7 @@ bool Controller::init(gfx::Window* gfxWindow, std::shared_ptr<gfx::PrerenderedFo
     logger.info("%s", __func__);
 
     renderer.reset(new Renderer(gfxWindow));
-    m_fontCache = fontCache;
+    m_fontCache = std::move(fontCache);
     winCtrl = std::make_unique<WindowController>(renderer, m_fontCache);
     parser.setProcessor(winCtrl.get());
 
@@ -325,7 +325,7 @@ void Controller::processCcpQueue()
     for(auto& ccp : cc708Ccp)
     {
         offset = 0;
-        auto ccpData = ccp->getCcpData();
+        const auto& ccpData = ccp->getCcpData();
         while (offset < ccpData.size())
         {
             std::unique_ptr<ServiceBlock> sb(new ServiceBlock(ccpData, offset));

@@ -53,7 +53,14 @@ Database::~Database()
 {
     g_logger.trace("%s", __func__);
 
-    epochReset();
+    try
+    {
+        epochReset();
+    }
+    catch (const std::exception& e)
+    {
+        g_logger.warning("%s - exception suppressed: %s", __func__, e.what());
+    }
 }
 
 void Database::epochReset()

@@ -45,7 +45,7 @@ static const int HorizontalMargin = 5;
 #define MAX_ROW_COUNT 12
 
 Window::Window(std::shared_ptr<Gfx> gfx, std::shared_ptr<gfx::PrerenderedFontCache> font, WindowDefinition def, bool enable608):
-    m_gfx(gfx), m_fontCache{font}, m_def(def), m_608Enabled(enable608),
+    m_gfx(std::move(gfx)), m_fontCache{std::move(font)}, m_def(def), m_608Enabled(enable608),
     m_fonts(enable608 ? screenInfo608.fonts : screenInfo708.fonts),
     m_changed(false), m_visibilityChanged(false), logger("ClosedCaptions", "Window")
 {
@@ -96,7 +96,7 @@ void Window::report(std::string str)
     {
         m_changed = true;
         ensureTextDrawer();
-        m_textDrawers.back()->report(str, m_def);
+        m_textDrawers.back()->report(std::move(str), m_def);
     }
 }
 

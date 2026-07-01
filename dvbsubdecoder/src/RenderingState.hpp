@@ -62,7 +62,8 @@ public:
     /**
      * Constructor.
      */
-    RenderingState()
+    RenderingState() :
+        m_regions{}
     {
         reset();
     }

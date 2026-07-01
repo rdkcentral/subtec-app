@@ -24,6 +24,8 @@
 
 #include "PixmapAllocator.hpp"
 
+#include <exception>
+
 namespace dvbsubdecoder
 {
 

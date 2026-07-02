@@ -28,8 +28,8 @@ namespace cc
 {
 
 WindowController::WindowController(std::shared_ptr<Gfx> gfx, std::shared_ptr<gfx::PrerenderedFontCache> fontCache)
-        : m_gfx(gfx),
-          m_fontCache(fontCache),
+        : m_gfx(std::move(gfx)),
+          m_fontCache(std::move(fontCache)),
           m_selectedWindow(nullptr),
           m_flashTransition(std::chrono::steady_clock::now()),
           m_windowTransition(std::chrono::steady_clock::now()),
@@ -243,7 +243,7 @@ void WindowController::report(std::string str)
 {
     logger.trace("ses ");
     if (m_selectedWindow)
-        m_selectedWindow->report(str);
+        m_selectedWindow->report(std::move(str));
 }
 
 void WindowController::hideWindows(WindowsMap wm)
@@ -372,7 +372,7 @@ void WindowController::setTabOffset(uint8_t offset)
 
 Window* WindowController::createWindow(std::shared_ptr<Gfx> gfx, WindowDefinition windef)
 {
-    return new Window(gfx, m_fontCache, windef, m_608Enabled);
+    return new Window(std::move(gfx), m_fontCache, windef, m_608Enabled);
 }
 
 void WindowController::executeOnWindows(const WindowsMap& wm, std::function<void (Window*)> method)

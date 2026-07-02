@@ -58,7 +58,7 @@ bool Controller::init(gfx::Window* gfxWindow, std::shared_ptr<gfx::PrerenderedFo
     logger.info("%s", __func__);
 
     renderer.reset(new Renderer(gfxWindow));
-    m_fontCache = fontCache;
+    m_fontCache = std::move(fontCache);
     winCtrl = std::make_unique<WindowController>(renderer, m_fontCache);
     parser.setProcessor(winCtrl.get());
 
@@ -325,7 +325,7 @@ void Controller::processCcpQueue()
     for(auto& ccp : cc708Ccp)
     {
         offset = 0;
-        auto ccpData = ccp->getCcpData();
+        const auto& ccpData = ccp->getCcpData();
         while (offset < ccpData.size())
         {
             std::unique_ptr<ServiceBlock> sb(new ServiceBlock(ccpData, offset));
@@ -375,10 +375,56 @@ void Controller::setTextForPreview(const std::string& text)
 {
     logger.info("%s", __func__);
     // We're using window 5 (just because) for the preview
-    WindowsMap wm = toWindowsMap(255 /*1<<(5-1)*/);
+    WindowsMap wm = toWindowsMap(1 << 5);
     logger.trace("deleteWindows");
     winCtrl->deleteWindows(wm);
     WindowDefinition wd{5, 1, false, false, true, false, 0, 0, 1, {}, 32, {}, {}};
+    logger.trace("defineWindow");
+    winCtrl->defineWindow(wd);
+    PenAttributes pa;
+    logger.trace("setPenAttributes");
+    winCtrl->setPenAttributes(pa);
+    PenColor pc;
+    logger.trace("setPenColor + setPenLocation");
+    winCtrl->setPenColor(pc);
+    winCtrl->setPenLocation(0, 0);
+    logger.trace("report");
+    winCtrl->report(text);
+    logger.trace("displayWindows");
+    winCtrl->displayWindows(wm);
+    logger.trace("drawWindows");
+    winCtrl->drawWindows();
+    logger.info("%s ends", __func__);
+}
+
+void Controller::displayPreviewText(const std::string& text, float verOffset, float horOffset, PenAnchorPoint anchorPoint)
+{
+    const unsigned windowWidth = 42; // Maximum number of characters in a row for CEA-708 on a 16:9 display
+    logger.info("%s", __func__);
+    // We're using window 5 (just because) for the preview
+    WindowsMap wm = toWindowsMap(1 << 5);
+    logger.trace("deleteWindows");
+    winCtrl->deleteWindows(wm);
+    // With relative_pos == true, the anchor points are a percentage of screen dimensions
+    WindowDefinition wd{5, 1, false, false, true, /*relative_pos*/ true, static_cast<int>(verOffset*100.0f), static_cast<int>(horOffset*100.0f), 1, anchorPoint, windowWidth, {}, {}};
+    switch (anchorPoint)
+    {
+        case PenAnchorPoint::TOP_LEFT:
+        case PenAnchorPoint::MIDDLE_LEFT:
+        case PenAnchorPoint::BOTTOM_LEFT:
+            wd.win_style.justify = WindowJustify::LEFT;
+            break;
+        case PenAnchorPoint::TOP_CENTER:
+        case PenAnchorPoint::MIDDLE_CENTER:
+        case PenAnchorPoint::BOTTOM_CENTER:
+            wd.win_style.justify = WindowJustify::CENTER;
+            break;
+        case PenAnchorPoint::TOP_RIGHT:
+        case PenAnchorPoint::MIDDLE_RIGHT:
+        case PenAnchorPoint::BOTTOM_RIGHT:
+            wd.win_style.justify = WindowJustify::RIGHT;
+            break;
+    }
     logger.trace("defineWindow");
     winCtrl->defineWindow(wd);
     PenAttributes pa;

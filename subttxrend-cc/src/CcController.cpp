@@ -399,14 +399,13 @@ void Controller::setTextForPreview(const std::string& text)
 
 void Controller::displayPreviewText(const std::string& text, float verOffset, float horOffset, PenAnchorPoint anchorPoint)
 {
-    const unsigned windowWidth = 42; // Maximum number of characters in a row for CEA-708 on a 16:9 display
     logger.info("%s", __func__);
     // We're using window 5 (just because) for the preview
     WindowsMap wm = toWindowsMap(1 << 5);
     logger.trace("deleteWindows");
     winCtrl->deleteWindows(wm);
     // With relative_pos == true, the anchor points are a percentage of screen dimensions
-    WindowDefinition wd{5, 1, false, false, true, /*relative_pos*/ true, static_cast<int>(verOffset*100.0f), static_cast<int>(horOffset*100.0f), 1, anchorPoint, windowWidth, {}, {}};
+    WindowDefinition wd{5, 1, false, false, true, /*relative_pos*/ true, static_cast<int>(verOffset*100.0f), static_cast<int>(horOffset*100.0f), 1, anchorPoint, static_cast<int>(text.size()), {}, {}};
     switch (anchorPoint)
     {
         case PenAnchorPoint::TOP_LEFT:

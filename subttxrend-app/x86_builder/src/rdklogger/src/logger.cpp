@@ -84,14 +84,18 @@ void RDK_LOG(rdk_LogLevel level,
              const char *format,
              ...)
 {
-    char buffer[32 * 1024];
+    thread_local char buffer[32 * 1024];
 
     std::va_list arguments;
 
     va_start(arguments, format);
-    vsnprintf(buffer, sizeof(buffer) - 1, format, arguments);
-    buffer[sizeof(buffer) - 1] = 0;
+    int ret = vsnprintf(buffer, sizeof(buffer), format, arguments);
     va_end(arguments);
+
+    if (ret < 0)
+    {
+        return;
+    }
 
     printf("%s\n", buffer);
 }

@@ -22,11 +22,6 @@
 #include "ScteExceptions.hpp"
 #include <vector>
 
-extern "C"
-{
-#include "zlib.h"
-}
-
 using namespace subttxrend::scte;
 
 class ScteSectionTest : public CppUnit::TestFixture
@@ -109,64 +104,6 @@ protected:
         data[crc_pos + 3] = 0x00;
     }
 
-    bool tryFinalizeSectionCrcNonZero(std::vector<uint8_t>& data, size_t tweak_pos)
-    {
-        if (data.size() < 3)
-        {
-            return false;
-        }
-
-        const uint16_t section_length = static_cast<uint16_t>(((data[1] & 0x0F) << 8) | data[2]);
-        if (section_length < 10)
-        {
-            return false;
-        }
-
-        const size_t crc_pos = static_cast<size_t>(section_length) - 1;
-        const size_t required_size = crc_pos + 4;
-        if (data.size() < required_size)
-        {
-            data.resize(required_size, 0x00);
-        }
-
-        // Keep CRC bytes deterministic while searching.
-        data[crc_pos + 1] = 0x00;
-        data[crc_pos + 2] = 0x00;
-        data[crc_pos + 3] = 0x00;
-
-        const uint8_t original_tweak = (tweak_pos < data.size()) ? data[tweak_pos] : 0x00;
-        uint32_t calculated_crc = 0;
-
-        for (int tweak = 0; tweak <= 0xFF; ++tweak)
-        {
-            if (tweak_pos < crc_pos)
-            {
-                data[tweak_pos] = static_cast<uint8_t>(tweak);
-            }
-
-            for (int guess = 0; guess <= 0xFF; ++guess)
-            {
-                data[crc_pos] = static_cast<uint8_t>(guess);
-                calculated_crc = ::crc32(0, data.data(), section_length);
-                if (static_cast<uint8_t>(calculated_crc >> 24) == data[crc_pos] && calculated_crc != 0x0)
-                {
-                    data[crc_pos] = static_cast<uint8_t>(calculated_crc >> 24);
-                    data[crc_pos + 1] = static_cast<uint8_t>(calculated_crc >> 16);
-                    data[crc_pos + 2] = static_cast<uint8_t>(calculated_crc >> 8);
-                    data[crc_pos + 3] = static_cast<uint8_t>(calculated_crc);
-                    return true;
-                }
-            }
-        }
-
-        if (tweak_pos < data.size())
-        {
-            data[tweak_pos] = original_tweak;
-        }
-        setSectionCrcToZero(data);
-        return false;
-    }
-
     // Helper to create minimal valid section WITHOUT overlay
     std::vector<uint8_t> createMinimalSectionWithoutOverlay()
     {
@@ -190,42 +127,22 @@ protected:
 
     std::vector<uint8_t> createMinimalSectionWithoutOverlayNonZeroCrc()
     {
-        static bool initialized = false;
-        static std::vector<uint8_t> cached;
-
-        if (initialized)
+        return
         {
-            return cached;
-        }
-
-        std::vector<uint8_t> data;
-        data.push_back(0xC6);
-        data.push_back(0x00);
-        data.push_back(0x0A); // section_length = 10
-        data.push_back(0x00);
-        for (int i = 0; i < 5; i++)
-        {
-            data.push_back(0xAA);
-        }
-
-        // Try to find a non-zero CRC that satisfies production validation.
-        // First: search varying payload byte 4.
-        bool ok = tryFinalizeSectionCrcNonZero(data, 4);
-
-        // If that fails, widen the search by also varying payload byte 5 (still fast enough, cached).
-        if (!ok)
-        {
-            for (int tweak2 = 0; tweak2 <= 0xFF && !ok; ++tweak2)
-            {
-                data[5] = static_cast<uint8_t>(tweak2);
-                ok = tryFinalizeSectionCrcNonZero(data, 4);
-            }
-        }
-
-        // Cache result (may still be CRC==0 if no non-zero CRC is possible).
-        cached = data;
-        initialized = true;
-        return cached;
+            0xC6,
+            0x00,
+            0x0A,
+            0x00,
+            0x00,
+            0xAA,
+            0xAA,
+            0xAA,
+            0xAA,
+            0x0F,
+            0x12,
+            0xE5,
+            0x4A
+        };
     }
 
     // Helper to create minimal valid section WITH overlay
@@ -546,7 +463,7 @@ protected:
     {
         std::vector<uint8_t> data = createMinimalSectionWithoutOverlayNonZeroCrc();
         Section section(data.data(), data.size());
-        CPPUNIT_ASSERT(section.getCrc32() != 0x0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(0x0F12E54A), section.getCrc32());
         CPPUNIT_ASSERT_EQUAL(true, section.isValid());
     }
 
@@ -554,12 +471,17 @@ protected:
     {
         std::vector<uint8_t> data = createMinimalSectionWithoutOverlayNonZeroCrc();
         CPPUNIT_ASSERT(data.size() >= 13);
-        CPPUNIT_ASSERT(((data[9] << 24) | (data[10] << 16) | (data[11] << 8) | data[12]) != 0x0);
+        const uint32_t originalCrc = (static_cast<uint32_t>(data[9]) << 24) |
+                                     (static_cast<uint32_t>(data[10]) << 16) |
+                                     (static_cast<uint32_t>(data[11]) << 8) |
+                                     static_cast<uint32_t>(data[12]);
+        CPPUNIT_ASSERT(originalCrc != 0x0);
         // Corrupt the CRC
         data[10] ^= 0x01;
         data[11] ^= 0x01;
 
         Section section(data.data(), data.size());
+        CPPUNIT_ASSERT_EQUAL(originalCrc ^ static_cast<uint32_t>(0x00010100), section.getCrc32());
         CPPUNIT_ASSERT_EQUAL(false, section.isValid());
     }
 

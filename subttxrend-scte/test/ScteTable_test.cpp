@@ -21,7 +21,6 @@
 #include "ScteTable.hpp"
 #include "ScteExceptions.hpp"
 #include <vector>
-#include <cstring>
 
 using namespace subttxrend::scte;
 
@@ -58,7 +57,9 @@ CPPUNIT_TEST_SUITE( ScteTableTest );
     CPPUNIT_TEST(testGetEndPtsWithZeroDuration);
     CPPUNIT_TEST(testGetIdReturnsCorrectValue);
     CPPUNIT_TEST(testSetTableIdModifiesId);
+    CPPUNIT_TEST(testGetSimpleBitmap);
     CPPUNIT_TEST(testSetTableDataWithValidData);
+    CPPUNIT_TEST(testSetTableDataWithBitmap);
     CPPUNIT_TEST(testSetTableDataWithNullPointer);
     CPPUNIT_TEST(testSetTableDataWithInsufficientSize);
     CPPUNIT_TEST(testConstructorWithValidBitmapData);
@@ -466,12 +467,26 @@ protected:
     void testSetTableIdModifiesId()
     {
         std::vector<uint8_t> data = createMinimalValidData();
+        TableID newId = static_cast<TableID>(0xAB);
 
         ScteTable table(TABLE_ID_SCTE_SUB, data.data(), data.size());
         CPPUNIT_ASSERT_EQUAL(TABLE_ID_SCTE_SUB, table.getId());
 
-        table.setTableId(TABLE_ID_SCTE_SUB);
-        CPPUNIT_ASSERT_EQUAL(TABLE_ID_SCTE_SUB, table.getId());
+        table.setTableId(newId);
+        CPPUNIT_ASSERT_EQUAL(newId, table.getId());
+    }
+
+    void testGetSimpleBitmap()
+    {
+        std::vector<uint8_t> data = createValidDataWithBitmap();
+
+        ScteTable table(TABLE_ID_SCTE_SUB, data.data(), data.size());
+        const SimpleBitmap& bitmap = table.getSimpleBitmap();
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(1), bitmap.width());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(1), bitmap.height());
+        CPPUNIT_ASSERT_EQUAL(false, bitmap.getBitmap().isCompressed());
+        CPPUNIT_ASSERT(bitmap.getBitmap().getRawData().size() > 0);
     }
 
     void testSetTableDataWithValidData()
@@ -491,6 +506,27 @@ protected:
 
         table.setTableData(data2.data(), data2.size());
         CPPUNIT_ASSERT_EQUAL(std::string("fra"), table.getLanguageCode());
+    }
+
+    void testSetTableDataWithBitmap()
+    {
+        std::vector<uint8_t> data1 = createMinimalValidData();
+        std::vector<uint8_t> data2 = createValidDataWithBitmap();
+        data2[3] = 0xC2;
+        data2[8] = 0x13;
+        data2[9] = 0x21;
+
+        ScteTable table(TABLE_ID_SCTE_SUB, data1.data(), data1.size());
+
+        table.setTableData(data2.data(), data2.size());
+
+        CPPUNIT_ASSERT_EQUAL(true, table.preClearDisplay());
+        CPPUNIT_ASSERT_EQUAL(true, table.isImmediate());
+        CPPUNIT_ASSERT(table.getDisplayStandard() == DisplayStandard::DS_1280_720_60);
+        CPPUNIT_ASSERT(table.getSubtitleType() == SubtitleType::SIMPLE_BITMAP);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x321), table.getDisplayDuration());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(1), table.getSimpleBitmap().width());
+        CPPUNIT_ASSERT_EQUAL(false, table.getSimpleBitmap().getBitmap().isCompressed());
     }
 
     void testSetTableDataWithNullPointer()

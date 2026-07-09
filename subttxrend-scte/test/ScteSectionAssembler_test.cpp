@@ -20,7 +20,6 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include "ScteSectionAssembler.hpp"
 #include "ScteSection.hpp"
-#include "ScteExceptions.hpp"
 #include <vector>
 
 using namespace subttxrend::scte;
@@ -39,6 +38,7 @@ CPPUNIT_TEST_SUITE( ScteSectionAssemblerTest );
     CPPUNIT_TEST(testPushCompleteSegmentedSequenceThreeSegments);
     CPPUNIT_TEST(testSegmentWithGapInSequence);
     CPPUNIT_TEST(testSegmentWithDuplicateSegmentNumber);
+    CPPUNIT_TEST(testSegmentDuplicateBeforeComplete);
     CPPUNIT_TEST(testSegmentFirstNotZero);
     CPPUNIT_TEST(testSegmentDifferentSizes);
     CPPUNIT_TEST(testDifferentTableExtensionsHandledSeparately);
@@ -150,6 +150,17 @@ protected:
 
         setSectionCrcToZero(data);
         return data;
+    }
+
+    void setSegmentPayload(std::vector<uint8_t>& data, const std::vector<uint8_t>& payload)
+    {
+        const size_t payloadStart = 9;
+        const size_t payloadEnd = data.size() >= 4 ? data.size() - 4 : 0;
+
+        for (size_t i = 0; i < payload.size() && (payloadStart + i) < payloadEnd; ++i)
+        {
+            data[payloadStart + i] = payload[i];
+        }
     }
 
     void testProvideDataWhenEmpty()
@@ -276,9 +287,11 @@ protected:
 
         uint16_t table_ext = 0x1234;
 
-        // Create 2 segments (segment 0 and segment 1)
-        std::vector<uint8_t> segment0Data = createSegmentedSectionData(table_ext, 1, 0);
-        std::vector<uint8_t> segment1Data = createSegmentedSectionData(table_ext, 1, 1);
+        // Split a 12-byte table payload across 2 segments.
+        std::vector<uint8_t> segment0Data = createSegmentedSectionData(table_ext, 1, 0, 6);
+        std::vector<uint8_t> segment1Data = createSegmentedSectionData(table_ext, 1, 1, 6);
+        setSegmentPayload(segment0Data, {'a', 'b', 'c', 0x00, 0x12, 0x34});
+        setSegmentPayload(segment1Data, {0x56, 0x78, 0x00, 0x21, 0x00, 0x00});
 
         Section segment0(segment0Data.data(), segment0Data.size());
         Section segment1(segment1Data.data(), segment1Data.size());
@@ -289,6 +302,9 @@ protected:
         // Should produce one table
         ScteTablePtr table = assembler.provideData();
         CPPUNIT_ASSERT(table != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("abc"), table->getLanguageCode());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(0x12345678), table->getPTS());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x21), table->getDisplayDuration());
 
         // No more tables
         ScteTablePtr table2 = assembler.provideData();
@@ -301,10 +317,13 @@ protected:
 
         uint16_t table_ext = 0x5678;
 
-        // Create 3 segments
-        std::vector<uint8_t> segment0Data = createSegmentedSectionData(table_ext, 2, 0);
-        std::vector<uint8_t> segment1Data = createSegmentedSectionData(table_ext, 2, 1);
-        std::vector<uint8_t> segment2Data = createSegmentedSectionData(table_ext, 2, 2);
+        // Split a 12-byte table payload across 3 segments.
+        std::vector<uint8_t> segment0Data = createSegmentedSectionData(table_ext, 2, 0, 4);
+        std::vector<uint8_t> segment1Data = createSegmentedSectionData(table_ext, 2, 1, 4);
+        std::vector<uint8_t> segment2Data = createSegmentedSectionData(table_ext, 2, 2, 4);
+        setSegmentPayload(segment0Data, {'d', 'e', 'f', 0x00});
+        setSegmentPayload(segment1Data, {0x01, 0x23, 0x45, 0x67});
+        setSegmentPayload(segment2Data, {0x00, 0x34, 0x00, 0x00});
 
         Section segment0(segment0Data.data(), segment0Data.size());
         Section segment1(segment1Data.data(), segment1Data.size());
@@ -317,6 +336,9 @@ protected:
         // Should produce one table
         ScteTablePtr table = assembler.provideData();
         CPPUNIT_ASSERT(table != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("def"), table->getLanguageCode());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(0x01234567), table->getPTS());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint16_t>(0x34), table->getDisplayDuration());
 
         // No more tables
         ScteTablePtr table2 = assembler.provideData();
@@ -374,6 +396,28 @@ protected:
         CPPUNIT_ASSERT(table2 == nullptr);
     }
 
+    void testSegmentDuplicateBeforeComplete()
+    {
+        SectionAssembler assembler;
+
+        uint16_t table_ext = 0x2323;
+
+        std::vector<uint8_t> segment0Data = createSegmentedSectionData(table_ext, 1, 0);
+        std::vector<uint8_t> segment0DupData = createSegmentedSectionData(table_ext, 1, 0);
+        std::vector<uint8_t> segment1Data = createSegmentedSectionData(table_ext, 1, 1);
+
+        Section segment0(segment0Data.data(), segment0Data.size());
+        Section segment0Dup(segment0DupData.data(), segment0DupData.size());
+        Section segment1(segment1Data.data(), segment1Data.size());
+
+        assembler.pushSection(segment0);
+        assembler.pushSection(segment0Dup);
+        assembler.pushSection(segment1);
+
+        ScteTablePtr table = assembler.provideData();
+        CPPUNIT_ASSERT(table == nullptr);
+    }
+
     void testSegmentFirstNotZero()
     {
         SectionAssembler assembler;
@@ -424,10 +468,14 @@ protected:
         uint16_t table_ext1 = 0x1000;
         uint16_t table_ext2 = 0x2000;
 
-        std::vector<uint8_t> seg1_0Data = createSegmentedSectionData(table_ext1, 1, 0);
-        std::vector<uint8_t> seg1_1Data = createSegmentedSectionData(table_ext1, 1, 1);
-        std::vector<uint8_t> seg2_0Data = createSegmentedSectionData(table_ext2, 1, 0);
-        std::vector<uint8_t> seg2_1Data = createSegmentedSectionData(table_ext2, 1, 1);
+        std::vector<uint8_t> seg1_0Data = createSegmentedSectionData(table_ext1, 1, 0, 6);
+        std::vector<uint8_t> seg1_1Data = createSegmentedSectionData(table_ext1, 1, 1, 6);
+        std::vector<uint8_t> seg2_0Data = createSegmentedSectionData(table_ext2, 1, 0, 6);
+        std::vector<uint8_t> seg2_1Data = createSegmentedSectionData(table_ext2, 1, 1, 6);
+        setSegmentPayload(seg1_0Data, {'o', 'n', 'e', 0x00, 0x00, 0x00});
+        setSegmentPayload(seg1_1Data, {0x00, 0x11, 0x00, 0x05, 0x00, 0x00});
+        setSegmentPayload(seg2_0Data, {'t', 'w', 'o', 0x00, 0x00, 0x00});
+        setSegmentPayload(seg2_1Data, {0x00, 0x22, 0x00, 0x06, 0x00, 0x00});
 
         Section seg1_0(seg1_0Data.data(), seg1_0Data.size());
         Section seg1_1(seg1_1Data.data(), seg1_1Data.size());
@@ -447,6 +495,8 @@ protected:
 
         CPPUNIT_ASSERT(table1 != nullptr);
         CPPUNIT_ASSERT(table2 != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("one"), table1->getLanguageCode());
+        CPPUNIT_ASSERT_EQUAL(std::string("two"), table2->getLanguageCode());
         CPPUNIT_ASSERT(table3 == nullptr);
     }
 
@@ -457,8 +507,10 @@ protected:
         uint16_t table_ext = 0x7777;
 
         // First complete sequence
-        std::vector<uint8_t> seq1_seg0Data = createSegmentedSectionData(table_ext, 1, 0);
-        std::vector<uint8_t> seq1_seg1Data = createSegmentedSectionData(table_ext, 1, 1);
+        std::vector<uint8_t> seq1_seg0Data = createSegmentedSectionData(table_ext, 1, 0, 6);
+        std::vector<uint8_t> seq1_seg1Data = createSegmentedSectionData(table_ext, 1, 1, 6);
+        setSegmentPayload(seq1_seg0Data, {'a', 'a', 'a', 0x00, 0x00, 0x00});
+        setSegmentPayload(seq1_seg1Data, {0x00, 0x11, 0x00, 0x07, 0x00, 0x00});
 
         Section seq1_seg0(seq1_seg0Data.data(), seq1_seg0Data.size());
         Section seq1_seg1(seq1_seg1Data.data(), seq1_seg1Data.size());
@@ -469,10 +521,13 @@ protected:
         // Should produce one table
         ScteTablePtr table1 = assembler.provideData();
         CPPUNIT_ASSERT(table1 != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("aaa"), table1->getLanguageCode());
 
         // Second complete sequence (same table_extension reused)
-        std::vector<uint8_t> seq2_seg0Data = createSegmentedSectionData(table_ext, 1, 0);
-        std::vector<uint8_t> seq2_seg1Data = createSegmentedSectionData(table_ext, 1, 1);
+        std::vector<uint8_t> seq2_seg0Data = createSegmentedSectionData(table_ext, 1, 0, 6);
+        std::vector<uint8_t> seq2_seg1Data = createSegmentedSectionData(table_ext, 1, 1, 6);
+        setSegmentPayload(seq2_seg0Data, {'b', 'b', 'b', 0x00, 0x00, 0x00});
+        setSegmentPayload(seq2_seg1Data, {0x00, 0x22, 0x00, 0x08, 0x00, 0x00});
 
         Section seq2_seg0(seq2_seg0Data.data(), seq2_seg0Data.size());
         Section seq2_seg1(seq2_seg1Data.data(), seq2_seg1Data.size());
@@ -483,6 +538,7 @@ protected:
         // Should produce another table
         ScteTablePtr table2 = assembler.provideData();
         CPPUNIT_ASSERT(table2 != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("bbb"), table2->getLanguageCode());
 
         // No more tables
         ScteTablePtr table3 = assembler.provideData();
@@ -499,8 +555,10 @@ protected:
 
         // Segmented sequence
         uint16_t table_ext = 0x8888;
-        std::vector<uint8_t> seg0Data = createSegmentedSectionData(table_ext, 1, 0);
-        std::vector<uint8_t> seg1Data = createSegmentedSectionData(table_ext, 1, 1);
+        std::vector<uint8_t> seg0Data = createSegmentedSectionData(table_ext, 1, 0, 6);
+        std::vector<uint8_t> seg1Data = createSegmentedSectionData(table_ext, 1, 1, 6);
+        setSegmentPayload(seg0Data, {'s', 'e', 'g', 0x00, 0x00, 0x00});
+        setSegmentPayload(seg1Data, {0x12, 0x34, 0x00, 0x09, 0x00, 0x00});
         Section seg0(seg0Data.data(), seg0Data.size());
         Section seg1(seg1Data.data(), seg1Data.size());
 
@@ -516,6 +574,9 @@ protected:
 
         CPPUNIT_ASSERT(table1 != nullptr);
         CPPUNIT_ASSERT(table2 != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("eng"), table1->getLanguageCode());
+        CPPUNIT_ASSERT_EQUAL(std::string("seg"), table2->getLanguageCode());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(0x00001234), table2->getPTS());
         CPPUNIT_ASSERT(table3 == nullptr);
     }
 
@@ -618,8 +679,10 @@ protected:
 
         uint16_t table_ext = 0x0000;
 
-        std::vector<uint8_t> seg0Data = createSegmentedSectionData(table_ext, 1, 0);
-        std::vector<uint8_t> seg1Data = createSegmentedSectionData(table_ext, 1, 1);
+        std::vector<uint8_t> seg0Data = createSegmentedSectionData(table_ext, 1, 0, 6);
+        std::vector<uint8_t> seg1Data = createSegmentedSectionData(table_ext, 1, 1, 6);
+        setSegmentPayload(seg0Data, {'z', 'e', 'r', 0x00, 0x00, 0x00});
+        setSegmentPayload(seg1Data, {0x00, 0x33, 0x00, 0x0A, 0x00, 0x00});
 
         Section seg0(seg0Data.data(), seg0Data.size());
         Section seg1(seg1Data.data(), seg1Data.size());
@@ -630,6 +693,7 @@ protected:
         // Should produce table
         ScteTablePtr table = assembler.provideData();
         CPPUNIT_ASSERT(table != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("zer"), table->getLanguageCode());
     }
 
     void testTableExtensionMaximum()
@@ -638,8 +702,10 @@ protected:
 
         uint16_t table_ext = 0xFFFF;
 
-        std::vector<uint8_t> seg0Data = createSegmentedSectionData(table_ext, 1, 0);
-        std::vector<uint8_t> seg1Data = createSegmentedSectionData(table_ext, 1, 1);
+        std::vector<uint8_t> seg0Data = createSegmentedSectionData(table_ext, 1, 0, 6);
+        std::vector<uint8_t> seg1Data = createSegmentedSectionData(table_ext, 1, 1, 6);
+        setSegmentPayload(seg0Data, {'m', 'a', 'x', 0x00, 0x00, 0x00});
+        setSegmentPayload(seg1Data, {0x00, 0x44, 0x00, 0x0B, 0x00, 0x00});
 
         Section seg0(seg0Data.data(), seg0Data.size());
         Section seg1(seg1Data.data(), seg1Data.size());
@@ -650,6 +716,7 @@ protected:
         // Should produce table
         ScteTablePtr table = assembler.provideData();
         CPPUNIT_ASSERT(table != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("max"), table->getLanguageCode());
     }
 };
 

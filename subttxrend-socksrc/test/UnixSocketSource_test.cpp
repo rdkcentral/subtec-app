@@ -29,8 +29,6 @@
 
 #include "../src/UnixSocketSource.hpp"
 #include "../include/PacketReceiver.hpp"
-#include <subttxrend/protocol/Packet.hpp>
-#include <subttxrend/common/DataBuffer.hpp>
 
 using subttxrend::socksrc::UnixSocketSource;
 using subttxrend::socksrc::PacketReceiver;
@@ -72,7 +70,6 @@ public:
     void setUp()
     {
         m_testSocketPath = generateTestSocketPath();
-        m_testSocketPath2 = generateTestSocketPath();
         m_receiver = std::make_unique<MockPacketReceiver>();
         s_testCounter++;
     }
@@ -80,7 +77,6 @@ public:
     void tearDown()
     {
         cleanupSocketFile(m_testSocketPath);
-        cleanupSocketFile(m_testSocketPath2);
         m_receiver.reset();
     }
 
@@ -251,6 +247,10 @@ public:
                 _exit(2);
             }
 
+            if (!isUnixSocketFile(path)) {
+                _exit(3);
+            }
+
             MockPacketReceiver receiver2;
             UnixSocketSource source2(path);
             source2.start(&receiver2);
@@ -258,7 +258,7 @@ public:
             // The observable contract here is that attempting to start a
             // second source does not make the socket endpoint disappear.
             if (!waitForUnixSocket(path, 500, 10)) {
-                _exit(3);
+                _exit(4);
             }
 
             _exit(0);
@@ -305,11 +305,12 @@ public:
 
         UnixSocketSource source(path);
 
+        auto start = std::chrono::steady_clock::now();
         source.start(m_receiver.get());
 
-        // Keep the parent absent for the first create attempt, then allow the next retry.
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        auto start = std::chrono::steady_clock::now();
+        // Keep the parent absent long enough to force at least one failed create
+        // attempt and the subsequent retry sleep.
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
         ensureDirExists(parentDir(path));
         bool created = waitForUnixSocket(path, 600, 10);
 
@@ -323,7 +324,7 @@ public:
         removeDirIfExists(parentDir(path));
 
         CPPUNIT_ASSERT(created);
-        CPPUNIT_ASSERT(duration.count() >= 30);
+        CPPUNIT_ASSERT(duration.count() >= 50);
     }
 
     void testCreateSocketSucceedsWhenParentDirAppears()
@@ -353,7 +354,6 @@ public:
 
         CPPUNIT_ASSERT(created);
     }
-
     void testMultipleStartStopCycles()
     {
         UnixSocketSource source(m_testSocketPath);
@@ -374,7 +374,6 @@ public:
 
 private:
     std::string m_testSocketPath;
-    std::string m_testSocketPath2;
     std::string m_tempBaseDir;
     std::unique_ptr<MockPacketReceiver> m_receiver;
     static int s_testCounter;

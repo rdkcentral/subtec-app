@@ -28,22 +28,31 @@ using namespace subttxrend;
 class MockDrawContext : public gfx::DrawContext
 {
 public:
-    MockDrawContext() : fillRectangleCalled(false), drawPixmapCalled(false),
-                        lastFillColor(0), lastFillRect(0,0,0,0) {}
+    MockDrawContext() : fillRectangleCalled(false), fillRectangleCallCount(0), drawPixmapCallCount(0),
+                        lastFillColor(0), lastFillRect(0,0,0,0),
+                        lastPixmapWidth(0), lastPixmapHeight(0), lastPixmapStride(0),
+                        lastClutSize(0) {}
     virtual ~MockDrawContext() = default;
 
     virtual void fillRectangle(gfx::ColorArgb color, const gfx::Rectangle& rectangle) override
     {
         fillRectangleCalled = true;
+        fillRectangleCallCount++;
         lastFillColor = color;
         lastFillRect = rectangle;
     }
 
     virtual void drawPixmap(const gfx::ClutBitmap& bitmap, const gfx::Rectangle& srcRect, const gfx::Rectangle& dstRect) override
     {
-        drawPixmapCalled = true;
+        drawPixmapCallCount++;
         lastSrcRect = srcRect;
         lastDstRect = dstRect;
+        lastPixmapWidth = bitmap.m_width;
+        lastPixmapHeight = bitmap.m_height;
+        lastPixmapStride = bitmap.m_stride;
+        lastClutSize = bitmap.m_clutSize;
+        capturedPixels.assign(bitmap.m_pixels, bitmap.m_pixels + (bitmap.m_width * bitmap.m_height));
+        capturedClut.assign(bitmap.m_clut, bitmap.m_clut + bitmap.m_clutSize);
     }
 
     virtual void drawUnderline(gfx::ColorArgb color, const gfx::Rectangle& rectangle) override {}
@@ -55,30 +64,40 @@ public:
     void reset()
     {
         fillRectangleCalled = false;
-        drawPixmapCalled = false;
-        updateCallCount = 0;
-        setSizeCallCount = 0;
-        setVisibleCallCount = 0;
-        lastVisibleValue = false;
+        fillRectangleCallCount = 0;
+        drawPixmapCallCount = 0;
+        lastFillColor = gfx::ColorArgb();
+        lastFillRect = gfx::Rectangle(0, 0, 0, 0);
+        lastSrcRect = gfx::Rectangle(0, 0, 0, 0);
+        lastDstRect = gfx::Rectangle(0, 0, 0, 0);
+        lastPixmapWidth = 0;
+        lastPixmapHeight = 0;
+        lastPixmapStride = 0;
+        lastClutSize = 0;
+        capturedPixels.clear();
+        capturedClut.clear();
     }
 
     bool fillRectangleCalled;
-    bool drawPixmapCalled;
+    int fillRectangleCallCount;
+    int drawPixmapCallCount;
     gfx::ColorArgb lastFillColor;
     gfx::Rectangle lastFillRect;
     gfx::Rectangle lastSrcRect;
     gfx::Rectangle lastDstRect;
-    int updateCallCount;
-    int setSizeCallCount;
-    int setVisibleCallCount;
-    bool lastVisibleValue;
+    std::uint32_t lastPixmapWidth;
+    std::uint32_t lastPixmapHeight;
+    std::uint32_t lastPixmapStride;
+    std::size_t lastClutSize;
+    std::vector<std::uint8_t> capturedPixels;
+    std::vector<std::uint32_t> capturedClut;
 };
 
 class MockWindow : public gfx::Window
 {
 public:
     MockWindow() : m_drawContext(), updateCallCount(0), setSizeCallCount(0),
-                   setVisibleCallCount(0), clearCallCount(0), lastVisibleValue(false),
+                   setVisibleCallCount(0), lastVisibleValue(false),
                    lastSize(0, 0) {}
     virtual ~MockWindow() = default;
 
@@ -104,7 +123,6 @@ public:
 
     virtual void clear() override
     {
-        clearCallCount++;
     }
 
     virtual void update() override
@@ -120,7 +138,6 @@ public:
         updateCallCount = 0;
         setSizeCallCount = 0;
         setVisibleCallCount = 0;
-        clearCallCount = 0;
         lastVisibleValue = false;
         lastSize = gfx::Size(0, 0);
         m_drawContext.reset();
@@ -131,7 +148,6 @@ public:
     int updateCallCount;
     int setSizeCallCount;
     int setVisibleCallCount;
-    int clearCallCount;
     bool lastVisibleValue;
     gfx::Size lastSize;
 
@@ -159,6 +175,10 @@ CPPUNIT_TEST_SUITE( ScteRendererTest );
     CPPUNIT_TEST(testHideMultipleCalls);
     CPPUNIT_TEST(testShowThenHide);
     CPPUNIT_TEST(testHideThenShow);
+    CPPUNIT_TEST(testRenderDrawsPixmap);
+    CPPUNIT_TEST(testRenderShadow);
+    CPPUNIT_TEST(testRenderOutline);
+    CPPUNIT_TEST(testRenderOutOfBounds);
 
 CPPUNIT_TEST_SUITE_END();
 
@@ -176,6 +196,59 @@ public:
     }
 
 protected:
+    void appendCoords(std::vector<uint8_t>& data, uint16_t x, uint16_t y)
+    {
+        data.push_back(static_cast<uint8_t>(x >> 4));
+        data.push_back(static_cast<uint8_t>(((x & 0x0F) << 4) | ((y >> 8) & 0x0F)));
+        data.push_back(static_cast<uint8_t>(y & 0xFF));
+    }
+
+    std::vector<uint8_t> createBitmapData(BackgroundStyle bgStyle, OutlineStyle outlineStyle,
+                                          Coords charTop, Coords charBottom,
+                                          const std::vector<uint8_t>& pixels,
+                                          uint8_t outlineThickness = 1,
+                                          uint8_t shadowRight = 1,
+                                          uint8_t shadowBottom = 1)
+    {
+        std::vector<uint8_t> data;
+        uint8_t style = static_cast<uint8_t>(outlineStyle) & 0x03;
+        if (bgStyle == BackgroundStyle::FRAMED)
+        {
+            style |= 0x04;
+        }
+
+        data.push_back(style);
+        data.push_back(0x00);
+        data.push_back(0x00);
+
+        appendCoords(data, charTop.x, charTop.y);
+        appendCoords(data, charBottom.x, charBottom.y);
+
+        if (outlineStyle == OutlineStyle::OUTLINE)
+        {
+            data.push_back(outlineThickness & 0x0F);
+            data.push_back(0x00);
+            data.push_back(0x00);
+        }
+        else if (outlineStyle == OutlineStyle::DROP_SHADOW)
+        {
+            data.push_back(static_cast<uint8_t>((shadowRight & 0x0F) << 4));
+            data.push_back(static_cast<uint8_t>(shadowBottom & 0x0F));
+            data.push_back(0x00);
+        }
+        else if (outlineStyle == OutlineStyle::RESERVED)
+        {
+            data.push_back(0x00);
+            data.push_back(0x00);
+            data.push_back(0x00);
+        }
+
+        data.push_back(static_cast<uint8_t>(pixels.size() >> 8));
+        data.push_back(static_cast<uint8_t>(pixels.size() & 0xFF));
+        data.insert(data.end(), pixels.begin(), pixels.end());
+        return data;
+    }
+
     void testConstructorWithValidWindow()
     {
         // Constructor should not crash with valid window
@@ -230,8 +303,7 @@ protected:
         m_renderer->clearscreen();
         m_renderer->clearscreen();
 
-        // Both calls should have worked
-        CPPUNIT_ASSERT(m_mockWindow->getMockDrawContext().fillRectangleCalled);
+        CPPUNIT_ASSERT_EQUAL(2, m_mockWindow->getMockDrawContext().fillRectangleCallCount);
     }
 
     void testShowSetsWindowSize()
@@ -267,7 +339,7 @@ protected:
         m_mockWindow->reset();
         m_renderer->show();
 
-        CPPUNIT_ASSERT(m_mockWindow->updateCallCount >= 1);
+        CPPUNIT_ASSERT_EQUAL(1, m_mockWindow->updateCallCount);
     }
 
     void testShowCallSequence()
@@ -279,7 +351,7 @@ protected:
         CPPUNIT_ASSERT_EQUAL(1, m_mockWindow->setSizeCallCount);
         CPPUNIT_ASSERT(m_mockWindow->getMockDrawContext().fillRectangleCalled);
         CPPUNIT_ASSERT_EQUAL(1, m_mockWindow->setVisibleCallCount);
-        CPPUNIT_ASSERT(m_mockWindow->updateCallCount >= 1);
+        CPPUNIT_ASSERT_EQUAL(1, m_mockWindow->updateCallCount);
         CPPUNIT_ASSERT_EQUAL(true, m_mockWindow->lastVisibleValue);
     }
 
@@ -287,11 +359,11 @@ protected:
     {
         m_mockWindow->reset();
         m_renderer->show();
-        m_mockWindow->reset();
         m_renderer->show();
 
-        // Second call should work the same
-        CPPUNIT_ASSERT_EQUAL(1, m_mockWindow->setSizeCallCount);
+        CPPUNIT_ASSERT_EQUAL(2, m_mockWindow->setSizeCallCount);
+        CPPUNIT_ASSERT_EQUAL(2, m_mockWindow->setVisibleCallCount);
+        CPPUNIT_ASSERT_EQUAL(2, m_mockWindow->updateCallCount);
         CPPUNIT_ASSERT_EQUAL(true, m_mockWindow->lastVisibleValue);
     }
 
@@ -316,11 +388,10 @@ protected:
     {
         m_mockWindow->reset();
         m_renderer->hide();
-        m_mockWindow->reset();
         m_renderer->hide();
 
-        // Second call should work the same
-        CPPUNIT_ASSERT_EQUAL(1, m_mockWindow->setVisibleCallCount);
+        CPPUNIT_ASSERT_EQUAL(2, m_mockWindow->setVisibleCallCount);
+        CPPUNIT_ASSERT_EQUAL(2, m_mockWindow->updateCallCount);
         CPPUNIT_ASSERT_EQUAL(false, m_mockWindow->lastVisibleValue);
     }
 
@@ -344,6 +415,86 @@ protected:
         m_mockWindow->reset();
         m_renderer->show();
         CPPUNIT_ASSERT_EQUAL(true, m_mockWindow->lastVisibleValue);
+    }
+
+    void testRenderDrawsPixmap()
+    {
+        std::vector<uint8_t> data = createBitmapData(BackgroundStyle::TRANSPARENT, OutlineStyle::NONE,
+                                                     Coords{0, 0}, Coords{2, 2},
+                                                     std::vector<uint8_t>{1, 0, 0, 1});
+        SimpleBitmap bitmap(data.data(), data.size());
+
+        m_mockWindow->reset();
+        m_renderer->render(bitmap, 2, 2);
+
+        MockDrawContext& drawContext = m_mockWindow->getMockDrawContext();
+        CPPUNIT_ASSERT_EQUAL(1, drawContext.drawPixmapCallCount);
+        CPPUNIT_ASSERT_EQUAL(1, m_mockWindow->updateCallCount);
+        CPPUNIT_ASSERT_EQUAL(0, drawContext.lastSrcRect.m_x);
+        CPPUNIT_ASSERT_EQUAL(0, drawContext.lastSrcRect.m_y);
+        CPPUNIT_ASSERT_EQUAL(2, drawContext.lastSrcRect.m_w);
+        CPPUNIT_ASSERT_EQUAL(2, drawContext.lastSrcRect.m_h);
+        CPPUNIT_ASSERT_EQUAL(0, drawContext.lastDstRect.m_x);
+        CPPUNIT_ASSERT_EQUAL(0, drawContext.lastDstRect.m_y);
+        CPPUNIT_ASSERT_EQUAL(1920, drawContext.lastDstRect.m_w);
+        CPPUNIT_ASSERT_EQUAL(1080, drawContext.lastDstRect.m_h);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2), drawContext.lastPixmapWidth);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2), drawContext.lastPixmapHeight);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2), drawContext.lastPixmapStride);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(COLOR_LAST), drawContext.lastClutSize);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), drawContext.capturedPixels.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_CHARACTER), drawContext.capturedPixels[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_TRANSPARENT), drawContext.capturedPixels[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_TRANSPARENT), drawContext.capturedPixels[2]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_CHARACTER), drawContext.capturedPixels[3]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), drawContext.capturedClut[COLOR_TRANSPARENT]);
+    }
+
+    void testRenderShadow()
+    {
+        std::vector<uint8_t> data = createBitmapData(BackgroundStyle::TRANSPARENT, OutlineStyle::DROP_SHADOW,
+                                                     Coords{0, 0}, Coords{1, 0}, std::vector<uint8_t>{1},
+                                                     1, 1, 1);
+        SimpleBitmap bitmap(data.data(), data.size());
+
+        m_mockWindow->reset();
+        m_renderer->render(bitmap, 4, 2);
+
+        const std::vector<std::uint8_t> expected{COLOR_CHARACTER, COLOR_TRANSPARENT, COLOR_TRANSPARENT, COLOR_TRANSPARENT,
+                                                 COLOR_TRANSPARENT, COLOR_SHADOW, COLOR_TRANSPARENT, COLOR_TRANSPARENT};
+        CPPUNIT_ASSERT(expected == m_mockWindow->getMockDrawContext().capturedPixels);
+    }
+
+    void testRenderOutline()
+    {
+        std::vector<uint8_t> data = createBitmapData(BackgroundStyle::TRANSPARENT, OutlineStyle::OUTLINE,
+                                                     Coords{1, 1}, Coords{2, 2}, std::vector<uint8_t>{1});
+        SimpleBitmap bitmap(data.data(), data.size());
+
+        m_mockWindow->reset();
+        m_renderer->render(bitmap, 3, 3);
+
+        MockDrawContext& drawContext = m_mockWindow->getMockDrawContext();
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), drawContext.capturedPixels[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), drawContext.capturedPixels[3]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_CHARACTER), drawContext.capturedPixels[4]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), drawContext.capturedPixels[5]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), drawContext.capturedPixels[7]);
+    }
+
+    void testRenderOutOfBounds()
+    {
+        std::vector<uint8_t> data = createBitmapData(BackgroundStyle::TRANSPARENT, OutlineStyle::NONE,
+                                                     Coords{5, 5}, Coords{6, 5}, std::vector<uint8_t>{1});
+        SimpleBitmap bitmap(data.data(), data.size());
+
+        m_mockWindow->reset();
+        m_renderer->render(bitmap, 2, 2);
+
+        const std::vector<std::uint8_t> expected(4, COLOR_TRANSPARENT);
+        CPPUNIT_ASSERT(expected == m_mockWindow->getMockDrawContext().capturedPixels);
+        CPPUNIT_ASSERT_EQUAL(1, m_mockWindow->getMockDrawContext().drawPixmapCallCount);
+        CPPUNIT_ASSERT_EQUAL(1, m_mockWindow->updateCallCount);
     }
 
 private:

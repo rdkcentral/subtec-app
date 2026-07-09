@@ -47,6 +47,7 @@ CPPUNIT_TEST_SUITE( ScteSimpleBitmapTest );
     CPPUNIT_TEST(testGetCharacterCoordinates);
     CPPUNIT_TEST(testGetOutlineThicknessWhenOutline);
     CPPUNIT_TEST(testGetOutlineColorWhenOutline);
+    CPPUNIT_TEST(testGetOutlineColorBits);
     CPPUNIT_TEST(testGetShadowOffsetsWhenDropShadow);
     CPPUNIT_TEST(testGetShadowColorWhenDropShadow);
     CPPUNIT_TEST(testWidthCalculation);
@@ -319,6 +320,24 @@ protected:
 
         // Outline color is set to zeros in helper
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), outlineColor.y);
+        CPPUNIT_ASSERT_EQUAL(false, outlineColor.opaqueEnabled);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), outlineColor.cr);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), outlineColor.cb);
+    }
+
+    void testGetOutlineColorBits()
+    {
+        std::vector<uint8_t> data = createSimpleBitmapData(BackgroundStyle::TRANSPARENT, OutlineStyle::OUTLINE);
+        data[10] = 0x7D;
+        data[11] = 0x45;
+
+        SimpleBitmap bitmap(data.data(), data.size());
+        Color outlineColor = bitmap.getOutlineColor();
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(15), outlineColor.y);
+        CPPUNIT_ASSERT_EQUAL(true, outlineColor.opaqueEnabled);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(10), outlineColor.cr);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(5), outlineColor.cb);
     }
 
     void testGetShadowOffsetsWhenDropShadow()
@@ -341,8 +360,10 @@ protected:
         SimpleBitmap bitmap(data.data(), data.size());
         Color shadowColor = bitmap.getShadowColor();
 
-        // Shadow color parsing from bytes - verify it doesn't crash
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(4), shadowColor.y); // (0x20 & 0xF8) >> 3 = 4
+        CPPUNIT_ASSERT_EQUAL(false, shadowColor.opaqueEnabled);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(16), shadowColor.cr);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), shadowColor.cb);
     }
 
     void testWidthCalculation()
@@ -464,6 +485,9 @@ protected:
 
         const RawBitmap& result = bitmap1.getBitmap();
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), result.getRawData().size());
+        CPPUNIT_ASSERT_EQUAL(true, result.isCompressed());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>('t'), result.getRawData()[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>('t'), result.getRawData()[3]);
     }
 
     void testSetBitmapCompressedFlag()
@@ -489,6 +513,9 @@ protected:
 
         const RawBitmap& result = bitmap.getBitmap();
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), result.getRawData().size());
+        CPPUNIT_ASSERT_EQUAL(true, result.isCompressed());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>('d'), result.getRawData()[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>('a'), result.getRawData()[1]);
     }
 
     void testDefaultConstructor()

@@ -74,8 +74,9 @@ public:
 
     virtual void processSetCCAttributesPacket(const protocol::PacketSetCCAttributes& packet);
 
-
+    /** @deprecated Use displayPreviewText() instead */
     void setTextForPreview(const std::string& text);
+    void displayPreviewText(const std::string& text, float verOffset, float horOffset, PenAnchorPoint anchorPoint);
 
 private:
     void purgeQueues();

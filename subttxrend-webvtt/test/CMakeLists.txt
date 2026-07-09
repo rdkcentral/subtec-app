@@ -116,6 +116,12 @@ if(CMAKE_BUILD_STANDALONE)
                     WebVTTAttributes_test.cpp
                     TestRunner.cpp
                     )
+
+    add_cppunit_test(WebVTTConfig_test
+                    WebVTTConfig_test.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/WebVTTConfig.cpp
+                    TestRunner.cpp
+                    )
 else()
     add_cppunit_test(All_test
                     WebvttParser_test.cpp

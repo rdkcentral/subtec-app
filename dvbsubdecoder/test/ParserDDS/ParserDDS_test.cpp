@@ -48,8 +48,19 @@ CPPUNIT_TEST_SUITE( ParserDDSTest );
     CPPUNIT_TEST(testNotEnoughData);
     CPPUNIT_TEST(testSameVersion);
     CPPUNIT_TEST(testBadSize);
-    CPPUNIT_TEST(testBadWindow);CPPUNIT_TEST_SUITE_END()
-    ;
+    CPPUNIT_TEST(testBadWindow);
+    CPPUNIT_TEST(testMaxSizeValues);
+    CPPUNIT_TEST(testMinSizeValues);
+    CPPUNIT_TEST(testVersionRollover);
+    CPPUNIT_TEST(testSizeAdjustmentSuccess);
+    CPPUNIT_TEST(testSizeAdjustmentFailure);
+    CPPUNIT_TEST(testWindowAtDisplayBoundary);
+    CPPUNIT_TEST(testWindowZeroCoordinates);
+    CPPUNIT_TEST(testWindowEqualCoordinates);
+    CPPUNIT_TEST(testVersionSkipping);
+    CPPUNIT_TEST(testDisplayBoundsCalculation);
+    CPPUNIT_TEST(testDatabaseStateAfterParse);
+CPPUNIT_TEST_SUITE_END();
 
 public:
     void setUp()
@@ -164,6 +175,15 @@ public:
             CPPUNIT_ASSERT_THROW(
                     parser.parseDisplayDefinitionSegment(*m_database, reader),
                     PesPacketReader::Exception);
+        }
+
+        // corrupted buffer (random data)
+        {
+            std::vector<uint8_t> corruptData = {0xFF, 0x00, 0xAA};
+            PesPacketReader reader(corruptData.data(), corruptData.size(), nullptr, 0);
+            CPPUNIT_ASSERT_THROW(
+                parser.parseDisplayDefinitionSegment(*m_database, reader),
+                PesPacketReader::Exception);
         }
     }
 
@@ -313,6 +333,270 @@ public:
         }
     }
 
+    void testMaxSizeValues()
+    {
+        BitStreamWriter writer;
+        writer.write(0xA << 4, 8); // version and flags
+        writer.write(1919 - 1, 16); // max width
+        writer.write(1079 - 1, 16); // max height
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+        const auto& display = m_database->getParsedDisplay();
+        CPPUNIT_ASSERT(display.getVersion() == 0xA);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 1919);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_y2 == 1079);
+    }
+
+    void testMinSizeValues()
+    {
+        BitStreamWriter writer;
+        writer.write(0x1 << 4, 8); // version and flags
+        writer.write(1 - 1, 16); // min width (1 pixel)
+        writer.write(1 - 1, 16); // min height (1 pixel)
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+        const auto& display = m_database->getParsedDisplay();
+        CPPUNIT_ASSERT(display.getVersion() == 0x1);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 1);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_y2 == 1);
+    }
+
+    void testVersionRollover()
+    {
+        // Start with version 15
+        {
+            BitStreamWriter writer;
+            writer.write(0xF << 4, 8);
+            writer.write(100 - 1, 16);
+            writer.write(100 - 1, 16);
+
+            PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+            ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+            const auto& display = m_database->getParsedDisplay();
+            CPPUNIT_ASSERT(display.getVersion() == 0xF);
+        }
+
+        // Rollover to version 0
+        {
+            BitStreamWriter writer;
+            writer.write(0x0 << 4, 8);
+            writer.write(200 - 1, 16);
+            writer.write(200 - 1, 16);
+
+            PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+            ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+            const auto& display = m_database->getParsedDisplay();
+            CPPUNIT_ASSERT(display.getVersion() == 0x0);
+            CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 200);
+        }
+    }
+
+    void testSizeAdjustmentSuccess()
+    {
+        // Oversized raw display, but window defines a valid in-range sub-area so adjustment succeeds.
+        BitStreamWriter writer;
+        writer.write((0x7 << 4) | (1 << 3), 8); // version and window flag
+        writer.write(3000 - 1, 16); // raw width exceeds limit
+        writer.write(2500 - 1, 16); // raw height exceeds limit
+        // Window spans exactly the maximum permitted dimensions (0..1919, 0..1079)
+        writer.write(0, 16);          // window min x
+        writer.write(1919 - 1, 16);   // window max x (1918 raw -> span 1919)
+        writer.write(0, 16);          // window min y
+        writer.write(1079 - 1, 16);   // window max y (1078 raw -> span 1079)
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+        const auto& display = m_database->getParsedDisplay();
+        CPPUNIT_ASSERT(display.getVersion() == 0x7);
+        // After adjustment, display width/height become (windowMax - windowMin) + 1
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 1919);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_y2 == 1079);
+    }
+
+    void testSizeAdjustmentFailure()
+    {
+        BitStreamWriter writer;
+        writer.write((0x8 << 4) | (1 << 3), 8); // version and window flag
+        writer.write(3000 - 1, 16); // exceeds max width
+        writer.write(2000 - 1, 16); // exceeds max height
+        writer.write(0, 16); // window min x
+        writer.write(3000 - 1, 16); // window max x (still too large)
+        writer.write(0, 16); // window min y
+        writer.write(2000 - 1, 16); // window max y (still too large)
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        CPPUNIT_ASSERT_THROW(
+            ParserDDS().parseDisplayDefinitionSegment(*m_database, reader),
+            ParserException);
+    }
+
+    // Window Edge Cases
+    void testWindowAtDisplayBoundary()
+    {
+        BitStreamWriter writer;
+        writer.write((0xB << 4) | (1 << 3), 8); // version and window flag
+        writer.write(800 - 1, 16); // width
+        writer.write(600 - 1, 16); // height
+        writer.write(0, 16); // window min x at boundary
+        writer.write(800 - 1, 16); // window max x at boundary
+        writer.write(0, 16); // window min y at boundary
+        writer.write(600 - 1, 16); // window max y at boundary
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+        const auto& display = m_database->getParsedDisplay();
+        CPPUNIT_ASSERT(display.getVersion() == 0xB);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x1 == 0);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x2 == 800);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_y1 == 0);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_y2 == 600);
+    }
+
+    void testWindowZeroCoordinates()
+    {
+        BitStreamWriter writer;
+        writer.write((0xD << 4) | (1 << 3), 8); // version and window flag
+        writer.write(400 - 1, 16); // width
+        writer.write(300 - 1, 16); // height
+        writer.write(0, 16); // window min x
+        writer.write(0, 16); // window max x
+        writer.write(0, 16); // window min y
+        writer.write(0, 16); // window max y
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+        const auto& display = m_database->getParsedDisplay();
+        CPPUNIT_ASSERT(display.getVersion() == 0xD);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x1 == 0);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x2 == 1); // 0 + 1
+        CPPUNIT_ASSERT(display.getWindowBounds().m_y1 == 0);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_y2 == 1); // 0 + 1
+    }
+
+    void testWindowEqualCoordinates()
+    {
+        BitStreamWriter writer;
+        writer.write((0xE << 4) | (1 << 3), 8); // version and window flag
+        writer.write(500 - 1, 16); // width
+        writer.write(400 - 1, 16); // height
+        writer.write(100, 16); // window min x
+        writer.write(100, 16); // window max x (equal to min)
+        writer.write(150, 16); // window min y
+        writer.write(150, 16); // window max y (equal to min)
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+        const auto& display = m_database->getParsedDisplay();
+        CPPUNIT_ASSERT(display.getVersion() == 0xE);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x1 == 100);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x2 == 101); // 100 + 1
+        CPPUNIT_ASSERT(display.getWindowBounds().m_y1 == 150);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_y2 == 151); // 150 + 1
+    }
+
+    // Version Handling
+    void testVersionSkipping()
+    {
+        // Start with version 2
+        {
+            BitStreamWriter writer;
+            writer.write(0x2 << 4, 8);
+            writer.write(300 - 1, 16);
+            writer.write(200 - 1, 16);
+
+            PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+            ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+            const auto& display = m_database->getParsedDisplay();
+            CPPUNIT_ASSERT(display.getVersion() == 0x2);
+        }
+
+        // Skip to version 7
+        {
+            BitStreamWriter writer;
+            writer.write(0x7 << 4, 8);
+            writer.write(600 - 1, 16);
+            writer.write(400 - 1, 16);
+
+            PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+            ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+            const auto& display = m_database->getParsedDisplay();
+            CPPUNIT_ASSERT(display.getVersion() == 0x7);
+            CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 600);
+            CPPUNIT_ASSERT(display.getDisplayBounds().m_y2 == 400);
+        }
+    }
+
+    // Data Flow
+    void testDisplayBoundsCalculation()
+    {
+        // Test that display bounds are correctly calculated with +1 offset
+        BitStreamWriter writer;
+        writer.write(0x3 << 4, 8);
+        writer.write(719, 16); // 720 - 1
+        writer.write(575, 16); // 576 - 1
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+        const auto& display = m_database->getParsedDisplay();
+        CPPUNIT_ASSERT(display.getVersion() == 0x3);
+        
+        // Verify the +1 calculation for bounds
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_x1 == 0);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_y1 == 0);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 720); // 719 + 1
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_y2 == 576); // 575 + 1
+        
+        // Window should match display when no window flag
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x1 == 0);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_y1 == 0);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x2 == 720);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_y2 == 576);
+    }
+
+    void testDatabaseStateAfterParse()
+    {
+        // Valid parse should update DB
+        BitStreamWriter writer;
+        writer.write((0xC << 4) | (1 << 3), 8); // version and flags
+        writer.write(700 - 1, 16); // width
+        writer.write(400 - 1, 16); // height
+        writer.write(100, 16); // window x1
+        writer.write(500 - 1, 16); // window y1
+        writer.write(80, 16); // window x2
+        writer.write(300 - 1, 16); // window y2
+
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
+
+        const auto& display = m_database->getParsedDisplay();
+        CPPUNIT_ASSERT(display.getVersion() == 0xC);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 700);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x1 == 100);
+
+        // Negative parse should not update DB
+        std::vector<uint8_t> corruptData = {0xFF, 0x00, 0xAA};
+        PesPacketReader badReader(corruptData.data(), corruptData.size(), nullptr, 0);
+        try {
+            ParserDDS().parseDisplayDefinitionSegment(*m_database, badReader);
+        } catch (...) {}
+        // DB state should remain unchanged
+        CPPUNIT_ASSERT(display.getVersion() == 0xC);
+        CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 700);
+        CPPUNIT_ASSERT(display.getWindowBounds().m_x1 == 100);
+    }
 private:
     const Specification SPEC_VERSION = Specification::VERSION_1_3_1;
 

@@ -66,4 +66,130 @@ add_cppunit_test(CacheImpl_Test
                  Logger.cpp
 )
 
+add_cppunit_test(CharsetMapping_Test
+                 ../src/CharsetMapping.cpp
+                 ../src/DefaultCharsets.cpp
+                 CharsetMapping_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
 
+add_cppunit_test(Collector_Test
+                 ../src/Collector.cpp
+                 ../src/Hamming.cpp
+                 ../src/PesPacketReader.cpp
+                 Collector_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(Database_Test
+                 ../src/Database.cpp
+                 Database_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(DecodedPage_Test
+                 ../src/DecodedPage.cpp
+                 DecodedPage_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(Decoder_Test
+                 ../src/Decoder.cpp
+                 ../src/Collector.cpp
+                 ../src/MetadataProcessor.cpp
+                 ../src/TopNavProcessor.cpp
+                 ../src/Database.cpp
+                 ../src/PesPacketReader.cpp
+                 ../src/Hamming.cpp
+                 Decoder_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(EngineImpl_Test
+                 ../src/EngineImpl.cpp
+                 ../src/DecodedPage.cpp
+                 ../src/Database.cpp
+                 ../src/CacheImpl.cpp
+                 ../src/PesBuffer.cpp
+                 ../src/Decoder.cpp
+                 ../src/Parser.cpp
+                 ../src/ParserX26.cpp
+                 ../src/Collector.cpp
+                 ../src/MetadataProcessor.cpp
+                 ../src/TopNavProcessor.cpp
+                 ../src/PesPacketReader.cpp
+                 ../src/Hamming.cpp
+                 ../src/CharsetMapping.cpp
+                 ../src/DefaultCharsets.cpp
+                 EngineImpl_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(Hamming_Test
+                 ../src/Hamming.cpp
+                 Hamming_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(MetadataProcessor_Test
+                 ../src/MetadataProcessor.cpp
+                 ../src/Database.cpp
+                 ../src/TopNavProcessor.cpp
+                 MetadataProcessor_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(Parser_Test
+                 ../src/Parser.cpp
+                 ../src/ParserX26.cpp
+                 ../src/Database.cpp
+                 ../src/DecodedPage.cpp
+                 ../src/CharsetMapping.cpp
+                 ../src/DefaultCharsets.cpp
+                 Parser_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(ParserX26_Test
+                 ../src/Parser.cpp
+                 ../src/ParserX26.cpp
+                 ../src/Database.cpp
+                 ../src/DecodedPage.cpp
+                 ../src/CharsetMapping.cpp
+                 ../src/DefaultCharsets.cpp
+                 ParserX26_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(PesBuffer_Test
+                 ../src/PesBuffer.cpp
+                 ../src/PesPacketReader.cpp
+                 PesBuffer_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(PesPacketReader_Test
+                 ../src/PesPacketReader.cpp
+                 PesPacketReader_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)
+
+add_cppunit_test(TopNavProcessor_Test
+                 ../src/TopNavProcessor.cpp
+                 ../src/Database.cpp
+                 TopNavProcessor_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+)

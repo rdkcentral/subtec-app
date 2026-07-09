@@ -54,21 +54,27 @@ UnixSocket::UnixSocket(std::string const& path)
 
 #ifndef PC_BUILD
 #ifdef SUBTTXACCESS_GROUP
-    using namespace std::string_literals;
-    struct group* grp = getgrnam(SUBTTXACCESS_GROUP);
-    if (grp == NULL) {
-        auto errorMsg = strerror(errno);
-        throw SocketException("getgrnam() failed with error: "s + errorMsg);
-    }
+    try {
+        using namespace std::string_literals;
+        struct group* grp = getgrnam(SUBTTXACCESS_GROUP);
+        if (grp == NULL) {
+            auto errorMsg = strerror(errno);
+            throw SocketException("getgrnam() failed with error: "s + errorMsg);
+        }
 
-    if (chown(path.c_str(), getuid(), grp->gr_gid) == -1) {
-        auto errorMsg = strerror(errno);
-        throw SocketException("chown() failed with error: "s + errorMsg);
-    }
+        if (chown(path.c_str(), getuid(), grp->gr_gid) == -1) {
+            auto errorMsg = strerror(errno);
+            throw SocketException("chown() failed with error: "s + errorMsg);
+        }
 
-    if (chmod(path.c_str(), S_IRWXU|S_IRWXG) < 0) {
-        auto errorMsg = strerror(errno);
-        throw SocketException("chmod() failed with error: "s + errorMsg);
+        if (chmod(path.c_str(), S_IRWXU|S_IRWXG) < 0) {
+            auto errorMsg = strerror(errno);
+            throw SocketException("chmod() failed with error: "s + errorMsg);
+        }
+    }
+    catch (...) {
+        (void) ::unlink(path.c_str());
+        throw;
     }
 #endif
 #endif

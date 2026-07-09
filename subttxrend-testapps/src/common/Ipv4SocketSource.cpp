@@ -232,11 +232,17 @@ bool Ipv4SocketSource::readPacket(DataPacket& packet)
         }
         const ssize_t newBytesRead = ::recv(m_clientSocketHandle, &buffer[bytesRead],
                 remainingBytes, 0);
-        if (newBytesRead <= 0)
+        if (newBytesRead < 0)
         {
             std::cerr << "Cannot read packet data" << std::endl;
             return false;
         }
+        else if (newBytesRead == 0)
+        {
+            std::cerr << "Peer closed connection while reading packet data" << std::endl;
+            return false;
+        }
+
         if (static_cast<std::size_t>(newBytesRead) > remainingBytes)
         {
             std::cerr << "Cannot read packet data" << std::endl;

@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
+#include <cerrno>
 
 namespace subttxrend
 {
@@ -82,14 +83,42 @@ bool PlainFileTarget::writePacket(const DataPacket& packet)
         return false;
     }
 
-    auto size = packet.getSize();
-    auto written = ::write(m_fileHandle, packet.getBuffer(), size);
+    const auto size = packet.getSize();
+    std::size_t totalWritten = 0;
+    const char* buffer = packet.getBuffer();
+
+    while (totalWritten < size)
+    {
+        const auto written = ::write(m_fileHandle,
+                buffer + totalWritten,
+                size - totalWritten);
+
+        if (written < 0)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+
+            std::cerr << "Write failed" << std::endl;
+            return false;
+        }
+
+        if (written == 0)
+        {
+            std::cerr << "Write returned 0 before packet completion" << std::endl;
+            return false;
+        }
+
+        totalWritten += static_cast<std::size_t>(written);
+    }
 
     std::cout << "Write operation - requested: " << size << " written: "
-            << written << std::endl;
+            << totalWritten << std::endl;
 
-    return written == static_cast<int>(size);
+    return true;
 }
+
 
 } // namespace testapps
 } // namespace subttxrend

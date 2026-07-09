@@ -44,12 +44,7 @@ bool TtmlFileSource::readPacket(DataPacket& packet)
 {
     static const std::size_t TTML_DATA_HEADER_SIZE = 24;
 
-    static bool headerSent = false;
-    static bool resetSent = false;
-    static bool timestampSent = false;
-    static std::uint32_t counter = 0;
-
-    if (!resetSent)
+    if (!m_resetSent)
     {
         if (packet.getCapacity() <  12)
         {
@@ -57,7 +52,7 @@ bool TtmlFileSource::readPacket(DataPacket& packet)
             return false;
         }
 
-        resetSent = true;
+        m_resetSent = true;
 
         packet.reset();
         packet.appendLeUint32(PACKET_TYPE_RESET_ALL);
@@ -65,11 +60,11 @@ bool TtmlFileSource::readPacket(DataPacket& packet)
         packet.appendLeUint32(0);
 
         packet.setSize(12);
-        counter++;
+        m_counter++;
         return true;
     }
 
-    if (!headerSent)
+    if (!m_headerSent)
     {
         if (packet.getCapacity() <  (TTML_DATA_HEADER_SIZE))
         {
@@ -77,11 +72,11 @@ bool TtmlFileSource::readPacket(DataPacket& packet)
             return false;
         }
 
-        headerSent = true;
+        m_headerSent = true;
 
         packet.reset();
         packet.appendLeUint32(PACKET_TYPE_TTML_SELECTION);
-        packet.appendLeUint32(counter++);
+        packet.appendLeUint32(m_counter++);
         packet.appendLeUint32(12);
         packet.appendLeUint32(0);
         packet.appendLeUint32(800);
@@ -91,7 +86,7 @@ bool TtmlFileSource::readPacket(DataPacket& packet)
         return true;
     }
 
-    if (!timestampSent)
+    if (!m_timestampSent)
     {
         if (packet.getCapacity() <  (TTML_DATA_HEADER_SIZE))
         {
@@ -99,11 +94,11 @@ bool TtmlFileSource::readPacket(DataPacket& packet)
             return false;
         }
 
-        timestampSent = true;
+        m_timestampSent = true;
 
         packet.reset();
         packet.appendLeUint32(PACKET_TYPE_TTML_TIMESTAMP);
-        packet.appendLeUint32(counter++);
+        packet.appendLeUint32(m_counter++);
         packet.appendLeUint32(12);
         packet.appendLeUint32(0);
         packet.appendLeUint64(0L);
@@ -141,9 +136,11 @@ bool TtmlFileSource::readPacket(DataPacket& packet)
 
     packet.reset();
     packet.appendLeUint32(type);
-    packet.appendLeUint32(counter++);
+    packet.appendLeUint32(m_counter++);
     packet.appendLeUint32(size);
     packet.appendLeUint32(channelId);
+
+    packet.appendLeUint64(static_cast<std::uint64_t>(0));
 
     int dataBytesRead = ::read(fileHandle, packet.getBuffer() + TTML_DATA_HEADER_SIZE,
             packetDataSize);

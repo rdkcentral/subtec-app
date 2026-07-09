@@ -99,6 +99,7 @@ void UnixSocketSource::close()
         (void) ::close(m_socketHandle);
         m_socketHandle = -1;
     }
+    (void) ::unlink(getPath().c_str());
 }
 
 bool UnixSocketSource::readPacket(DataPacket& packet)

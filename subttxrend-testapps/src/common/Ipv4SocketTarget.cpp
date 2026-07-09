@@ -26,6 +26,7 @@
 #include <cstring>
 #include <iostream>
 #include <cstdio>
+#include <cerrno>
 
 #include <arpa/inet.h>
 namespace subttxrend
@@ -119,13 +120,46 @@ bool Ipv4SocketTarget::wantsMorePackets()
 
 bool Ipv4SocketTarget::writePacket(const DataPacket& packet)
 {
-    auto size = packet.getSize();
-    auto written = ::send(m_socketHandle, packet.getBuffer(), size, 0);
+    if (m_socketHandle == -1)
+    {
+        return false;
+    }
+
+    const auto size = packet.getSize();
+    const char* buffer = packet.getBuffer();
+    std::size_t totalSent = 0;
+
+    while (totalSent < size)
+    {
+        const auto written = ::send(m_socketHandle,
+                buffer + totalSent,
+                size - totalSent,
+                0);
+
+        if (written < 0)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+
+            std::cerr << "Socket send failed" << std::endl;
+            return false;
+        }
+
+        if (written == 0)
+        {
+            std::cerr << "Socket send returned 0 before packet completion" << std::endl;
+            return false;
+        }
+
+        totalSent += static_cast<std::size_t>(written);
+    }
 
     std::cout << "Write operation - requested: " << size << " written: "
-            << written << std::endl;
+            << totalSent << std::endl;
 
-    return written == static_cast<int>(size);
+    return true;
 }
 
 } // namespace testapps

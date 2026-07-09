@@ -50,6 +50,7 @@ public:
     };
 
     UnixSocket(std::string const& path);
+    ~UnixSocket();
 
     /**
      * Read socket buffer size.
@@ -104,6 +105,7 @@ private:
     using SocketHandlePtr = std::unique_ptr<Handle>;
 
     SocketHandlePtr m_socketHandlePtr;
+    std::string m_socketPath;
 };
 
 using UnixSocketPtr = std::unique_ptr<UnixSocket>;

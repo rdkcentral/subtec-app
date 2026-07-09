@@ -33,6 +33,7 @@ namespace subttxrend {
 namespace socksrc {
 
 UnixSocket::UnixSocket(std::string const& path)
+    : m_socketPath(path)
 {
     m_socketHandlePtr = std::make_unique<Handle>(::socket(AF_UNIX, SOCK_DGRAM, 0));
 
@@ -73,6 +74,15 @@ UnixSocket::UnixSocket(std::string const& path)
 #endif
 }
 
+UnixSocket::~UnixSocket()
+{
+    m_socketHandlePtr.reset();
+
+    if (!m_socketPath.empty()) {
+        (void) ::unlink(m_socketPath.c_str());
+    }
+}
+
 std::size_t UnixSocket::getSocketBufferSize() const
 {
     auto constexpr MAX_BUFFER_SIZE = 128 * 1024;
@@ -103,7 +113,12 @@ std::size_t UnixSocket::read(common::DataBuffer& buffer, bool peekOnly)
 {
     std::size_t result{};
     int flags = (peekOnly ? MSG_PEEK : 0);
-    auto bytesRead = ::recv(*m_socketHandlePtr, buffer.data(), buffer.capacity(), flags);
+
+    ssize_t bytesRead = -1;
+    do {
+        bytesRead = ::recv(*m_socketHandlePtr, buffer.data(), buffer.capacity(), flags);
+    } while ((bytesRead < 0) && (errno == EINTR));
+
     if (bytesRead >= 0) {
         buffer.resize(bytesRead);
         result = static_cast<std::size_t>(bytesRead);

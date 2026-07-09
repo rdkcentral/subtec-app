@@ -26,6 +26,7 @@
 #include <cstring>
 #include <iostream>
 #include <arpa/inet.h>
+#include <cerrno>
 
 namespace subttxrend
 {
@@ -172,6 +173,10 @@ bool Ipv4SocketSource::readPacket(DataPacket& packet)
                 remainingBytes, 0);
         if (newBytesRead < 0)
         {
+            if (errno == EINTR)
+            {
+                continue;
+            }
             std::cerr << "Cannot read header data" << std::endl;
             return false;
         }
@@ -234,6 +239,10 @@ bool Ipv4SocketSource::readPacket(DataPacket& packet)
                 remainingBytes, 0);
         if (newBytesRead < 0)
         {
+            if (errno == EINTR)
+            {
+                continue;
+            }
             std::cerr << "Cannot read packet data" << std::endl;
             return false;
         }

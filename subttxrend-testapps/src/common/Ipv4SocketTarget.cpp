@@ -125,16 +125,14 @@ bool Ipv4SocketTarget::writePacket(const DataPacket& packet)
         return false;
     }
 
-    const auto size = packet.getSize();
-    const char* buffer = packet.getBuffer();
+    const std::size_t size = packet.getSize();
+    const char* nextBuffer = packet.getBuffer();
     std::size_t totalSent = 0;
+    std::size_t remaining = size;
 
-    while (totalSent < size)
+    while (remaining > 0)
     {
-        const auto written = ::send(m_socketHandle,
-                buffer + totalSent,
-                size - totalSent,
-                0);
+        const ssize_t written = ::send(m_socketHandle, nextBuffer, remaining, 0);
 
         if (written < 0)
         {
@@ -153,7 +151,16 @@ bool Ipv4SocketTarget::writePacket(const DataPacket& packet)
             return false;
         }
 
-        totalSent += static_cast<std::size_t>(written);
+        const std::size_t bytesWritten = static_cast<std::size_t>(written);
+        if (bytesWritten > remaining)
+        {
+            std::cerr << "Socket send wrote more bytes than requested" << std::endl;
+            return false;
+        }
+
+        nextBuffer += bytesWritten;
+        totalSent += bytesWritten;
+        remaining -= bytesWritten;
     }
 
     std::cout << "Write operation - requested: " << size << " written: "

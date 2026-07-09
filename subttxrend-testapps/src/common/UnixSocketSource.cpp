@@ -35,7 +35,8 @@ namespace testapps
 
 UnixSocketSource::UnixSocketSource(const std::string& path) :
         DataSource(path),
-        m_socketHandle(-1)
+        m_socketHandle(-1),
+        m_isBound(false)
 {
     // noop
 }
@@ -84,6 +85,8 @@ bool UnixSocketSource::open()
         return false;
     }
 
+    m_isBound = true;
+
     if (chmod(getPath().c_str(), S_IWUSR|S_IWGRP|S_IWOTH|S_IRUSR|S_IRGRP|S_IROTH) != 0)
     {
         std::cerr << "Warning: cannot set socket permissions" << std::endl;
@@ -99,7 +102,12 @@ void UnixSocketSource::close()
         (void) ::close(m_socketHandle);
         m_socketHandle = -1;
     }
-    (void) ::unlink(getPath().c_str());
+
+    if (m_isBound)
+    {
+        (void) ::unlink(getPath().c_str());
+        m_isBound = false;
+    }
 }
 
 bool UnixSocketSource::readPacket(DataPacket& packet)

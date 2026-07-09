@@ -83,15 +83,14 @@ bool PlainFileTarget::writePacket(const DataPacket& packet)
         return false;
     }
 
-    const auto size = packet.getSize();
+    const std::size_t size = packet.getSize();
+    const char* nextBuffer = packet.getBuffer();
     std::size_t totalWritten = 0;
-    const char* buffer = packet.getBuffer();
+    std::size_t remaining = size;
 
-    while (totalWritten < size)
+    while (remaining > 0)
     {
-        const auto written = ::write(m_fileHandle,
-                buffer + totalWritten,
-                size - totalWritten);
+        const ssize_t written = ::write(m_fileHandle, nextBuffer, remaining);
 
         if (written < 0)
         {
@@ -110,7 +109,16 @@ bool PlainFileTarget::writePacket(const DataPacket& packet)
             return false;
         }
 
-        totalWritten += static_cast<std::size_t>(written);
+        const std::size_t bytesWritten = static_cast<std::size_t>(written);
+        if (bytesWritten > remaining)
+        {
+            std::cerr << "Write wrote more bytes than requested" << std::endl;
+            return false;
+        }
+
+        nextBuffer += bytesWritten;
+        totalWritten += bytesWritten;
+        remaining -= bytesWritten;
     }
 
     std::cout << "Write operation - requested: " << size << " written: "

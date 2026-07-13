@@ -61,6 +61,12 @@ bool PesBuffer::addPesPacket(const std::uint8_t* const packet,
     std::size_t packetLength = length;
     std::size_t sizeLeft = m_size - m_used;
 
+    if (packetData == nullptr)
+    {
+        g_logger.info("%s - Data dropped - null packet.", __func__);
+        return false;
+    }
+
     if (packetLength > sizeLeft)
     {
         g_logger.info(

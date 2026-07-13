@@ -141,8 +141,17 @@ Region* Database::addRegionAndClut(std::uint8_t regionId,
         return nullptr;
     }
 
+    const auto widthSize = static_cast<std::size_t>(width);
+    const auto heightSize = static_cast<std::size_t>(height);
+
+    if (widthSize > (std::numeric_limits<std::size_t>::max() / heightSize))
+    {
+        g_logger.info("%s - invalid pixmap size", __func__);
+        return nullptr;
+    }
+
     // check if there is memory for pixmap
-    const std::size_t pixmapSize = width * height;
+    const std::size_t pixmapSize = widthSize * heightSize;
     if (!m_pixmapAllocator.canAllocate(pixmapSize))
     {
         g_logger.info("%s - cannot allocate pixmap memory (%zu bytes)",

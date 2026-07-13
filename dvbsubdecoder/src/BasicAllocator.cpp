@@ -182,9 +182,9 @@ void BasicAllocator::free(void* block)
     std::uint8_t* blockPtr = reinterpret_cast<std::uint8_t*>(block);
     std::uint8_t* markerPtr = blockPtr - 4;
 
-    if ((markerPtr[0] != ALLOC_MARKER[0]) && (markerPtr[1] != ALLOC_MARKER[1])
-            && (markerPtr[2] != ALLOC_MARKER[2])
-            && (markerPtr[3] != ALLOC_MARKER[3]))
+    if ((markerPtr[0] != ALLOC_MARKER[0]) || (markerPtr[1] != ALLOC_MARKER[1])
+            || (markerPtr[2] != ALLOC_MARKER[2])
+            || (markerPtr[3] != ALLOC_MARKER[3]))
     {
         throw std::logic_error("Invalid alloc marker");
     }

@@ -96,17 +96,20 @@ public:
         // set
         for (int i = 0; i < (1 << 2); ++i)
         {
-            std::uint32_t value = (i << 24) | (i << 16) | i;
+            const std::uint32_t index = static_cast<std::uint32_t>(i);
+            const std::uint32_t value = (index << 24) | (index << 16) | index;
             testClut.set2bit(i, value);
         }
         for (int i = 0; i < (1 << 4); ++i)
         {
-            std::uint32_t value = (i << 24) | (i << 16) | i;
+            const std::uint32_t index = static_cast<std::uint32_t>(i);
+            const std::uint32_t value = (index << 24) | (index << 16) | index;
             testClut.set4bit(i, value);
         }
         for (int i = 0; i < (1 << 8); ++i)
         {
-            std::uint32_t value = (i << 24) | (i << 16) | i;
+            const std::uint32_t index = static_cast<std::uint32_t>(i);
+            const std::uint32_t value = (index << 24) | (index << 16) | index;
             testClut.set8bit(i, value);
         }
 
@@ -114,19 +117,22 @@ public:
         for (int i = 0; i < (1 << 2); ++i)
         {
             auto testArray = testClut.getArray2bit();
-            std::uint32_t value = (i << 24) | (i << 16) | i;
+            const std::uint32_t index = static_cast<std::uint32_t>(i);
+            const std::uint32_t value = (index << 24) | (index << 16) | index;
             CPPUNIT_ASSERT_EQUAL(value, testArray[i]);
         }
         for (int i = 0; i < (1 << 4); ++i)
         {
             auto testArray = testClut.getArray4bit();
-            std::uint32_t value = (i << 24) | (i << 16) | i;
+            const std::uint32_t index = static_cast<std::uint32_t>(i);
+            const std::uint32_t value = (index << 24) | (index << 16) | index;
             CPPUNIT_ASSERT_EQUAL(value, testArray[i]);
         }
         for (int i = 0; i < (1 << 8); ++i)
         {
             auto testArray = testClut.getArray8bit();
-            std::uint32_t value = (i << 24) | (i << 16) | i;
+            const std::uint32_t index = static_cast<std::uint32_t>(i);
+            const std::uint32_t value = (index << 24) | (index << 16) | index;
             CPPUNIT_ASSERT_EQUAL(value, testArray[i]);
         }
 

@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
+#include <cerrno>
 
 namespace subttxrend
 {
@@ -82,14 +83,50 @@ bool PlainFileTarget::writePacket(const DataPacket& packet)
         return false;
     }
 
-    auto size = packet.getSize();
-    auto written = ::write(m_fileHandle, packet.getBuffer(), size);
+    const std::size_t size = packet.getSize();
+    const char* nextBuffer = packet.getBuffer();
+    std::size_t totalWritten = 0;
+    std::size_t remaining = size;
+
+    while (remaining > 0)
+    {
+        const ssize_t written = ::write(m_fileHandle, nextBuffer, remaining);
+
+        if (written < 0)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+
+            std::cerr << "Write failed" << std::endl;
+            return false;
+        }
+
+        if (written == 0)
+        {
+            std::cerr << "Write returned 0 before packet completion" << std::endl;
+            return false;
+        }
+
+        const std::size_t bytesWritten = static_cast<std::size_t>(written);
+        if (bytesWritten > remaining)
+        {
+            std::cerr << "Write wrote more bytes than requested" << std::endl;
+            return false;
+        }
+
+        nextBuffer += bytesWritten;
+        totalWritten += bytesWritten;
+        remaining -= bytesWritten;
+    }
 
     std::cout << "Write operation - requested: " << size << " written: "
-            << written << std::endl;
+            << totalWritten << std::endl;
 
-    return written == static_cast<int>(size);
+    return true;
 }
+
 
 } // namespace testapps
 } // namespace subttxrend

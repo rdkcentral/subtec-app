@@ -26,6 +26,7 @@
 #include <cstring>
 #include <iostream>
 #include <cstdio>
+#include <cerrno>
 
 #include <arpa/inet.h>
 namespace subttxrend
@@ -119,13 +120,53 @@ bool Ipv4SocketTarget::wantsMorePackets()
 
 bool Ipv4SocketTarget::writePacket(const DataPacket& packet)
 {
-    auto size = packet.getSize();
-    auto written = ::send(m_socketHandle, packet.getBuffer(), size, 0);
+    if (m_socketHandle == -1)
+    {
+        return false;
+    }
+
+    const std::size_t size = packet.getSize();
+    const char* nextBuffer = packet.getBuffer();
+    std::size_t totalSent = 0;
+    std::size_t remaining = size;
+
+    while (remaining > 0)
+    {
+        const ssize_t written = ::send(m_socketHandle, nextBuffer, remaining, 0);
+
+        if (written < 0)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+
+            std::cerr << "Socket send failed" << std::endl;
+            return false;
+        }
+
+        if (written == 0)
+        {
+            std::cerr << "Socket send returned 0 before packet completion" << std::endl;
+            return false;
+        }
+
+        const std::size_t bytesWritten = static_cast<std::size_t>(written);
+        if (bytesWritten > remaining)
+        {
+            std::cerr << "Socket send wrote more bytes than requested" << std::endl;
+            return false;
+        }
+
+        nextBuffer += bytesWritten;
+        totalSent += bytesWritten;
+        remaining -= bytesWritten;
+    }
 
     std::cout << "Write operation - requested: " << size << " written: "
-            << written << std::endl;
+            << totalSent << std::endl;
 
-    return written == static_cast<int>(size);
+    return true;
 }
 
 } // namespace testapps

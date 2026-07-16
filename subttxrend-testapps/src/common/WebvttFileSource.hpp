@@ -61,10 +61,6 @@ private:
     /** Ttml data packet type. */
     std::uint32_t PACKET_TYPE_WVTT_TIMESTAMP = 18;
 
-    bool m_headerSent = false;
-    bool m_resetSent = false;
-    bool m_timestampSent = false;
-    std::uint32_t m_counter = 0;
 };
 
 } // namespace subttxrend

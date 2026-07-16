@@ -44,7 +44,12 @@ bool WebvttFileSource::readPacket(DataPacket& packet)
 {
     static const std::size_t TTML_DATA_HEADER_SIZE = 24;
 
-    if (!m_resetSent)
+    static bool headerSent = false;
+    static bool resetSent = false;
+    static bool timestampSent = false;
+    static std::uint32_t counter = 0;
+
+    if (!resetSent)
     {
         if (packet.getCapacity() <  12)
         {
@@ -52,7 +57,7 @@ bool WebvttFileSource::readPacket(DataPacket& packet)
             return false;
         }
 
-        m_resetSent = true;
+        resetSent = true;
 
         packet.reset();
         packet.appendLeUint32(PACKET_TYPE_RESET_ALL);
@@ -60,11 +65,11 @@ bool WebvttFileSource::readPacket(DataPacket& packet)
         packet.appendLeUint32(0);
 
         packet.setSize(12);
-        m_counter++;
+        counter++;
         return true;
     }
 
-    if (!m_headerSent)
+    if (!headerSent)
     {
         if (packet.getCapacity() <  (TTML_DATA_HEADER_SIZE))
         {
@@ -72,11 +77,11 @@ bool WebvttFileSource::readPacket(DataPacket& packet)
             return false;
         }
 
-        m_headerSent = true;
+        headerSent = true;
 
         packet.reset();
         packet.appendLeUint32(PACKET_TYPE_WVTT_SELECTION);
-        packet.appendLeUint32(m_counter++);
+        packet.appendLeUint32(counter++);
         packet.appendLeUint32(12);
         packet.appendLeUint32(0);
         packet.appendLeUint32(1920);
@@ -86,7 +91,7 @@ bool WebvttFileSource::readPacket(DataPacket& packet)
         return true;
     }
 
-    if (!m_timestampSent)
+    if (!timestampSent)
     {
         if (packet.getCapacity() <  (TTML_DATA_HEADER_SIZE))
         {
@@ -94,11 +99,11 @@ bool WebvttFileSource::readPacket(DataPacket& packet)
             return false;
         }
 
-        m_timestampSent = true;
+        timestampSent = true;
 
         packet.reset();
         packet.appendLeUint32(PACKET_TYPE_WVTT_TIMESTAMP);
-        packet.appendLeUint32(m_counter++);
+        packet.appendLeUint32(counter++);
         packet.appendLeUint32(12);
         packet.appendLeUint32(0);
         packet.appendLeUint64(0L);
@@ -136,7 +141,7 @@ bool WebvttFileSource::readPacket(DataPacket& packet)
 
     packet.reset();
     packet.appendLeUint32(type);
-    packet.appendLeUint32(m_counter++);
+    packet.appendLeUint32(counter++);
     packet.appendLeUint32(size);
     packet.appendLeUint32(channelId);
     packet.appendLeUint64(0);

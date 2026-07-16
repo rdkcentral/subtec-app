@@ -33,7 +33,6 @@ namespace subttxrend {
 namespace socksrc {
 
 UnixSocket::UnixSocket(std::string const& path)
-    : m_socketPath(path)
 {
     m_socketHandlePtr = std::make_unique<Handle>(::socket(AF_UNIX, SOCK_DGRAM, 0));
 
@@ -78,15 +77,6 @@ UnixSocket::UnixSocket(std::string const& path)
     }
 #endif
 #endif
-}
-
-UnixSocket::~UnixSocket()
-{
-    m_socketHandlePtr.reset();
-
-    if (!m_socketPath.empty()) {
-        (void) ::unlink(m_socketPath.c_str());
-    }
 }
 
 std::size_t UnixSocket::getSocketBufferSize() const

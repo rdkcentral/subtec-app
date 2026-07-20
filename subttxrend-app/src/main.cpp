@@ -21,7 +21,6 @@
 #include <future>
 #include <iostream>
 #include <cstdlib>
-#include <stdexcept>
 #include <signal.h>
 #include <system_error>
 #include <pthread.h>

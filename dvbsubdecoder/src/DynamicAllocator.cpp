@@ -38,6 +38,7 @@ DynamicAllocator::~DynamicAllocator()
 
     m_blocks.clear();
 
+    (void)hasOutstandingBlocks;
     assert(!hasOutstandingBlocks);
 }
 

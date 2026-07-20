@@ -55,8 +55,12 @@ UnixSocket::UnixSocket(std::string const& path)
 #ifdef SUBTTXACCESS_GROUP
     try {
         using namespace std::string_literals;
+        errno = 0;
         struct group* grp = getgrnam(SUBTTXACCESS_GROUP);
         if (grp == NULL) {
+            if (errno == 0) {
+                throw SocketException("getgrnam() failed: group not found");
+            }
             auto errorMsg = strerror(errno);
             throw SocketException("getgrnam() failed with error: "s + errorMsg);
         }

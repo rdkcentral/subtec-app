@@ -83,7 +83,10 @@ std::uint8_t* Pixmap::getLine(std::int32_t line)
         throw std::invalid_argument("line");
     }
 
-    return m_buffer + line * m_width;
+    const std::size_t offset = static_cast<std::size_t>(line)
+            * static_cast<std::size_t>(m_width);
+
+    return m_buffer + offset;
 }
 
 void Pixmap::clear(std::uint8_t colorIndex)
@@ -95,7 +98,8 @@ void Pixmap::clear(std::uint8_t colorIndex)
         throw std::logic_error("Pixmap not initialized");
     }
 
-    std::size_t size = m_width * m_height;
+    const std::size_t size = static_cast<std::size_t>(m_width)
+            * static_cast<std::size_t>(m_height);
 
     (void) std::memset(m_buffer, colorIndex, size);
 }

@@ -29,7 +29,17 @@ namespace dvbsubdecoder
 
 DynamicAllocator::~DynamicAllocator()
 {
-    assert(m_blocks.empty());
+    const bool hasOutstandingBlocks = !m_blocks.empty();
+
+    for (const auto& blockEntry : m_blocks)
+    {
+        ::operator delete(blockEntry.second);
+    }
+
+    m_blocks.clear();
+
+    (void)hasOutstandingBlocks;
+    assert(!hasOutstandingBlocks);
 }
 
 void* DynamicAllocator::allocate(std::size_t size,

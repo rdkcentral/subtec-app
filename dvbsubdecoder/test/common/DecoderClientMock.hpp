@@ -96,6 +96,7 @@ public:
             auto iter = m_allocBlocks.find(block);
             if (iter != m_allocBlocks.end())
             {
+                ::operator delete(block);
                 m_allocTotal -= iter->second;
                 m_allocBlocks.erase(iter);
             }

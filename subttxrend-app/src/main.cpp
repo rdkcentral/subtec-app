@@ -28,32 +28,30 @@
 using subttxrend::app::Application;
 using subttxrend::ctrl::Options;
 
-auto registerSignalListener()
+static sigset_t blockTerminationSignals()
 {
-    // block signals in this thread and subsequently
-    // spawned threads
     sigset_t sigset;
     sigemptyset(&sigset);
     sigaddset(&sigset, SIGINT);
     sigaddset(&sigset, SIGTERM);
     pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
+    return sigset;
+}
 
-    auto signal_handler = [sigset]() {
+static auto createSignalListener(const sigset_t& sigset)
+{
+    return std::async(std::launch::async, [sigset]() {
         int signum = 0;
-        // wait until a signal is delivered:
         sigwait(&sigset, &signum);
-
         return signum;
-    };
-
-    return std::async(std::launch::async, signal_handler);
+    });
 }
 
 int main(int argc,
          char* argv[])
 {
 #ifndef __APPLE__
-    auto exitListener = registerSignalListener();
+    const auto exitSignalSet = blockTerminationSignals();
 #endif
     int rv = EXIT_FAILURE;
 
@@ -80,6 +78,7 @@ int main(int argc,
         std::cerr << "subttxrend-app started" << std::endl;
 
 #ifndef __APPLE__
+        auto exitListener = createSignalListener(exitSignalSet);
         auto signalNum = exitListener.get();
         std::cerr << "subttxrend-app signaled (" << signalNum << ") to exit" << std::endl;
 #else // __APPLE__

@@ -116,7 +116,15 @@ void DbusHandlerTeletext::onBusAcquired(GDBusConnection *connection,
     GError *gError = nullptr;
     if (!g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON(teletextObj), connection, DBUS_PATH, &gError))
     {
-        m_logger.error("%s: could not export gObject", __func__);
+        m_logger.error("%s: could not export gObject%s%s", __func__,
+                (gError != nullptr && gError->message != nullptr) ? " error=" : "",
+                (gError != nullptr && gError->message != nullptr) ? gError->message : "");
+
+        if (gError != nullptr)
+        {
+            g_error_free(gError);
+            gError = nullptr;
+        }
         thiz->doCleanup();
         return;
     }

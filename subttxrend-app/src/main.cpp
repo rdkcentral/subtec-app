@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <signal.h>
+#include <system_error>
 #include <pthread.h>
 
 #include "Application.hpp"
@@ -58,7 +59,7 @@ static auto createSignalListener(const sigset_t& sigset)
         int signum = 0;
         const int rc = sigwait(&sigset, &signum);
         if (rc != 0) {
-            throw std::runtime_error("sigwait failed");
+            throw std::system_error(rc, std::generic_category(), "sigwait failed");
         }
         return signum;
     });

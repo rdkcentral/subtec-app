@@ -49,15 +49,7 @@ const std::string& levelToString(rdk_LogLevel level)
             break;
     }
 
-    if ((level == RDK_LOG_TRACE1) ||
-        (level == RDK_LOG_TRACE2) ||
-        (level == RDK_LOG_TRACE3) ||
-        (level == RDK_LOG_TRACE4) ||
-        (level == RDK_LOG_TRACE5) ||
-        (level == RDK_LOG_TRACE6) ||
-        (level == RDK_LOG_TRACE7) ||
-        (level == RDK_LOG_TRACE8) ||
-        (level == RDK_LOG_TRACE9))
+    if (level == RDK_LOG_TRACE)
     {
         return TRACE_NAME;
     }

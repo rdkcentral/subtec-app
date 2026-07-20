@@ -20,6 +20,7 @@
 
 #include <rdk_debug.h>
 #include <cstdarg>
+#include <cstdio>
 #include <string>
 
 namespace

@@ -21,6 +21,9 @@
 #include <future>
 #include <iostream>
 #include <cstdlib>
+#include <stdexcept>
+#include <signal.h>
+#include <pthread.h>
 
 #include "Application.hpp"
 #include <subttxrend/ctrl/Options.hpp>
@@ -28,21 +31,35 @@
 using subttxrend::app::Application;
 using subttxrend::ctrl::Options;
 
-static sigset_t blockTerminationSignals()
+static bool blockTerminationSignals(sigset_t& sigset)
 {
-    sigset_t sigset;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGINT);
-    sigaddset(&sigset, SIGTERM);
-    pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
-    return sigset;
+    if (sigemptyset(&sigset) != 0) {
+        return false;
+    }
+
+    if (sigaddset(&sigset, SIGINT) != 0) {
+        return false;
+    }
+
+    if (sigaddset(&sigset, SIGTERM) != 0) {
+        return false;
+    }
+
+    if (pthread_sigmask(SIG_BLOCK, &sigset, nullptr) != 0) {
+        return false;
+    }
+
+    return true;
 }
 
 static auto createSignalListener(const sigset_t& sigset)
 {
     return std::async(std::launch::async, [sigset]() {
         int signum = 0;
-        sigwait(&sigset, &signum);
+        const int rc = sigwait(&sigset, &signum);
+        if (rc != 0) {
+            throw std::runtime_error("sigwait failed");
+        }
         return signum;
     });
 }
@@ -51,7 +68,11 @@ int main(int argc,
          char* argv[])
 {
 #ifndef __APPLE__
-    const auto exitSignalSet = blockTerminationSignals();
+    sigset_t exitSignalSet;
+    if (!blockTerminationSignals(exitSignalSet)) {
+        std::cerr << "Failed to block termination signals" << std::endl;
+        return EXIT_FAILURE;
+    }
 #endif
     int rv = EXIT_FAILURE;
 

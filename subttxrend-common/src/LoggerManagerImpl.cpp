@@ -309,10 +309,10 @@ const char* LoggerManagerImpl::componentToGroupName(const std::string& component
     };
 
     auto it = componentToGroup.find(component);
-    assert((it != componentToGroup.end()) && "component group not found");
 
     if (it == componentToGroup.end())
     {
+        assert(false && "component group not found");
         return m_currentBackend->getGroupName(CORE);
     }
 

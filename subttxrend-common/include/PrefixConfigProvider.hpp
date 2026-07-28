@@ -75,7 +75,7 @@ protected:
     }
 
     /** Prefix to be added to all keys. */
-    const std::string& m_keyPrefix;
+    const std::string m_keyPrefix;
 
     /** Peer configuration provider. */
     const ConfigProvider& m_peerProvider;

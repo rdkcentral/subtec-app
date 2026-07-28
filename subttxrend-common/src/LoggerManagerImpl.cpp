@@ -50,14 +50,8 @@ LoggerManager* LoggerManager::getInstance()
 
 LoggerManagerImpl* LoggerManagerImpl::getInstance()
 {
-    static LoggerManagerImpl* theInstance = nullptr;
-
-    if (!theInstance)
-    {
-        theInstance = new LoggerManagerImpl();
-    }
-
-    return theInstance;
+    static LoggerManagerImpl theInstance;
+    return &theInstance;
 }
 
 LoggerManagerImpl::LoggerManagerImpl() :
@@ -316,6 +310,11 @@ const char* LoggerManagerImpl::componentToGroupName(const std::string& component
 
     auto it = componentToGroup.find(component);
     assert((it != componentToGroup.end()) && "component group not found");
+
+    if (it == componentToGroup.end())
+    {
+        return m_currentBackend->getGroupName(CORE);
+    }
 
     return m_currentBackend->getGroupName(it->second);
 }

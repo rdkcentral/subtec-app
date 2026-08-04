@@ -515,7 +515,7 @@ std::list<Line> LineBuilder::buildLines(const std::vector<std::string> line_stri
         
         g_logger.osdebug(__LOGGER_FUNC__, " lineWidth:", fullLine.lineWidth, " max:", maxLineSize);
 
-        if (fullLine.lineWidth > maxLineSize) {
+        if ((maxLineSize > 0) && (fullLine.lineWidth > maxLineSize)) {
             auto split_lines = splitLinesByScreenWidth(fullLine, maxLineSize);
             g_logger.osdebug(__LOGGER_FUNC__, " split line into ", split_lines.size());
             lines.insert(lines.end(), split_lines.begin(), split_lines.end());

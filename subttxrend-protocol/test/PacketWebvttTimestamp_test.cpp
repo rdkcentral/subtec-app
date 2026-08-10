@@ -58,10 +58,10 @@ CPPUNIT_TEST_SUITE( PacketWebvttTimestampTest );
     CPPUNIT_TEST(testBadSizeMaxValue);
     CPPUNIT_TEST(testParseEmptyBuffer);
     CPPUNIT_TEST(testParseHeaderOnly);
-    CPPUNIT_TEST(testParseTruncatedAfterChannelId);
-    CPPUNIT_TEST(testParsePartialTimestamp1Byte);
-    CPPUNIT_TEST(testParsePartialTimestamp4Bytes);
-    CPPUNIT_TEST(testParsePartialTimestamp7Bytes);
+    CPPUNIT_TEST(testParseShortPayload4Bytes);
+    CPPUNIT_TEST(testParseShortPayload5Bytes);
+    CPPUNIT_TEST(testParseShortPayload8Bytes);
+    CPPUNIT_TEST(testParseShortPayload11Bytes);
     CPPUNIT_TEST(testParse23Bytes);
     CPPUNIT_TEST(testParse1Byte);
     CPPUNIT_TEST(testLittleEndianByteOrder);
@@ -78,7 +78,7 @@ CPPUNIT_TEST_SUITE( PacketWebvttTimestampTest );
     CPPUNIT_TEST(testBaseClassChannelId);
     CPPUNIT_TEST(testBaseClassCounter);
     CPPUNIT_TEST(testBaseClassSize);
-    CPPUNIT_TEST(testBaseClassParseFailure);
+    CPPUNIT_TEST(testBaseClassShortPayloadFailure);
     CPPUNIT_TEST(testBaseClassChannelIdBoundary);
     CPPUNIT_TEST(testBaseClassCounterBoundary);
     CPPUNIT_TEST(testPolymorphismAsPacket);
@@ -87,7 +87,7 @@ CPPUNIT_TEST_SUITE( PacketWebvttTimestampTest );
     CPPUNIT_TEST(testPolymorphismParseVirtual);
     CPPUNIT_TEST(testPolymorphismIsValidVirtual);
     CPPUNIT_TEST(testBufferReaderIntegrationComplete);
-    CPPUNIT_TEST(testBufferReaderIntegrationPartial);
+    CPPUNIT_TEST(testBufferReaderIntegrationShortPayload);
     CPPUNIT_TEST(testBufferReaderIntegrationMultipleCalls);
     CPPUNIT_TEST(testBufferReaderIntegrationTimestampExtraction);
     CPPUNIT_TEST(testErrorRecoveryAfterBadType);
@@ -506,8 +506,8 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    // Parse buffer truncated after channelId
-    void testParseTruncatedAfterChannelId()
+    // Parse fails when payload is 4 bytes short of the declared size
+    void testParseShortPayload4Bytes()
     {
         std::uint8_t packetData[] = {
             0x11, 0x00, 0x00, 0x00, // type
@@ -523,8 +523,8 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    // Parse buffer with 1 byte of timestamp
-    void testParsePartialTimestamp1Byte()
+    // Parse fails when payload is 5 bytes short of the declared size
+    void testParseShortPayload5Bytes()
     {
         std::uint8_t packetData[] = {
             0x11, 0x00, 0x00, 0x00, // type
@@ -541,8 +541,8 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    // Parse buffer with 4 bytes of timestamp
-    void testParsePartialTimestamp4Bytes()
+    // Parse fails when payload is 8 bytes short of the declared size
+    void testParseShortPayload8Bytes()
     {
         std::uint8_t packetData[] = {
             0x11, 0x00, 0x00, 0x00, // type
@@ -559,8 +559,8 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    // Parse buffer with 7 bytes of timestamp
-    void testParsePartialTimestamp7Bytes()
+    // Parse fails when payload is 11 bytes short of the declared size
+    void testParseShortPayload11Bytes()
     {
         std::uint8_t packetData[] = {
             0x11, 0x00, 0x00, 0x00, // type
@@ -814,8 +814,8 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), packet.getSize());
     }
 
-    // Test base class parse failure
-    void testBaseClassParseFailure()
+    // Base class parse fails when payload is shorter than the declared size
+    void testBaseClassShortPayloadFailure()
     {
         // Create packet with valid header but truncated channel ID
         std::uint8_t packetData[] = {
@@ -951,8 +951,8 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0x0807060504030201ULL), packet.getTimestamp());
     }
 
-    // BufferReader handling of insufficient data
-    void testBufferReaderIntegrationPartial()
+    // Integration rejects packets whose payload is shorter than declared
+    void testBufferReaderIntegrationShortPayload()
     {
         std::uint8_t partialData[] = {
             0x11, 0x00, 0x00, 0x00, // type

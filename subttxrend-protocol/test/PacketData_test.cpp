@@ -20,7 +20,11 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#include "Packet.hpp"
+#include <iterator>
+#include <limits>
+#include <memory>
+#include <vector>
+
 #include "PacketData.hpp"
 
 using subttxrend::common::DataBuffer;
@@ -237,9 +241,10 @@ public:
         {
             0x08, 0x00, 0x00, 0x00, // type (TTML_DATA)
             0x01, 0x23, 0x45, 0x67, // counter
-            0x0C, 0x00, 0x00, 0x00, // size (12 bytes: 4 channel_id + 8 display_offset)
+            0x0D, 0x00, 0x00, 0x00, // size (13 bytes: 4 channel_id + 8 display_offset + 1 data byte)
             0x05, 0x00, 0x00, 0x00, // channel id
             0x39, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // display offset (12345 ms)
+            0x43                    // data
         };
 
         PacketData packet{Packet::Type::TTML_DATA};
@@ -247,6 +252,8 @@ public:
 
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.getDisplayOffset() == 12345);
+        CPPUNIT_ASSERT(packet.getDataSize() == 1);
+        CPPUNIT_ASSERT(static_cast<std::uint8_t>(packet.getData()[0]) == 0x43);
     }
 
     // Test getData basic functionality
@@ -304,7 +311,8 @@ public:
             0x01, 0x23, 0x45, 0x67, // counter
             0x0C, 0x00, 0x00, 0x00, // size (12 bytes - missing PTS fields)
             0x05, 0x00, 0x00, 0x00, // channel id
-            0x01, 0x00, 0x00, 0x00  // channel type (incomplete - missing PTS fields)
+            0x01, 0x00, 0x00, 0x00, // channel type
+            0x00, 0x00, 0x00, 0x00  // PTS presence type (missing PTS type field)
         };
 
         PacketData packet{Packet::Type::CC_DATA};
@@ -321,10 +329,9 @@ public:
         {
             0x0A, 0x00, 0x00, 0x00, // type (CC_DATA)
             0x01, 0x23, 0x45, 0x67, // counter
-            0x10, 0x00, 0x00, 0x00, // size (16 bytes - still missing one PTS field)
+            0x08, 0x00, 0x00, 0x00, // size (8 bytes - missing both PTS fields)
             0x05, 0x00, 0x00, 0x00, // channel id
-            0x01, 0x00, 0x00, 0x00, // channel type
-            0x00, 0x00, 0x00, 0x00  // PTS presence type (missing PTS type field)
+            0x01, 0x00, 0x00, 0x00  // channel type
         };
 
         PacketData packet{Packet::Type::CC_DATA};
@@ -341,7 +348,7 @@ public:
         {
             0x08, 0x00, 0x00, 0x00, // type (TTML_DATA)
             0x01, 0x23, 0x45, 0x67, // counter
-            0x0C, 0x00, 0x00, 0x00, // size
+            0x08, 0x00, 0x00, 0x00, // size (8 bytes - incomplete display offset)
             0x05, 0x00, 0x00, 0x00, // channel id
             0x40, 0x42, 0x0F, 0x00  // display offset (incomplete - only 4 bytes)
         };
@@ -360,7 +367,7 @@ public:
         {
             0x10, 0x00, 0x00, 0x00, // type (WEBVTT_DATA)
             0x01, 0x23, 0x45, 0x67, // counter
-            0x0E, 0x00, 0x00, 0x00, // size
+            0x0A, 0x00, 0x00, 0x00, // size (10 bytes - incomplete display offset)
             0x05, 0x00, 0x00, 0x00, // channel id
             0x40, 0x42, 0x0F, 0x00, 0x00, 0x00  // display offset (incomplete - only 6 bytes)
         };
@@ -380,32 +387,40 @@ public:
         {
             0x08, 0x00, 0x00, 0x00, // type (TTML_DATA)
             0x01, 0x23, 0x45, 0x67, // counter
-            0x0C, 0x00, 0x00, 0x00, // size (12 bytes: 4 channel_id + 8 display_offset)
+            0x0D, 0x00, 0x00, 0x00, // size (13 bytes: 4 channel_id + 8 display_offset + 1 data byte)
             0x05, 0x00, 0x00, 0x00, // channel id
             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F, // max int64_t
+            0xAA                    // data
         };
 
         PacketData maxPacket{Packet::Type::TTML_DATA};
         DataBufferPtr maxBuffer = std::make_unique<DataBuffer>(std::begin(maxPacketData), std::end(maxPacketData));
 
         CPPUNIT_ASSERT(maxPacket.parse(std::move(maxBuffer)));
+        CPPUNIT_ASSERT(maxPacket.isValid());
         CPPUNIT_ASSERT(maxPacket.getDisplayOffset() == 9223372036854775807LL);
+        CPPUNIT_ASSERT(maxPacket.getDataSize() == 1);
+        CPPUNIT_ASSERT(static_cast<std::uint8_t>(maxPacket.getData()[0]) == 0xAA);
 
         // Test minimum negative value
         std::uint8_t minPacketData[] =
         {
             0x10, 0x00, 0x00, 0x00, // type (WEBVTT_DATA)
             0x01, 0x23, 0x45, 0x67, // counter
-            0x0C, 0x00, 0x00, 0x00, // size (12 bytes: 4 channel_id + 8 display_offset)
+            0x0D, 0x00, 0x00, 0x00, // size (13 bytes: 4 channel_id + 8 display_offset + 1 data byte)
             0x05, 0x00, 0x00, 0x00, // channel id
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // min int64_t
+            0xBB                    // data
         };
 
         PacketData minPacket{Packet::Type::WEBVTT_DATA};
         DataBufferPtr minBuffer = std::make_unique<DataBuffer>(std::begin(minPacketData), std::end(minPacketData));
 
         CPPUNIT_ASSERT(minPacket.parse(std::move(minBuffer)));
+        CPPUNIT_ASSERT(minPacket.isValid());
         CPPUNIT_ASSERT(minPacket.getDisplayOffset() == std::numeric_limits<std::int64_t>::min());
+        CPPUNIT_ASSERT(minPacket.getDataSize() == 1);
+        CPPUNIT_ASSERT(static_cast<std::uint8_t>(minPacket.getData()[0]) == 0xBB);
     }
 
     // Test channel boundary values
@@ -494,9 +509,13 @@ public:
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetData), std::end(packetData));
 
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
+        CPPUNIT_ASSERT(packet.isValid());
         CPPUNIT_ASSERT(packet.getCounter() == 0xFFFFFFFF);
         CPPUNIT_ASSERT(packet.getChannelId() == 0xFFFFFFFF);
         CPPUNIT_ASSERT(packet.getChannelType() == 0xFFFFFFFF);
+        CPPUNIT_ASSERT(packet.getDataSize() == 3);
+        CPPUNIT_ASSERT(static_cast<std::uint8_t>(packet.getData()[0]) == 0xAA);
+        CPPUNIT_ASSERT(static_cast<std::uint8_t>(packet.getData()[2]) == 0xCC);
     }
 
     // Test counter boundary values
@@ -518,6 +537,23 @@ public:
 
         CPPUNIT_ASSERT(zeroPacket.parse(std::move(zeroBuffer)));
         CPPUNIT_ASSERT(zeroPacket.getCounter() == 0);
+
+        // Test maximum counter
+        std::uint8_t maxPacketData[] =
+        {
+            0x01, 0x00, 0x00, 0x00, // type
+            0xFF, 0xFF, 0xFF, 0xFF, // counter (max)
+            0x09, 0x00, 0x00, 0x00, // size
+            0x05, 0x00, 0x00, 0x00, // channel id
+            0x01, 0x00, 0x00, 0x00, // channel type
+            0x42                    // data
+        };
+
+        PacketData maxPacket{Packet::Type::PES_DATA};
+        DataBufferPtr maxBuffer = std::make_unique<DataBuffer>(std::begin(maxPacketData), std::end(maxPacketData));
+
+        CPPUNIT_ASSERT(maxPacket.parse(std::move(maxBuffer)));
+        CPPUNIT_ASSERT(maxPacket.getCounter() == 0xFFFFFFFF);
     }
 
     // Test initial state before parsing
@@ -628,6 +664,47 @@ public:
         CPPUNIT_ASSERT(ttmlPacket.isValid());
         CPPUNIT_ASSERT(ttmlPacket.getDataSize() == 1);
         CPPUNIT_ASSERT(ttmlPacket.getDisplayOffset() == 0);
+
+        // CC_DATA minimum: channel_id(4) + channel_type(4) + PTS presence(4) + PTS type(4) + minimal_data(1) = 17 bytes
+        std::uint8_t ccMinData[] =
+        {
+            0x0A, 0x00, 0x00, 0x00, // type
+            0x01, 0x23, 0x45, 0x67, // counter
+            0x11, 0x00, 0x00, 0x00, // size (17 bytes)
+            0x05, 0x00, 0x00, 0x00, // channel id
+            0x01, 0x00, 0x00, 0x00, // channel type
+            0x00, 0x00, 0x00, 0x00, // PTS presence type
+            0x00, 0x00, 0x00, 0x00, // PTS type
+            0x44                    // minimal data
+        };
+
+        PacketData ccPacket{Packet::Type::CC_DATA};
+        DataBufferPtr ccBuffer = std::make_unique<DataBuffer>(std::begin(ccMinData), std::end(ccMinData));
+
+        CPPUNIT_ASSERT(ccPacket.parse(std::move(ccBuffer)));
+        CPPUNIT_ASSERT(ccPacket.isValid());
+        CPPUNIT_ASSERT(ccPacket.getDataSize() == 1);
+        CPPUNIT_ASSERT(static_cast<std::uint8_t>(ccPacket.getData()[0]) == 0x44);
+
+        // WEBVTT_DATA minimum: channel_id(4) + display_offset(8) + minimal_data(1) = 13 bytes
+        std::uint8_t webvttMinData[] =
+        {
+            0x10, 0x00, 0x00, 0x00, // type
+            0x01, 0x23, 0x45, 0x67, // counter
+            0x0D, 0x00, 0x00, 0x00, // size (13 bytes)
+            0x05, 0x00, 0x00, 0x00, // channel id
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // display offset
+            0x45                    // minimal data
+        };
+
+        PacketData webvttPacket{Packet::Type::WEBVTT_DATA};
+        DataBufferPtr webvttBuffer = std::make_unique<DataBuffer>(std::begin(webvttMinData), std::end(webvttMinData));
+
+        CPPUNIT_ASSERT(webvttPacket.parse(std::move(webvttBuffer)));
+        CPPUNIT_ASSERT(webvttPacket.isValid());
+        CPPUNIT_ASSERT(webvttPacket.getDataSize() == 1);
+        CPPUNIT_ASSERT(webvttPacket.getDisplayOffset() == 0);
+        CPPUNIT_ASSERT(static_cast<std::uint8_t>(webvttPacket.getData()[0]) == 0x45);
     }
 
     // Test negative display offset

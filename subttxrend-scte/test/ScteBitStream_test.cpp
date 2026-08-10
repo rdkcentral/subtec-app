@@ -33,6 +33,7 @@ CPPUNIT_TEST_SUITE( ScteBitStreamTest );
     CPPUNIT_TEST(testShiftPositiveWithinBounds);
     CPPUNIT_TEST(testShiftNegativeWithinBounds);
     CPPUNIT_TEST(testShiftZero);
+    CPPUNIT_TEST(testShiftOperator);
     CPPUNIT_TEST(testShiftBeyondEnd);
     CPPUNIT_TEST(testShiftBeforeStart);
     CPPUNIT_TEST(testShiftExactlyToEnd);
@@ -158,20 +159,36 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(16), bs.remainingBits());
     }
 
+    void testShiftOperator()
+    {
+        std::vector<uint8_t> data = {0xAA, 0xBB, 0xCC};
+        BitStream bs(data);
+        bs << 8;
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(0xBB), bs.data(8));
+    }
+
     void testShiftBeyondEnd()
     {
-        std::vector<uint8_t> data = {0x01, 0x02};
+        std::vector<uint8_t> data = {0xAB, 0xCD, 0xEF};
         BitStream bs(data);
+        bs.shift(8);
+        const std::size_t remaining = bs.remainingBits();
+        const uint32_t current = bs.data(8);
         bs.shift(100); // Beyond end
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(16), bs.remainingBits()); // Should remain unchanged
+        CPPUNIT_ASSERT_EQUAL(remaining, bs.remainingBits());
+        CPPUNIT_ASSERT_EQUAL(current, bs.data(8));
     }
 
     void testShiftBeforeStart()
     {
-        std::vector<uint8_t> data = {0x01, 0x02};
+        std::vector<uint8_t> data = {0xAB, 0xCD, 0xEF};
         BitStream bs(data);
+        bs.shift(8);
+        const std::size_t remaining = bs.remainingBits();
+        const uint32_t current = bs.data(8);
         bs.shift(-10); // Before start
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(16), bs.remainingBits()); // Should remain unchanged
+        CPPUNIT_ASSERT_EQUAL(remaining, bs.remainingBits());
+        CPPUNIT_ASSERT_EQUAL(current, bs.data(8));
     }
 
     void testShiftExactlyToEnd()
@@ -513,10 +530,14 @@ protected:
 
     void testSetOffsetBeyondEnd()
     {
-        std::vector<uint8_t> data = {0x01, 0x02};
+        std::vector<uint8_t> data = {0xAA, 0xBB, 0xCC};
         BitStream bs(data);
+        bs.setOffset(8);
+        const std::size_t remaining = bs.remainingBits();
+        const uint32_t current = bs.data(8);
         bs.setOffset(100);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(16), bs.remainingBits()); // Should remain unchanged
+        CPPUNIT_ASSERT_EQUAL(remaining, bs.remainingBits());
+        CPPUNIT_ASSERT_EQUAL(current, bs.data(8));
     }
 
     void testSetOffsetByteAligned()
@@ -556,6 +577,8 @@ protected:
         bs.setData(empty);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bs.size());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bs.length());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), bs.remainingBits());
+        CPPUNIT_ASSERT_THROW(bs.data(1), InvalidArgument);
     }
 };
 

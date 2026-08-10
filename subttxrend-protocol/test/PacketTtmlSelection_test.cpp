@@ -20,6 +20,12 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <cstdint>
+#include <memory>
+#include <tuple>
+#include <utility>
+#include <vector>
+
 #include "PacketTtmlSelection.hpp"
 
 using subttxrend::common::DataBuffer;
@@ -92,10 +98,10 @@ CPPUNIT_TEST_SUITE( PacketTtmlSelectionTest );
     CPPUNIT_TEST(testBufferReaderIntegrationPayloadExtraction);
     CPPUNIT_TEST(testBufferReaderIntegrationCompleteRead);
     CPPUNIT_TEST(testPolymorphismGetTypeVirtual);
-    CPPUNIT_TEST(testPolymorphismParseVirtual);
-    CPPUNIT_TEST(testPolymorphismIsValidVirtual);
+    CPPUNIT_TEST(testParseViaBasePointer);
+    CPPUNIT_TEST(testIsValidViaBasePointer);
     CPPUNIT_TEST(testPolymorphismChannelSpecificBase);
-    CPPUNIT_TEST(testPolymorphismGettersVirtual);
+    CPPUNIT_TEST(testGettersViaBasePointers);
     CPPUNIT_TEST(testStateConsistencyAcrossGetters);
     CPPUNIT_TEST(testStateConsistencyMultipleCalls);
     CPPUNIT_TEST(testStateConsistencyFailureToSuccess);
@@ -1071,9 +1077,9 @@ public:
         CPPUNIT_ASSERT(derivedPacket.getType() == Packet::Type::TTML_SELECTION);
     }
 
-    void testPolymorphismParseVirtual()
+    void testParseViaBasePointer()
     {
-        // Test virtual parse() through base class pointer
+        // Test parse() through base class pointer
         auto packetData = createValidPacket(0x123, 0x456, 1920, 1080);
 
         PacketTtmlSelection derivedPacket;
@@ -1093,9 +1099,9 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1080), derivedPacket.getRelatedVideoHeight());
     }
 
-    void testPolymorphismIsValidVirtual()
+    void testIsValidViaBasePointer()
     {
-        // Test isValid() state consistency through polymorphic interface
+        // Test isValid() state consistency through base class pointer
         PacketTtmlSelection derivedPacket;
         Packet* basePtr = &derivedPacket;
 
@@ -1126,9 +1132,9 @@ public:
         CPPUNIT_ASSERT(channelPtr->getType() == Packet::Type::TTML_SELECTION);
     }
 
-    void testPolymorphismGettersVirtual()
+    void testGettersViaBasePointers()
     {
-        // Test getter methods through polymorphic base class pointers
+        // Test getter methods through base class pointers
         PacketTtmlSelection derivedPacket;
         Packet* basePtr = &derivedPacket;
         PacketChannelSpecific* channelPtr = &derivedPacket;
@@ -1240,6 +1246,9 @@ public:
 
         CPPUNIT_ASSERT(packet.parse(std::move(invalidBuffer)) == false);
         CPPUNIT_ASSERT(packet.isValid() == false);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x111), packet.getChannelId());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1920), packet.getRelatedVideoWidth());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1080), packet.getRelatedVideoHeight());
     }
 
     void testErrorRecoverySequentialParsing()
@@ -1531,9 +1540,8 @@ public:
         corrupted[10] = 0xFF; // Corrupt a byte
         corrupted[15] = 0xAA;
         DataBufferPtr buffer2 = std::make_unique<DataBuffer>(corrupted.begin(), corrupted.end());
-        // Parsing may succeed depending on what was corrupted; just verify it handles gracefully
-        bool parseResult2 = packet.parse(std::move(buffer2));
-        // Either succeeds with corrupted data or fails gracefully
+        CPPUNIT_ASSERT(packet.parse(std::move(buffer2)) == false);
+        CPPUNIT_ASSERT(packet.isValid() == false);
 
         // Scenario 3: Truncated packet (incomplete transmission)
         std::uint8_t truncated[] = {

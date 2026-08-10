@@ -21,7 +21,6 @@
 #include "ScteOutliner.hpp"
 #include "ScteSimpleBitmap.hpp"
 #include <vector>
-#include <cstring>
 #include <algorithm>
 
 using namespace subttxrend::scte;
@@ -101,12 +100,6 @@ protected:
         return std::count(bytemap.begin(), bytemap.end(), value);
     }
 
-    // Helper function to verify pixel is within bounds
-    bool isPixelInBounds(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
-    {
-        return x < width && y < height;
-    }
-
     void testConstructorWithValidParameters()
     {
         std::vector<uint8_t> bytemap = createBytemap(10, 10);
@@ -148,9 +141,10 @@ protected:
         outliner.setRange(tl, br);
         outliner.outline(1, COLOR_OUTLINE);
 
-        // Should create outline around character pixel
-        uint32_t outlineCount = countPixels(bytemap, COLOR_OUTLINE);
-        CPPUNIT_ASSERT(outlineCount > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 4, 5));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 6, 5));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 5, 4));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 5, 6));
     }
 
     void testSetRangeWithSingleRow()
@@ -261,6 +255,10 @@ protected:
 
         // Outline should be created
         CPPUNIT_ASSERT(outlineCount > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 3, 5));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 7, 5));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 5, 3));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 5, 7));
 
         // Character pixel should remain
         CPPUNIT_ASSERT_EQUAL(characterCountBefore, characterCountAfter);
@@ -282,6 +280,9 @@ protected:
 
         // Outline should be created around all character pixels
         CPPUNIT_ASSERT(outlineCount > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 20, 5, 3));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 20, 15, 13));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 20, 8, 10));
 
         // All 3 character pixels should remain
         CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(3), characterCount);
@@ -364,9 +365,9 @@ protected:
         // Character pixel should remain
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_CHARACTER), getBytemapPixel(bytemap, 10, 0, 0));
 
-        // Some outline should be drawn (only in valid quadrants)
-        uint32_t outlineCount = countPixels(bytemap, COLOR_OUTLINE);
-        CPPUNIT_ASSERT(outlineCount > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 1, 0));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 0, 1));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 1, 1));
     }
 
     void testOutlineAtBottomRightCorner()
@@ -383,9 +384,9 @@ protected:
         // Character pixel should remain
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_CHARACTER), getBytemapPixel(bytemap, 10, 9, 9));
 
-        // Some outline should be drawn
-        uint32_t outlineCount = countPixels(bytemap, COLOR_OUTLINE);
-        CPPUNIT_ASSERT(outlineCount > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 8, 9));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 9, 8));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 8, 8));
     }
 
     void testOutlineAtTopEdge()
@@ -397,9 +398,9 @@ protected:
         outliner.outline(2, COLOR_OUTLINE);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_CHARACTER), getBytemapPixel(bytemap, 10, 5, 0));
-
-        uint32_t outlineCount = countPixels(bytemap, COLOR_OUTLINE);
-        CPPUNIT_ASSERT(outlineCount > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 4, 0));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 6, 0));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 5, 1));
     }
 
     void testOutlineAtBottomEdge()
@@ -411,9 +412,9 @@ protected:
         outliner.outline(2, COLOR_OUTLINE);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_CHARACTER), getBytemapPixel(bytemap, 10, 5, 9));
-
-        uint32_t outlineCount = countPixels(bytemap, COLOR_OUTLINE);
-        CPPUNIT_ASSERT(outlineCount > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 4, 9));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 6, 9));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 5, 8));
     }
 
     void testOutlineAtLeftEdge()
@@ -425,9 +426,9 @@ protected:
         outliner.outline(2, COLOR_OUTLINE);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_CHARACTER), getBytemapPixel(bytemap, 10, 0, 5));
-
-        uint32_t outlineCount = countPixels(bytemap, COLOR_OUTLINE);
-        CPPUNIT_ASSERT(outlineCount > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 0, 4));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 0, 6));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 1, 5));
     }
 
     void testOutlineAtRightEdge()
@@ -439,9 +440,9 @@ protected:
         outliner.outline(2, COLOR_OUTLINE);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_CHARACTER), getBytemapPixel(bytemap, 10, 9, 5));
-
-        uint32_t outlineCount = countPixels(bytemap, COLOR_OUTLINE);
-        CPPUNIT_ASSERT(outlineCount > 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 9, 4));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 9, 6));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(COLOR_OUTLINE), getBytemapPixel(bytemap, 10, 8, 5));
     }
 
     void testOutlineWithRestrictedRange()

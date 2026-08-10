@@ -49,7 +49,7 @@ CPPUNIT_TEST_SUITE( PacketSubtitleSelectionTest );
     CPPUNIT_TEST(testChannelIdBoundaryValues);
     CPPUNIT_TEST(testAuxIdBoundaryValues);
     CPPUNIT_TEST(testEndiannessPatternsComprehensive);
-    CPPUNIT_TEST(testTruncatedPacketVariations);
+    CPPUNIT_TEST(testShortPackets);
     CPPUNIT_TEST(testPacketReuse);
     CPPUNIT_TEST(testCorruptedHeaderFields);
     CPPUNIT_TEST(testEmptyBuffer);
@@ -538,7 +538,7 @@ public:
     }
     
     // Error handling and packet variations
-    void testTruncatedPacketVariations()
+    void testShortPackets()
     {
         // Test packet truncated at different points
         
@@ -640,8 +640,13 @@ public:
         DataBufferPtr buffer2 = std::make_unique<DataBuffer>(std::begin(packetData2), std::end(packetData2));
         CPPUNIT_ASSERT(packet.parse(std::move(buffer2)));
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(packet.getType() == Packet::Type::SUBTITLE_SELECTION);
+        CPPUNIT_ASSERT(packet.getSize() == 16);
         CPPUNIT_ASSERT(packet.getSubtitlesType() == PacketSubtitleSelection::SUBTITLES_TYPE_SCTE);
         CPPUNIT_ASSERT(packet.getCounter() == 0x44332211);
+        CPPUNIT_ASSERT(packet.getChannelId() == 0x08070605);
+        CPPUNIT_ASSERT(packet.getAuxId1() == 0x44332211);
+        CPPUNIT_ASSERT(packet.getAuxId2() == 0x88776655);
         
         // Third parse - invalid packet
         std::uint8_t packetData3[] =

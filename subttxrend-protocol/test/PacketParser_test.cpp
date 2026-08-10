@@ -19,13 +19,39 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#include "PacketParser.hpp"
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <vector>
+
 #include "Packet.hpp"
+#include "PacketData.hpp"
+#include "PacketParser.hpp"
+#include "PacketSetCCAttributes.hpp"
+#include "PacketSubtitleSelection.hpp"
+#include "PacketTeletextSelection.hpp"
+#include "PacketTimestamp.hpp"
+#include "PacketTtmlInfo.hpp"
+#include "PacketTtmlSelection.hpp"
+#include "PacketTtmlTimestamp.hpp"
+#include "PacketWebvttSelection.hpp"
+#include "PacketWebvttTimestamp.hpp"
 
 using subttxrend::common::DataBuffer;
 using subttxrend::common::DataBufferPtr;
 using subttxrend::protocol::Packet;
+using subttxrend::protocol::PacketChannelSpecific;
+using subttxrend::protocol::PacketData;
 using subttxrend::protocol::PacketParser;
+using subttxrend::protocol::PacketSetCCAttributes;
+using subttxrend::protocol::PacketSubtitleSelection;
+using subttxrend::protocol::PacketTeletextSelection;
+using subttxrend::protocol::PacketTimestamp;
+using subttxrend::protocol::PacketTtmlInfo;
+using subttxrend::protocol::PacketTtmlSelection;
+using subttxrend::protocol::PacketTtmlTimestamp;
+using subttxrend::protocol::PacketWebvttSelection;
+using subttxrend::protocol::PacketWebvttTimestamp;
 
 class PacketParserTest : public CppUnit::TestFixture
 {
@@ -131,22 +157,36 @@ public:
         // noop
     }
 
-    DataBufferPtr createValidPacket(Packet::Type type, std::uint32_t counter = 0x12345678)
+    void appendLeUint32(std::vector<std::uint8_t>& data, std::uint32_t value)
+    {
+        data.push_back(value & 0xFF);
+        data.push_back((value >> 8) & 0xFF);
+        data.push_back((value >> 16) & 0xFF);
+        data.push_back((value >> 24) & 0xFF);
+    }
+
+    void appendLeUint64(std::vector<std::uint8_t>& data, std::uint64_t value)
+    {
+        data.push_back(value & 0xFF);
+        data.push_back((value >> 8) & 0xFF);
+        data.push_back((value >> 16) & 0xFF);
+        data.push_back((value >> 24) & 0xFF);
+        data.push_back((value >> 32) & 0xFF);
+        data.push_back((value >> 40) & 0xFF);
+        data.push_back((value >> 48) & 0xFF);
+        data.push_back((value >> 56) & 0xFF);
+    }
+
+    DataBufferPtr createValidPacket(Packet::Type type, std::uint32_t counter = 0x12345678, std::uint32_t channelId = 0x00000001)
     {
         std::uint32_t typeValue = static_cast<std::uint32_t>(type);
         std::vector<std::uint8_t> data;
 
         // Type field (4 bytes, little endian)
-        data.push_back(typeValue & 0xFF);
-        data.push_back((typeValue >> 8) & 0xFF);
-        data.push_back((typeValue >> 16) & 0xFF);
-        data.push_back((typeValue >> 24) & 0xFF);
+        appendLeUint32(data, typeValue);
 
         // Counter field (4 bytes, little endian)
-        data.push_back(counter & 0xFF);
-        data.push_back((counter >> 8) & 0xFF);
-        data.push_back((counter >> 16) & 0xFF);
-        data.push_back((counter >> 24) & 0xFF);
+        appendLeUint32(data, counter);
 
         // Size field depends on packet type
         std::uint32_t dataSize = 0;
@@ -157,16 +197,8 @@ public:
             case Packet::Type::PES_DATA:
                 // PES_DATA: channel ID (4) + channel type (4) + minimal data (1)
                 dataSize = 9;
-                // Channel ID
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // Channel type
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
+                appendLeUint32(payloadData, channelId);
+                appendLeUint32(payloadData, 0x00000001);
                 // Minimal data
                 payloadData.push_back(0xAA);
                 break;
@@ -174,26 +206,10 @@ public:
             case Packet::Type::CC_DATA:
                 // CC_DATA: channel ID (4) + channel type (4) + PTS presence (4) + PTS (4) + minimal data (1)
                 dataSize = 17;
-                // Channel ID
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // Channel type
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // PTS presence
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // PTS
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
+                appendLeUint32(payloadData, channelId);
+                appendLeUint32(payloadData, 0x00000001);
+                appendLeUint32(payloadData, 0x00000000);
+                appendLeUint32(payloadData, 0x00000000);
                 // Minimal data
                 payloadData.push_back(0xAA);
                 break;
@@ -202,138 +218,76 @@ public:
             case Packet::Type::WEBVTT_DATA:
                 // TTML_DATA/WEBVTT_DATA: channel ID (4) + display offset (8) + minimal data (1)
                 dataSize = 13;
-                // Channel ID
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // Display offset (8 bytes)
-                for (int i = 0; i < 8; i++)
-                    payloadData.push_back(0x00);
+                appendLeUint32(payloadData, channelId);
+                appendLeUint64(payloadData, 0);
                 // Minimal data
                 payloadData.push_back(0xAA);
                 break;
 
             case Packet::Type::TIMESTAMP:
-            case Packet::Type::TTML_TIMESTAMP:
-            case Packet::Type::WEBVTT_TIMESTAMP:
                 // Timestamp packets: timestamp (8 bytes) + STC (4 bytes)
                 dataSize = 12;
-                // Timestamp (8 bytes)
-                for (int i = 0; i < 8; i++) payloadData.push_back(0x11 + i);
-                // STC (4 bytes)
-                for (int i = 0; i < 4; i++) payloadData.push_back(0x22 + i);
+                appendLeUint64(payloadData, 0x1817161514131211ULL);
+                appendLeUint32(payloadData, 0x25242322);
+                break;
+
+            case Packet::Type::TTML_TIMESTAMP:
+            case Packet::Type::WEBVTT_TIMESTAMP:
+                // Channel-specific timestamp packets: channel ID (4) + timestamp (8 bytes)
+                dataSize = 12;
+                appendLeUint32(payloadData, channelId);
+                appendLeUint64(payloadData, 0x1817161514131211ULL);
                 break;
 
             case Packet::Type::RESET_CHANNEL:
                 // Reset channel: channel ID (4 bytes)
                 dataSize = 4;
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
+                appendLeUint32(payloadData, channelId);
                 break;
 
             case Packet::Type::SUBTITLE_SELECTION:
                 // SUBTITLE_SELECTION: channel ID (4) + subtitlesType (4) + auxId1 (4) + auxId2 (4)
                 dataSize = 16;
-                // Channel ID
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // subtitlesType
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // auxId1
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // auxId2
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
+                appendLeUint32(payloadData, channelId);
+                appendLeUint32(payloadData, 0x00000001);
+                appendLeUint32(payloadData, 0x00000000);
+                appendLeUint32(payloadData, 0x00000000);
                 break;
 
             case Packet::Type::TELETEXT_SELECTION:
                 // Teletext selection: channel ID + magazine + page (12 bytes)
                 dataSize = 12;
-                // Channel ID
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // Magazine
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // Page
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
+                appendLeUint32(payloadData, channelId);
+                appendLeUint32(payloadData, 0x00000001);
+                appendLeUint32(payloadData, 0x00000000);
                 break;
 
             case Packet::Type::TTML_SELECTION:
             case Packet::Type::WEBVTT_SELECTION:
                 // TTML/WebVTT selection: channel ID + width + height
                 dataSize = 12;
-                // Channel ID
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // Width
-                payloadData.push_back(0x80);
-                payloadData.push_back(0x07);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // Height
-                payloadData.push_back(0x38);
-                payloadData.push_back(0x04);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
+                appendLeUint32(payloadData, channelId);
+                appendLeUint32(payloadData, 0x00000780);
+                appendLeUint32(payloadData, 0x00000438);
                 break;
 
             case Packet::Type::TTML_INFO:
-                // TTML info: channel ID + 4 additional fields (each 4 bytes)
-                dataSize = 20;
-                // Channel ID
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // Additional fields (4 x 4 bytes)
-                for (int i = 0; i < 16; i++) payloadData.push_back(0x00);
+                // TTML info: channel ID + content type + space + subtitle info
+                dataSize = 15;
+                appendLeUint32(payloadData, channelId);
+                payloadData.insert(payloadData.end(), {'v', 'o', 'd', ' ', 'e', 'n', 'g', ' ', 'n', 'r', 'm'});
                 break;
 
             case Packet::Type::SET_CC_ATTRIBUTES:
                 // CC attributes: channel ID + ccType + attribType + 14 attributes (each 4 bytes)
                 // Total = 4 + 4 + 4 + (14 * 4) = 68
                 dataSize = 68;
-                // Channel ID (4 bytes)
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // ccType (4 bytes)
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                // attribType bitmask (enable all 14 attributes) 0x00003FFF little-endian
-                payloadData.push_back(0xFF); // low byte
-                payloadData.push_back(0x3F); // next byte
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
+                appendLeUint32(payloadData, channelId);
+                appendLeUint32(payloadData, 0x00000001);
+                appendLeUint32(payloadData, 0x00003FFF);
                 // 14 attributes (each 4 bytes -> 56 bytes total)
-                for (int i = 0; i < 56; i++)
-                    payloadData.push_back(0x00);
+                for (std::uint32_t i = 1; i <= 14; i++)
+                    appendLeUint32(payloadData, i);
                 break;
 
             case Packet::Type::RESET_ALL:
@@ -348,11 +302,7 @@ public:
             case Packet::Type::FLUSH:
                 // Control packets with channel ID only (extends PacketChannelSpecific)
                 dataSize = 4;
-                // Channel ID
-                payloadData.push_back(0x01);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
-                payloadData.push_back(0x00);
+                appendLeUint32(payloadData, channelId);
                 break;
 
             default:
@@ -361,10 +311,7 @@ public:
         }
 
         // Size field (4 bytes, little endian)
-        data.push_back(dataSize & 0xFF);
-        data.push_back((dataSize >> 8) & 0xFF);
-        data.push_back((dataSize >> 16) & 0xFF);
-        data.push_back((dataSize >> 24) & 0xFF);
+        appendLeUint32(data, dataSize);
 
         // Payload data
         data.insert(data.end(), payloadData.begin(), payloadData.end());
@@ -392,10 +339,16 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::PES_DATA, 0x11223344);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketData* dataPacket = dynamic_cast<const PacketData*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(dataPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::PES_DATA);
         CPPUNIT_ASSERT(packet.getCounter() == 0x11223344);
+        CPPUNIT_ASSERT(dataPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(dataPacket->getChannelType() == 1);
+        CPPUNIT_ASSERT(dataPacket->getDataSize() == 1);
+        CPPUNIT_ASSERT(static_cast<unsigned char>(dataPacket->getData()[0]) == 0xAA);
     }
 
     void testParseValidTimestampPacket()
@@ -404,10 +357,14 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::TIMESTAMP, 0xAABBCCDD);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketTimestamp* timestampPacket = dynamic_cast<const PacketTimestamp*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(timestampPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::TIMESTAMP);
         CPPUNIT_ASSERT(packet.getCounter() == 0xAABBCCDD);
+        CPPUNIT_ASSERT(timestampPacket->getTimestamp() == 0x1817161514131211ULL);
+        CPPUNIT_ASSERT(timestampPacket->getStc() == 0x25242322);
     }
 
     void testParseValidResetAllPacket()
@@ -428,10 +385,13 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::RESET_CHANNEL, 0x12345678);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketChannelSpecific* channelPacket = dynamic_cast<const PacketChannelSpecific*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(channelPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::RESET_CHANNEL);
         CPPUNIT_ASSERT(packet.getCounter() == 0x12345678);
+        CPPUNIT_ASSERT(channelPacket->getChannelId() == 1);
     }
 
     void testParseValidSubtitleSelectionPacket()
@@ -440,10 +400,16 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::SUBTITLE_SELECTION, 0x11112222);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketSubtitleSelection* selectionPacket = dynamic_cast<const PacketSubtitleSelection*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(selectionPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::SUBTITLE_SELECTION);
         CPPUNIT_ASSERT(packet.getCounter() == 0x11112222);
+        CPPUNIT_ASSERT(selectionPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(selectionPacket->getSubtitlesType() == 1);
+        CPPUNIT_ASSERT(selectionPacket->getAuxId1() == 0);
+        CPPUNIT_ASSERT(selectionPacket->getAuxId2() == 0);
     }
 
     void testParseValidTeletextSelectionPacket()
@@ -452,10 +418,15 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::TELETEXT_SELECTION, 0x33334444);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketTeletextSelection* selectionPacket = dynamic_cast<const PacketTeletextSelection*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(selectionPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::TELETEXT_SELECTION);
         CPPUNIT_ASSERT(packet.getCounter() == 0x33334444);
+        CPPUNIT_ASSERT(selectionPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(selectionPacket->getInitialMagazine() == 1);
+        CPPUNIT_ASSERT(selectionPacket->getInitialPage() == 0);
     }
 
     void testParseValidTtmlSelectionPacket()
@@ -464,10 +435,15 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::TTML_SELECTION, 0x55556666);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketTtmlSelection* selectionPacket = dynamic_cast<const PacketTtmlSelection*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(selectionPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::TTML_SELECTION);
         CPPUNIT_ASSERT(packet.getCounter() == 0x55556666);
+        CPPUNIT_ASSERT(selectionPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(selectionPacket->getRelatedVideoWidth() == 0x780);
+        CPPUNIT_ASSERT(selectionPacket->getRelatedVideoHeight() == 0x438);
     }
 
     void testParseValidTtmlDataPacket()
@@ -476,10 +452,15 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::TTML_DATA, 0x77778888);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketData* dataPacket = dynamic_cast<const PacketData*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(dataPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::TTML_DATA);
         CPPUNIT_ASSERT(packet.getCounter() == 0x77778888);
+        CPPUNIT_ASSERT(dataPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(dataPacket->getDisplayOffset() == 0);
+        CPPUNIT_ASSERT(dataPacket->getDataSize() == 1);
     }
 
     void testParseValidTtmlTimestampPacket()
@@ -488,10 +469,14 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::TTML_TIMESTAMP, 0x99990000);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketTtmlTimestamp* timestampPacket = dynamic_cast<const PacketTtmlTimestamp*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(timestampPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::TTML_TIMESTAMP);
         CPPUNIT_ASSERT(packet.getCounter() == 0x99990000);
+        CPPUNIT_ASSERT(timestampPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(timestampPacket->getTimestamp() == 0x1817161514131211ULL);
     }
 
     void testParseValidCcDataPacket()
@@ -500,10 +485,15 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::CC_DATA, 0xAAAABBBB);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketData* dataPacket = dynamic_cast<const PacketData*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(dataPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::CC_DATA);
         CPPUNIT_ASSERT(packet.getCounter() == 0xAAAABBBB);
+        CPPUNIT_ASSERT(dataPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(dataPacket->getChannelType() == 1);
+        CPPUNIT_ASSERT(dataPacket->getDataSize() == 1);
     }
 
     void testParseValidPausePacket()
@@ -560,10 +550,15 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::WEBVTT_SELECTION, 0x33330000);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketWebvttSelection* selectionPacket = dynamic_cast<const PacketWebvttSelection*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(selectionPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::WEBVTT_SELECTION);
         CPPUNIT_ASSERT(packet.getCounter() == 0x33330000);
+        CPPUNIT_ASSERT(selectionPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(selectionPacket->getRelatedVideoWidth() == 0x780);
+        CPPUNIT_ASSERT(selectionPacket->getRelatedVideoHeight() == 0x438);
     }
 
     void testParseValidWebvttDataPacket()
@@ -572,10 +567,15 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::WEBVTT_DATA, 0x44440000);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketData* dataPacket = dynamic_cast<const PacketData*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(dataPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::WEBVTT_DATA);
         CPPUNIT_ASSERT(packet.getCounter() == 0x44440000);
+        CPPUNIT_ASSERT(dataPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(dataPacket->getDisplayOffset() == 0);
+        CPPUNIT_ASSERT(dataPacket->getDataSize() == 1);
     }
 
     void testParseValidWebvttTimestampPacket()
@@ -584,10 +584,14 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::WEBVTT_TIMESTAMP, 0x55550000);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketWebvttTimestamp* timestampPacket = dynamic_cast<const PacketWebvttTimestamp*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(timestampPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::WEBVTT_TIMESTAMP);
         CPPUNIT_ASSERT(packet.getCounter() == 0x55550000);
+        CPPUNIT_ASSERT(timestampPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(timestampPacket->getTimestamp() == 0x1817161514131211ULL);
     }
 
     void testParseValidSetCCAttributesPacket()
@@ -596,10 +600,18 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::SET_CC_ATTRIBUTES, 0x66660000);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketSetCCAttributes* attributesPacket = dynamic_cast<const PacketSetCCAttributes*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(attributesPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::SET_CC_ATTRIBUTES);
         CPPUNIT_ASSERT(packet.getCounter() == 0x66660000);
+        CPPUNIT_ASSERT(attributesPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(attributesPacket->getAttributes().size() == 14);
+        CPPUNIT_ASSERT(attributesPacket->containsAttribute(PacketSetCCAttributes::CcAttribType::FONT_COLOR));
+        CPPUNIT_ASSERT(attributesPacket->containsAttribute(PacketSetCCAttributes::CcAttribType::EDGE_COLOR));
+        CPPUNIT_ASSERT(attributesPacket->getAttributeValue(PacketSetCCAttributes::CcAttribType::FONT_COLOR) == 1);
+        CPPUNIT_ASSERT(attributesPacket->getAttributeValue(PacketSetCCAttributes::CcAttribType::EDGE_COLOR) == 14);
     }
 
     void testParseValidTtmlInfoPacket()
@@ -608,10 +620,15 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::TTML_INFO, 0x77770000);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketTtmlInfo* infoPacket = dynamic_cast<const PacketTtmlInfo*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(infoPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::TTML_INFO);
         CPPUNIT_ASSERT(packet.getCounter() == 0x77770000);
+        CPPUNIT_ASSERT(infoPacket->getChannelId() == 1);
+        CPPUNIT_ASSERT(infoPacket->getContentType() == "vod");
+        CPPUNIT_ASSERT(infoPacket->getSubtitleInfo() == "eng nrm");
     }
 
     void testParseValidFlushPacket()
@@ -620,10 +637,13 @@ public:
         DataBufferPtr buffer = createValidPacket(Packet::Type::FLUSH, 0x88880000);
 
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketChannelSpecific* channelPacket = dynamic_cast<const PacketChannelSpecific*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(channelPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::FLUSH);
         CPPUNIT_ASSERT(packet.getCounter() == 0x88880000);
+        CPPUNIT_ASSERT(channelPacket->getChannelId() == 1);
     }
 
     void testParseUnknownPacketType()
@@ -1012,6 +1032,8 @@ public:
         CPPUNIT_ASSERT(packet1.isValid());
         CPPUNIT_ASSERT(packet1.getType() == Packet::Type::PAUSE);
         CPPUNIT_ASSERT(packet1.getCounter() == 0x11111111);
+        const Packet::Type packet1Type = packet1.getType();
+        const std::uint32_t packet1Counter = packet1.getCounter();
 
         // Parse second packet with different type
         DataBufferPtr buffer2 = createValidPacket(Packet::Type::RESUME, 0x22222222);
@@ -1021,8 +1043,8 @@ public:
         CPPUNIT_ASSERT(packet2.getCounter() == 0x22222222);
 
         // Packets should be independent
-        CPPUNIT_ASSERT(packet1.getType() != packet2.getType());
-        CPPUNIT_ASSERT(packet1.getCounter() != packet2.getCounter());
+        CPPUNIT_ASSERT(packet1Type != packet2.getType());
+        CPPUNIT_ASSERT(packet1Counter != packet2.getCounter());
     }
 
     void testPacketReusePattern()
@@ -1350,24 +1372,28 @@ public:
         PacketParser parser;
 
         // First selection packet
-        DataBufferPtr ch1_sel = createValidPacket(Packet::Type::SUBTITLE_SELECTION, 0x000000A0);
+        DataBufferPtr ch1_sel = createValidPacket(Packet::Type::SUBTITLE_SELECTION, 0x000000A0, 1);
         const Packet& p1 = parser.parse(std::move(ch1_sel));
         CPPUNIT_ASSERT(p1.isValid());
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(p1).getChannelId() == 1);
 
         // Second selection packet
-        DataBufferPtr ch2_sel = createValidPacket(Packet::Type::SUBTITLE_SELECTION, 0x000000A1);
+        DataBufferPtr ch2_sel = createValidPacket(Packet::Type::SUBTITLE_SELECTION, 0x000000A1, 2);
         const Packet& p2 = parser.parse(std::move(ch2_sel));
         CPPUNIT_ASSERT(p2.isValid());
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(p2).getChannelId() == 2);
 
         // First data packet
-        DataBufferPtr ch1_data = createValidPacket(Packet::Type::PES_DATA, 0x000000A2);
+        DataBufferPtr ch1_data = createValidPacket(Packet::Type::PES_DATA, 0x000000A2, 1);
         const Packet& p3 = parser.parse(std::move(ch1_data));
         CPPUNIT_ASSERT(p3.isValid());
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(p3).getChannelId() == 1);
 
         // Second data packet
-        DataBufferPtr ch2_data = createValidPacket(Packet::Type::PES_DATA, 0x000000A3);
+        DataBufferPtr ch2_data = createValidPacket(Packet::Type::PES_DATA, 0x000000A3, 2);
         const Packet& p4 = parser.parse(std::move(ch2_data));
         CPPUNIT_ASSERT(p4.isValid());
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(p4).getChannelId() == 2);
     }
 
     // Large data packet
@@ -1605,22 +1631,22 @@ public:
         std::uint32_t counter = 0;
 
         // Initial selection
-        DataBufferPtr ch1_sel = createValidPacket(Packet::Type::SUBTITLE_SELECTION, counter++);
-        CPPUNIT_ASSERT(parser.parse(std::move(ch1_sel)).isValid());
+        DataBufferPtr ch1_sel = createValidPacket(Packet::Type::SUBTITLE_SELECTION, counter++, 1);
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(parser.parse(std::move(ch1_sel))).getChannelId() == 1);
 
-        DataBufferPtr ch1_data = createValidPacket(Packet::Type::PES_DATA, counter++);
-        CPPUNIT_ASSERT(parser.parse(std::move(ch1_data)).isValid());
+        DataBufferPtr ch1_data = createValidPacket(Packet::Type::PES_DATA, counter++, 1);
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(parser.parse(std::move(ch1_data))).getChannelId() == 1);
 
         // Reset packet
-        DataBufferPtr ch1_reset = createValidPacket(Packet::Type::RESET_CHANNEL, counter++);
-        CPPUNIT_ASSERT(parser.parse(std::move(ch1_reset)).isValid());
+        DataBufferPtr ch1_reset = createValidPacket(Packet::Type::RESET_CHANNEL, counter++, 1);
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(parser.parse(std::move(ch1_reset))).getChannelId() == 1);
 
         // Second selection
-        DataBufferPtr ch2_sel = createValidPacket(Packet::Type::SUBTITLE_SELECTION, counter++);
-        CPPUNIT_ASSERT(parser.parse(std::move(ch2_sel)).isValid());
+        DataBufferPtr ch2_sel = createValidPacket(Packet::Type::SUBTITLE_SELECTION, counter++, 2);
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(parser.parse(std::move(ch2_sel))).getChannelId() == 2);
 
-        DataBufferPtr ch2_data = createValidPacket(Packet::Type::PES_DATA, counter++);
-        CPPUNIT_ASSERT(parser.parse(std::move(ch2_data)).isValid());
+        DataBufferPtr ch2_data = createValidPacket(Packet::Type::PES_DATA, counter++, 2);
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(parser.parse(std::move(ch2_data))).getChannelId() == 2);
     }
 
     // Error recovery in stream
@@ -1896,27 +1922,30 @@ public:
         std::uint32_t counter = 1100;
 
         // Channel 1 data
-        DataBufferPtr buf1 = createValidPacket(Packet::Type::PES_DATA, counter++);
+        DataBufferPtr buf1 = createValidPacket(Packet::Type::PES_DATA, counter++, 1);
         parser.parse(std::move(buf1));
 
         // Channel 2 data
-        DataBufferPtr buf2 = createValidPacket(Packet::Type::PES_DATA, counter++);
+        DataBufferPtr buf2 = createValidPacket(Packet::Type::PES_DATA, counter++, 2);
         parser.parse(std::move(buf2));
 
         // Reset channel 1
-        DataBufferPtr buf3 = createValidPacket(Packet::Type::RESET_CHANNEL, counter++);
+        DataBufferPtr buf3 = createValidPacket(Packet::Type::RESET_CHANNEL, counter++, 1);
         const Packet& pkt3 = parser.parse(std::move(buf3));
         CPPUNIT_ASSERT(pkt3.isValid());
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(pkt3).getChannelId() == 1);
 
         // Channel 2 continues
-        DataBufferPtr buf4 = createValidPacket(Packet::Type::PES_DATA, counter++);
+        DataBufferPtr buf4 = createValidPacket(Packet::Type::PES_DATA, counter++, 2);
         const Packet& pkt4 = parser.parse(std::move(buf4));
         CPPUNIT_ASSERT(pkt4.isValid());
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(pkt4).getChannelId() == 2);
 
         // New data on channel 1
-        DataBufferPtr buf5 = createValidPacket(Packet::Type::PES_DATA, counter++);
+        DataBufferPtr buf5 = createValidPacket(Packet::Type::PES_DATA, counter++, 1);
         const Packet& pkt5 = parser.parse(std::move(buf5));
         CPPUNIT_ASSERT(pkt5.isValid());
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(pkt5).getChannelId() == 1);
     }
 
     void testInterleavedPacketStream()
@@ -1929,10 +1958,12 @@ public:
         {
             for (int packetIndex = 0; packetIndex < 3; packetIndex++)
             {
-                DataBufferPtr buf = createValidPacket(Packet::Type::PES_DATA, counter++);
+                std::uint32_t channelId = (packetIndex % 2) + 1;
+                DataBufferPtr buf = createValidPacket(Packet::Type::PES_DATA, counter++, channelId);
                 const Packet& pkt = parser.parse(std::move(buf));
                 CPPUNIT_ASSERT(pkt.isValid());
                 CPPUNIT_ASSERT(pkt.getType() == Packet::Type::PES_DATA);
+                CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(pkt).getChannelId() == channelId);
             }
         }
     }
@@ -1962,17 +1993,22 @@ public:
         data.push_back((maxSize >> 16) & 0xFF);
         data.push_back((maxSize >> 24) & 0xFF);
 
-        // Channel ID + type
-        for (int i = 0; i < 8; i++) data.push_back(0x02);
+        // Channel ID + display offset
+        appendLeUint32(data, 0x00000002);
+        appendLeUint64(data, 0);
 
         // Large payload
-        for (size_t i = 0; i < maxSize - 8; i++) data.push_back(0x54); // 'T'
+        for (size_t i = 0; i < maxSize - 12; i++) data.push_back(0x54); // 'T'
 
         DataBufferPtr buffer = std::make_unique<DataBuffer>(data.begin(), data.end());
         const Packet& packet = parser.parse(std::move(buffer));
+        const PacketData* dataPacket = dynamic_cast<const PacketData*>(&packet);
 
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(dataPacket != nullptr);
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::TTML_DATA);
+        CPPUNIT_ASSERT(dataPacket->getChannelId() == 2);
+        CPPUNIT_ASSERT(dataPacket->getDataSize() == (maxSize - 12));
     }
 
     void testContinuousStreamParsing()
@@ -2044,21 +2080,23 @@ public:
         std::uint32_t counter = 4100;
 
         // Multiple channels active
-        DataBufferPtr buf1 = createValidPacket(Packet::Type::PES_DATA, counter++);
+        DataBufferPtr buf1 = createValidPacket(Packet::Type::PES_DATA, counter++, 1);
         parser.parse(std::move(buf1));
 
-        DataBufferPtr buf2 = createValidPacket(Packet::Type::PES_DATA, counter++);
+        DataBufferPtr buf2 = createValidPacket(Packet::Type::PES_DATA, counter++, 2);
         parser.parse(std::move(buf2));
 
-        // Flush all
-        DataBufferPtr buf3 = createValidPacket(Packet::Type::FLUSH, counter++);
+        // Flush channel 1 while channel 2 remains active
+        DataBufferPtr buf3 = createValidPacket(Packet::Type::FLUSH, counter++, 1);
         const Packet& pkt3 = parser.parse(std::move(buf3));
         CPPUNIT_ASSERT(pkt3.isValid());
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(pkt3).getChannelId() == 1);
 
-        // Resume with new data
-        DataBufferPtr buf4 = createValidPacket(Packet::Type::PES_DATA, counter++);
+        // Channel 2 continues with new data
+        DataBufferPtr buf4 = createValidPacket(Packet::Type::PES_DATA, counter++, 2);
         const Packet& pkt4 = parser.parse(std::move(buf4));
         CPPUNIT_ASSERT(pkt4.isValid());
+        CPPUNIT_ASSERT(dynamic_cast<const PacketChannelSpecific&>(pkt4).getChannelId() == 2);
     }
 
     void testMultiFormatSession()

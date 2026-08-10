@@ -20,6 +20,14 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <tuple>
+#include <utility>
+#include <vector>
+
 #include "PacketWebvttSelection.hpp"
 
 using subttxrend::common::DataBuffer;
@@ -60,10 +68,10 @@ CPPUNIT_TEST_SUITE( PacketWebvttSelectionTest );
     CPPUNIT_TEST(testBadSizeMaxValue);
     CPPUNIT_TEST(testParseEmptyBuffer);
     CPPUNIT_TEST(testParseHeaderOnly);
-    CPPUNIT_TEST(testParseTruncatedAfterChannelId);
-    CPPUNIT_TEST(testParseTruncatedAfterWidth);
-    CPPUNIT_TEST(testParsePartialWidth);
-    CPPUNIT_TEST(testParsePartialHeight);
+    CPPUNIT_TEST(testShortPayloadAfterChannelId);
+    CPPUNIT_TEST(testShortPayloadAfterWidth);
+    CPPUNIT_TEST(testShortPayloadInWidth);
+    CPPUNIT_TEST(testShortPayloadInHeight);
     CPPUNIT_TEST(testParse23Bytes);
     CPPUNIT_TEST(testParse1Byte);
     CPPUNIT_TEST(testLittleEndianWidthExtraction);
@@ -74,6 +82,7 @@ CPPUNIT_TEST_SUITE( PacketWebvttSelectionTest );
     CPPUNIT_TEST(testLittleEndianHeightAlternatingPattern);
     CPPUNIT_TEST(testStateValidToValid);
     CPPUNIT_TEST(testStateValidToInvalid);
+    CPPUNIT_TEST(testStateAfterTypeFailure);
     CPPUNIT_TEST(testStateInvalidToValid);
     CPPUNIT_TEST(testStateMultipleValidParses);
     CPPUNIT_TEST(testStateAlternatingValidInvalid);
@@ -84,7 +93,7 @@ CPPUNIT_TEST_SUITE( PacketWebvttSelectionTest );
     CPPUNIT_TEST(testBaseClassChannelId);
     CPPUNIT_TEST(testBaseClassCounter);
     CPPUNIT_TEST(testBaseClassSize);
-    CPPUNIT_TEST(testBaseClassParseFailure);
+    CPPUNIT_TEST(testBaseClassShortChannelId);
     CPPUNIT_TEST(testBaseClassChannelIdBoundary);
     CPPUNIT_TEST(testBaseClassCounterBoundary);
     CPPUNIT_TEST(testBoundaryWidthZeroHeightMax);
@@ -109,7 +118,7 @@ CPPUNIT_TEST_SUITE( PacketWebvttSelectionTest );
     CPPUNIT_TEST(testEndToEndWorkflowSequentialParsing);
     CPPUNIT_TEST(testBufferReaderIntegrationHeaderExtraction);
     CPPUNIT_TEST(testBufferReaderIntegrationPayloadExtraction);
-    CPPUNIT_TEST(testBufferReaderIntegrationPartialData);
+    CPPUNIT_TEST(testBufferReaderIntegrationShortPayload);
     CPPUNIT_TEST(testBufferReaderIntegrationMultipleCalls);
     CPPUNIT_TEST(testBufferReaderIntegrationLargeStream);
     CPPUNIT_TEST(testPolymorphismAsPacket);
@@ -140,7 +149,7 @@ CPPUNIT_TEST_SUITE( PacketWebvttSelectionTest );
     CPPUNIT_TEST(testRealWorldDVBSubtitleStream);
     CPPUNIT_TEST(testRealWorldMobileRotation);
     CPPUNIT_TEST(testRealWorldHighFrequencyUpdates);
-    CPPUNIT_TEST(testRealWorldConcurrentChannels);
+    CPPUNIT_TEST(testInterleavedChannels);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -535,7 +544,7 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    void testParseTruncatedAfterChannelId()
+    void testShortPayloadAfterChannelId()
     {
         std::uint8_t packetData[] = {
             0x0F, 0x00, 0x00, 0x00, // type
@@ -551,7 +560,7 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    void testParseTruncatedAfterWidth()
+    void testShortPayloadAfterWidth()
     {
         std::uint8_t packetData[] = {
             0x0F, 0x00, 0x00, 0x00, // type
@@ -568,7 +577,7 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    void testParsePartialWidth()
+    void testShortPayloadInWidth()
     {
         std::uint8_t packetData[] = {
             0x0F, 0x00, 0x00, 0x00, // type
@@ -585,7 +594,7 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    void testParsePartialHeight()
+    void testShortPayloadInHeight()
     {
         std::uint8_t packetData[] = {
             0x0F, 0x00, 0x00, 0x00, // type
@@ -739,6 +748,27 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
+    void testStateAfterTypeFailure()
+    {
+        PacketWebvttSelection packet;
+
+        auto validData = createValidPacket(0x01020304, 0x11111111, 1920, 1080);
+        DataBufferPtr validBuffer = std::make_unique<DataBuffer>(validData.begin(), validData.end());
+        CPPUNIT_ASSERT(packet.parse(std::move(validBuffer)));
+
+        auto invalidData = createValidPacket(0xAABBCCDD, 0x22222222, 640, 480);
+        invalidData[0] = 0xFF;
+        DataBufferPtr invalidBuffer = std::make_unique<DataBuffer>(invalidData.begin(), invalidData.end());
+
+        CPPUNIT_ASSERT(!packet.parse(std::move(invalidBuffer)));
+        CPPUNIT_ASSERT(!packet.isValid());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x22222222), packet.getCounter());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x01020304), packet.getChannelId());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1920), packet.getRelatedVideoWidth());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(1080), packet.getRelatedVideoHeight());
+    }
+
     void testStateInvalidToValid()
     {
         PacketWebvttSelection packet;
@@ -884,7 +914,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), packet.getSize());
     }
 
-    void testBaseClassParseFailure()
+    void testBaseClassShortChannelId()
     {
         // Create packet with valid header but truncated channel ID
         std::uint8_t packetData[] = {
@@ -1300,7 +1330,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xCAFEBABE), packet.getRelatedVideoHeight());
     }
 
-    void testBufferReaderIntegrationPartialData()
+    void testBufferReaderIntegrationShortPayload()
     {
         // Test BufferReader handling of partial data
         std::uint8_t partialData[] = {
@@ -1873,11 +1903,16 @@ public:
 
         // Scenario 2: Corrupted packet (network error simulation)
         auto corrupted = createValidPacket(0x01, 0x200, 3840, 2160);
-        corrupted[14] = 0xFF; // Corrupt width byte
-        corrupted[18] = 0xAA; // Corrupt height byte
+        corrupted[14] = 0xFF; // Corrupt channelId byte
+        corrupted[18] = 0xAA; // Corrupt width byte
         DataBufferPtr buffer2 = std::make_unique<DataBuffer>(corrupted.begin(), corrupted.end());
         // Should parse successfully despite corruption (data still structurally valid)
         bool parseResult2 = packet.parse(std::move(buffer2));
+        CPPUNIT_ASSERT(parseResult2 == true);
+        CPPUNIT_ASSERT(packet.isValid() == true);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x00FF0001), packet.getChannelId());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x00AA0F00), packet.getRelatedVideoWidth());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(2160), packet.getRelatedVideoHeight());
 
         // Scenario 3: Truncated packet (incomplete transmission)
         std::uint8_t truncated[] = {
@@ -1997,9 +2032,9 @@ public:
         }
     }
 
-    void testRealWorldConcurrentChannels()
+    void testInterleavedChannels()
     {
-        // Test concurrent subtitle channels with interleaved packets
+        // Test interleaved subtitle channels with independent packet state
         std::vector<PacketWebvttSelection> channels(3);
         std::uint32_t baseWidth = 1920;
         std::uint32_t baseHeight = 1080;

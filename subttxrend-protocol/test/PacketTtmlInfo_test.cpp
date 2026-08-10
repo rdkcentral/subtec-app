@@ -347,8 +347,7 @@ public:
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.isValid());
         
-        // Invalid after failed parse
-        PacketTtmlInfo packet2;
+        // Invalid after failed parse on the same instance
         std::uint8_t invalidData[] = {
             0x13, 0x00, 0xFF, 0x00, // invalid type
             0x01, 0x23, 0x45, 0x67, // counter
@@ -358,8 +357,8 @@ public:
         };
         
         DataBufferPtr buffer2 = std::make_unique<DataBuffer>(std::begin(invalidData), std::end(invalidData));
-        CPPUNIT_ASSERT(!packet2.parse(std::move(buffer2)));
-        CPPUNIT_ASSERT(!packet2.isValid());
+        CPPUNIT_ASSERT(!packet.parse(std::move(buffer2)));
+        CPPUNIT_ASSERT(!packet.isValid());
     }
 
     void testParseMethodBasic()

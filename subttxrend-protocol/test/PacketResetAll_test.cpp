@@ -18,7 +18,10 @@
 *****************************************************************************/
 
 
+#include <cstdint>
 #include <cppunit/extensions/HelperMacros.h>
+#include <iterator>
+#include <memory>
 
 #include "Packet.hpp"
 #include "PacketResetAll.hpp"
@@ -33,7 +36,7 @@ class PacketResetAllTest : public CppUnit::TestFixture
 CPPUNIT_TEST_SUITE( PacketResetAllTest );
     CPPUNIT_TEST(testGood);
     CPPUNIT_TEST(testBadType);
-    CPPUNIT_TEST(testBadCounter);
+    CPPUNIT_TEST(testCounterAccepted);
     CPPUNIT_TEST(testBadSize);
     CPPUNIT_TEST(testConstructorInitialState);
     CPPUNIT_TEST(testGetTypeBasic);
@@ -100,7 +103,7 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    void testBadCounter()
+    void testCounterAccepted()
     {
         std::uint8_t packetData[] =
         {
@@ -116,6 +119,7 @@ public:
         // for reset all counter is not taken into account, packet is valid
         CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(packet.getCounter() == 0x00000100);
     }
 
     void testBadSize()

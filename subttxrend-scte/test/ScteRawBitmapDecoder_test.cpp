@@ -19,7 +19,6 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include "ScteRawBitmapDecoder.hpp"
-#include "ScteRawBitmap.hpp"
 #include "ScteExceptions.hpp"
 
 using namespace subttxrend::scte;
@@ -43,6 +42,11 @@ CPPUNIT_TEST_SUITE( ScteRawBitmapDecoderTest );
     CPPUNIT_TEST(testDecompressMixedPatterns);
     CPPUNIT_TEST(testDecompressMinimumSize);
     CPPUNIT_TEST(testDecompressEmptyData);
+    CPPUNIT_TEST(testDecompressTruncatedData);
+    CPPUNIT_TEST(testDecompressInvalidSteering);
+    CPPUNIT_TEST(testDecompress8OnZeroCount);
+    CPPUNIT_TEST(testDecompress64OffZeroCount);
+    CPPUNIT_TEST(testDecompress16OnZeroCount);
 
 CPPUNIT_TEST_SUITE_END();
 
@@ -112,6 +116,7 @@ protected:
         // Should return early, bitmap should remain uncompressed
         CPPUNIT_ASSERT_EQUAL(false, bitmap.isCompressed());
         CPPUNIT_ASSERT_EQUAL(data.size(), bitmap.getRawData().size());
+        CPPUNIT_ASSERT(data == bitmap.getRawData());
     }
 
     void testDecompressSetsFlagToFalse()
@@ -228,22 +233,23 @@ protected:
 
     void testDecompressMixedPatterns()
     {
-        // Use 64_off to fill entire 4-pixel bitmap
-        // Format: 01 XXXXXX where XXXXXX=off-count (or 0 => 64)
-        // To fill 4 false: 01 000100 => 0x44
-        std::vector<uint8_t> data = {0x44};
+        // 16_on(2), newline, 8_on(1) + 32_off(3)
+        std::vector<uint8_t> data = {0x24, 0x19, 0x18};
         RawBitmap bitmap(true, data.data(), data.size());
 
-        RawBitmapDecoder decoder(bitmap, 4, 1);
+        RawBitmapDecoder decoder(bitmap, 4, 2);
         decoder.decompress();
 
         const auto& result = bitmap.getRawData();
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), result.size());
-        // All should be false
-        for (size_t i = 0; i < 4; i++)
-        {
-            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), result[i]);
-        }
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(8), result.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(1), result[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(1), result[1]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), result[2]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), result[3]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(1), result[4]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), result[5]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), result[6]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), result[7]);
     }
 
     void testDecompressMinimumSize()
@@ -264,17 +270,98 @@ protected:
 
     void testDecompressEmptyData()
     {
-        // Use a minimal valid compressed stream that fills the bitmap completely.
-        // For 2x2 => 4 pixels: 64_off with count=4 => 01 000100 => 0x44
-        std::vector<uint8_t> data = {0x44};
-        RawBitmap bitmap(true, data.data(), data.size());
+        RawBitmap bitmap;
+        bitmap.setCompression(true);
 
         RawBitmapDecoder decoder(bitmap, 2, 2);
         decoder.decompress();
 
-        // Should complete (possibly with errors logged, but shouldn't crash)
         CPPUNIT_ASSERT_EQUAL(false, bitmap.isCompressed());
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), bitmap.getRawData().size());
+        CPPUNIT_ASSERT(bitmap.getRawData().empty());
+    }
+
+    void testDecompressTruncatedData()
+    {
+        // 16_on(2) followed by insufficient bits for the next steering sequence.
+        std::vector<uint8_t> data = {0x24};
+        RawBitmap bitmap(true, data.data(), data.size());
+
+        RawBitmapDecoder decoder(bitmap, 3, 1);
+        decoder.decompress();
+
+        const auto& result = bitmap.getRawData();
+        CPPUNIT_ASSERT_EQUAL(false, bitmap.isCompressed());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), result.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(1), result[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(1), result[1]);
+    }
+
+    void testDecompressInvalidSteering()
+    {
+        // Invalid steering op 0x2 followed by stream exhaustion.
+        std::vector<uint8_t> data = {0x10};
+        RawBitmap bitmap(true, data.data(), data.size());
+
+        RawBitmapDecoder decoder(bitmap, 1, 1);
+        decoder.decompress();
+
+        CPPUNIT_ASSERT_EQUAL(false, bitmap.isCompressed());
+        CPPUNIT_ASSERT(bitmap.getRawData().empty());
+    }
+
+    void testDecompress8OnZeroCount()
+    {
+        // 8_on(0=>8), 32_off(0=>32)
+        std::vector<uint8_t> data = {0x80, 0x00};
+        RawBitmap bitmap(true, data.data(), data.size());
+
+        RawBitmapDecoder decoder(bitmap, 40, 1);
+        decoder.decompress();
+
+        const auto& result = bitmap.getRawData();
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(40), result.size());
+        for (size_t i = 0; i < 8; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(1), result[i]);
+        }
+        for (size_t i = 8; i < 40; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), result[i]);
+        }
+    }
+
+    void testDecompress64OffZeroCount()
+    {
+        // 64_off(0=>64)
+        std::vector<uint8_t> data = {0x40};
+        RawBitmap bitmap(true, data.data(), data.size());
+
+        RawBitmapDecoder decoder(bitmap, 64, 1);
+        decoder.decompress();
+
+        const auto& result = bitmap.getRawData();
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(64), result.size());
+        for (size_t i = 0; i < 64; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), result[i]);
+        }
+    }
+
+    void testDecompress16OnZeroCount()
+    {
+        // 16_on(0=>16)
+        std::vector<uint8_t> data = {0x20};
+        RawBitmap bitmap(true, data.data(), data.size());
+
+        RawBitmapDecoder decoder(bitmap, 16, 1);
+        decoder.decompress();
+
+        const auto& result = bitmap.getRawData();
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(16), result.size());
+        for (size_t i = 0; i < 16; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(1), result[i]);
+        }
     }
 };
 

@@ -20,6 +20,8 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <stdexcept>
+
 #include "PacketSetCCAttributes.hpp"
 
 using subttxrend::common::DataBuffer;
@@ -36,10 +38,10 @@ CPPUNIT_TEST_SUITE( PacketSetCCAttributesTest );
     CPPUNIT_TEST(testBadSize67);
     CPPUNIT_TEST(testBadSize69);
     CPPUNIT_TEST(testBadSizeZero);
-    CPPUNIT_TEST(testTooShortAfterChannelId);
-    CPPUNIT_TEST(testTooShortAfterCcType);
-    CPPUNIT_TEST(testTooShortAfterAttribType);
-    CPPUNIT_TEST(testTooShort13Attributes);
+    CPPUNIT_TEST(testSizeMismatchAfterChannelId);
+    CPPUNIT_TEST(testSizeMismatchAfterCcType);
+    CPPUNIT_TEST(testSizeMismatchAfterAttribType);
+    CPPUNIT_TEST(testSizeMismatch13Attributes);
     CPPUNIT_TEST(testTooLong);
     CPPUNIT_TEST(testConstructorInitialState);
     CPPUNIT_TEST(testGetTypeBasic);
@@ -60,6 +62,7 @@ CPPUNIT_TEST_SUITE( PacketSetCCAttributesTest );
     CPPUNIT_TEST(testGetAttributeValueZero);
     CPPUNIT_TEST(testGetAttributeValueMax);
     CPPUNIT_TEST(testGetAttributeValueAll14);
+    CPPUNIT_TEST(testGetAttributeValueAbsent);
     CPPUNIT_TEST(testGetAttributesAllPresent);
     CPPUNIT_TEST(testGetAttributesNone);
     CPPUNIT_TEST(testGetAttributesPartial);
@@ -247,7 +250,7 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    void testTooShortAfterChannelId()
+    void testSizeMismatchAfterChannelId()
     {
         std::uint8_t packetData[] = {
             0x12, 0x00, 0x00, 0x00, // type
@@ -263,7 +266,7 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    void testTooShortAfterCcType()
+    void testSizeMismatchAfterCcType()
     {
         std::uint8_t packetData[] = {
             0x12, 0x00, 0x00, 0x00, // type
@@ -280,7 +283,7 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    void testTooShortAfterAttribType()
+    void testSizeMismatchAfterAttribType()
     {
         std::uint8_t packetData[] = {
             0x12, 0x00, 0x00, 0x00, // type
@@ -298,7 +301,7 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
-    void testTooShort13Attributes()
+    void testSizeMismatch13Attributes()
     {
         auto packetData = createValidPacket();
         // Remove last 4 bytes (one attribute value)
@@ -543,6 +546,16 @@ public:
         CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::BACKGROUND_COLOR));
         CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::FONT_OPACITY));
         CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::BACKGROUND_OPACITY));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::FONT_STYLE));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::FONT_SIZE));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::FONT_ITALIC));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::FONT_UNDERLINE));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::BORDER_TYPE));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::BORDER_COLOR));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::WIN_COLOR));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::WIN_OPACITY));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::EDGE_TYPE));
+        CPPUNIT_ASSERT(!packet.containsAttribute(PacketSetCCAttributes::CcAttribType::EDGE_COLOR));
     }
 
     void testContainsAttributeBeforeParse()
@@ -630,6 +643,37 @@ public:
                            packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::FONT_OPACITY));
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1300),
                            packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::BACKGROUND_OPACITY));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1400),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::FONT_STYLE));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1500),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::FONT_SIZE));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1600),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::FONT_ITALIC));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1700),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::FONT_UNDERLINE));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1800),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::BORDER_TYPE));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1900),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::BORDER_COLOR));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1A00),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::WIN_COLOR));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1B00),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::WIN_OPACITY));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1C00),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::EDGE_TYPE));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x1D00),
+                           packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::EDGE_COLOR));
+    }
+
+    void testGetAttributeValueAbsent()
+    {
+        auto packetData = createValidPacket(0x01, 0x01, 0x00, 0x0001);
+
+        PacketSetCCAttributes packet;
+        DataBufferPtr buffer = std::make_unique<DataBuffer>(packetData.begin(), packetData.end());
+
+        CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
+        CPPUNIT_ASSERT_THROW(packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::BACKGROUND_COLOR), std::out_of_range);
     }
 
     void testGetAttributesAllPresent()
@@ -1354,8 +1398,7 @@ public:
     void testStateConsistencyFailureToSuccess()
     {
         // Test state machine: failure -> success transition
-        // Use separate instances to avoid depending on retained internal state
-        PacketSetCCAttributes packet_failed;
+        PacketSetCCAttributes packet;
 
         // Invalid packet
         std::uint8_t invalidData[] = {
@@ -1365,19 +1408,18 @@ public:
         };
 
         DataBufferPtr invalidBuffer = std::make_unique<DataBuffer>(std::begin(invalidData), std::end(invalidData));
-        CPPUNIT_ASSERT(packet_failed.parse(std::move(invalidBuffer)) == false);
-        CPPUNIT_ASSERT(packet_failed.isValid() == false);
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet_failed.getAttributes().size());
+        CPPUNIT_ASSERT(packet.parse(std::move(invalidBuffer)) == false);
+        CPPUNIT_ASSERT(packet.isValid() == false);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), packet.getAttributes().size());
 
-        // Valid packet parsed into a fresh instance (explicit independence)
-        PacketSetCCAttributes packet_success;
+        // Valid packet parsed into the same instance
         auto validData = createValidPacket(0xABC, 0xDEF, 0x123, 0x0003);
         DataBufferPtr validBuffer = std::make_unique<DataBuffer>(validData.begin(), validData.end());
 
-        CPPUNIT_ASSERT(packet_success.parse(std::move(validBuffer)) == true);
-        CPPUNIT_ASSERT(packet_success.isValid() == true);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xABC), packet_success.getChannelId());
-        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), packet_success.getAttributes().size());
+        CPPUNIT_ASSERT(packet.parse(std::move(validBuffer)) == true);
+        CPPUNIT_ASSERT(packet.isValid() == true);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xABC), packet.getChannelId());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), packet.getAttributes().size());
     }
 
     void testStateConsistencySuccessToFailure()
@@ -1582,20 +1624,17 @@ public:
     void testCrossComponentLargePacketStream()
     {
         // Simulate processing a stream of packets
-        PacketSetCCAttributes packet;
-
         for (int i = 0; i < 20; ++i) {
             std::uint32_t attribMask = (i % 2 == 0) ? 0x3FFF : 0x0001;
             auto packetData = createValidPacket(i, i * 100, i * 1000, attribMask);
+            PacketSetCCAttributes packet;
             DataBufferPtr buffer = std::make_unique<DataBuffer>(packetData.begin(), packetData.end());
 
             CPPUNIT_ASSERT(packet.parse(std::move(buffer)) == true);
             CPPUNIT_ASSERT(packet.isValid() == true);
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(i), packet.getChannelId());
 
-            // The packet format always includes all 14 attribute values in the buffer
-            // The bitmask determines which are valid, but implementation may parse all
-            size_t expectedSize = (i % 2 == 0) ? 14 : 14; // Both cases parse all 14
+            size_t expectedSize = (i % 2 == 0) ? 14 : 1;
             CPPUNIT_ASSERT_EQUAL(expectedSize, packet.getAttributes().size());
         }
     }

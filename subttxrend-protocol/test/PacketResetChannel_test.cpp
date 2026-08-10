@@ -24,7 +24,6 @@
 
 using subttxrend::common::DataBuffer;
 using subttxrend::common::DataBufferPtr;
-using subttxrend::protocol::BufferReader;
 using subttxrend::protocol::Packet;
 using subttxrend::protocol::PacketResetChannel;
 
@@ -54,8 +53,9 @@ CPPUNIT_TEST_SUITE( PacketResetChannelTest );
     CPPUNIT_TEST(testEmptyBuffer);
     CPPUNIT_TEST(testMultipleParseCalls);
     CPPUNIT_TEST(testParseAfterFailedParse);
+    CPPUNIT_TEST(testFailedParseAfterSuccess);
     CPPUNIT_TEST(testSequentialFailures);
-    CPPUNIT_TEST(testCorruptedHeaderFields);
+    CPPUNIT_TEST(testHeaderFieldVariations);
     CPPUNIT_TEST(testExactSizeMatching);
 CPPUNIT_TEST_SUITE_END();
 
@@ -172,6 +172,10 @@ public:
         PacketResetChannel packet;
 
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::RESET_CHANNEL); // Type should be set by constructor
+        CPPUNIT_ASSERT(!packet.isValid());
+        CPPUNIT_ASSERT(packet.getCounter() == 0);
+        CPPUNIT_ASSERT(packet.getSize() == 0);
+        CPPUNIT_ASSERT(packet.getChannelId() == 0);
     }
 
     // Test getType method
@@ -682,6 +686,33 @@ public:
         CPPUNIT_ASSERT(packet.getChannelId() == 0x44332211);
     }
 
+    void testFailedParseAfterSuccess()
+    {
+        PacketResetChannel packet;
+
+        std::uint8_t validData[] = {
+            0x04, 0x00, 0x00, 0x00,
+            0x99, 0x88, 0x77, 0x66,
+            0x04, 0x00, 0x00, 0x00,
+            0x11, 0x22, 0x33, 0x44,
+        };
+
+        DataBufferPtr validBuffer = std::make_unique<DataBuffer>(std::begin(validData), std::end(validData));
+        CPPUNIT_ASSERT(packet.parse(std::move(validBuffer)));
+        CPPUNIT_ASSERT(packet.isValid());
+
+        std::uint8_t invalidData[] = {
+            0xFF, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00,
+            0x04, 0x00, 0x00, 0x00,
+            0x01, 0x02, 0x03, 0x04,
+        };
+
+        DataBufferPtr invalidBuffer = std::make_unique<DataBuffer>(std::begin(invalidData), std::end(invalidData));
+        CPPUNIT_ASSERT(!packet.parse(std::move(invalidBuffer)));
+        CPPUNIT_ASSERT(!packet.isValid());
+    }
+
     // Test sequential failures
     void testSequentialFailures()
     {
@@ -715,7 +746,7 @@ public:
     }
 
     // Test corrupted header fields
-    void testCorruptedHeaderFields()
+    void testHeaderFieldVariations()
     {
         // Test with corrupted type field (partial corruption)
         std::uint8_t corruptedTypeData[] = {

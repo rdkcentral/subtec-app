@@ -127,8 +127,7 @@ public:
                 0x02, 0x00, 0x00, 0x00, // type
                 0x01, 0x23, 0x45, 0x67, // counter
                 0x01, 0x00, 0x00, 0x00, // size
-                0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01, // timestamp
-                0x11, 0x22, 0x33, 0x44, // stc
+                0xEF, // 1 byte payload so Packet::parse accepts the size before PacketTimestamp rejects it
         };
 
         PacketTimestamp packet;
@@ -725,12 +724,12 @@ public:
         CPPUNIT_ASSERT(!missingSizePacket.parse(std::move(missingSizeBuffer)));
         CPPUNIT_ASSERT(!missingSizePacket.isValid());
 
-        // Test with partial timestamp (4 bytes)
+        // Test with payload shorter than declared size
         std::uint8_t partialTimestampData[] = {
             0x02, 0x00, 0x00, 0x00, // type
             0x01, 0x00, 0x00, 0x00, // counter
             0x0C, 0x00, 0x00, 0x00, // size
-            0x01, 0x02, 0x03, 0x04, // partial timestamp (4 bytes)
+            0x01, 0x02, 0x03, 0x04, // payload shorter than declared size
         };
         
         PacketTimestamp partialTimestampPacket;
@@ -739,13 +738,13 @@ public:
         CPPUNIT_ASSERT(!partialTimestampPacket.parse(std::move(partialTimestampBuffer)));
         CPPUNIT_ASSERT(!partialTimestampPacket.isValid());
 
-        // Test with missing STC (timestamp complete, STC missing)
+        // Test with payload still shorter than declared size
         std::uint8_t missingStcData[] = {
             0x02, 0x00, 0x00, 0x00, // type
             0x01, 0x00, 0x00, 0x00, // counter
             0x0C, 0x00, 0x00, 0x00, // size
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, // timestamp (complete)
-            0x11, 0x22, // partial STC
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, // 8 payload bytes
+            0x11, 0x22, // still shorter than declared size
         };
         
         PacketTimestamp missingStcPacket;

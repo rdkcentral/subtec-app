@@ -20,6 +20,14 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <tuple>
+#include <utility>
+#include <vector>
+
 #include "PacketTtmlTimestamp.hpp"
 
 using subttxrend::common::DataBuffer;
@@ -91,6 +99,7 @@ CPPUNIT_TEST_SUITE( PacketTtmlTimestampTest );
     CPPUNIT_TEST(testPolymorphismTypeIdentity);
     CPPUNIT_TEST(testStateConsistencyAcrossParsing);
     CPPUNIT_TEST(testStateConsistencyAfterFailures);
+    CPPUNIT_TEST(testFailedParseStateAfterBadType);
     CPPUNIT_TEST(testStateConsistencyTimestampProgression);
     CPPUNIT_TEST(testStateConsistencyRepeatedValues);
     CPPUNIT_TEST(testErrorRecoveryAfterBadType);
@@ -108,7 +117,7 @@ CPPUNIT_TEST_SUITE( PacketTtmlTimestampTest );
     CPPUNIT_TEST(testRealWorldHighFrequencyUpdates);
     CPPUNIT_TEST(testRealWorldVariousTimestampRanges);
     CPPUNIT_TEST(testRealWorldPTSWraparound);
-    CPPUNIT_TEST(testRealWorldConcurrentChannels);
+    CPPUNIT_TEST(testInterleavedChannels);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -1074,6 +1083,26 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x03), packet.getChannelId());
     }
 
+    void testFailedParseStateAfterBadType()
+    {
+        PacketTtmlTimestamp packet;
+
+        auto valid = createValidPacket(0x11, 0x22, 0x3333ULL);
+        DataBufferPtr validBuffer = std::make_unique<DataBuffer>(valid.begin(), valid.end());
+        CPPUNIT_ASSERT(packet.parse(std::move(validBuffer)) == true);
+
+        auto invalid = createValidPacket(0x44, 0x55, 0x6666ULL);
+        invalid[0] = 0xFF;
+        DataBufferPtr invalidBuffer = std::make_unique<DataBuffer>(invalid.begin(), invalid.end());
+
+        CPPUNIT_ASSERT(packet.parse(std::move(invalidBuffer)) == false);
+        CPPUNIT_ASSERT(packet.isValid() == false);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x55), packet.getCounter());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(12), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x11), packet.getChannelId());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0x3333ULL), packet.getTimestamp());
+    }
+
     void testStateConsistencyTimestampProgression()
     {
         // Test state consistency with progressing timestamps
@@ -1376,11 +1405,16 @@ public:
 
         // Scenario 2: Corrupted packet (network error simulation)
         auto corrupted = createValidPacket(0x01, 0x200, 1638360001000ULL);
-        corrupted[10] = 0xFF; // Corrupt channel id byte
-        corrupted[15] = 0xAA; // Corrupt timestamp byte
+        corrupted[12] = 0xFF; // Corrupt channel id low byte
+        corrupted[16] = 0xAA; // Corrupt timestamp low byte
         DataBufferPtr buffer2 = std::make_unique<DataBuffer>(corrupted.begin(), corrupted.end());
         // Should parse successfully despite corruption (data still structurally valid)
-        bool parseResult2 = packet.parse(std::move(buffer2));
+        CPPUNIT_ASSERT(packet.parse(std::move(buffer2)) == true);
+        CPPUNIT_ASSERT(packet.isValid() == true);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xFF), packet.getChannelId());
+        CPPUNIT_ASSERT_EQUAL(
+            static_cast<std::uint64_t>((1638360001000ULL & ~0xFFULL) | 0xAAULL),
+            packet.getTimestamp());
 
         // Scenario 3: Truncated packet (incomplete transmission)
         std::uint8_t truncated[] = {
@@ -1449,11 +1483,11 @@ public:
         // Test PTS (Presentation Time Stamp) wraparound scenario
         PacketTtmlTimestamp packet;
 
-        // Simulate timestamps near max value
-        std::uint64_t nearMax = 0xFFFFFFFFFFFFF000ULL;
+        // Simulate timestamps crossing the uint64_t boundary
+        std::uint64_t nearMax = 0xFFFFFFFFFFFFFFF0ULL;
 
         for (int i = 0; i < 20; ++i) {
-            std::uint64_t timestamp = nearMax + (i * 256);
+            std::uint64_t timestamp = nearMax + (static_cast<std::uint64_t>(i) * 0x10ULL);
             auto packetData = createValidPacket(0x01, i, timestamp);
             DataBufferPtr buffer = std::make_unique<DataBuffer>(packetData.begin(), packetData.end());
 
@@ -1463,9 +1497,9 @@ public:
         }
     }
 
-    void testRealWorldConcurrentChannels()
+    void testInterleavedChannels()
     {
-        // Test concurrent subtitle channels with interleaved timestamps
+        // Test interleaved subtitle channels with independent state
         std::vector<PacketTtmlTimestamp> channels(3);
         std::uint64_t baseTime = 1638360000000ULL;
 

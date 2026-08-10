@@ -251,6 +251,44 @@ private:
         return packet;
     }
 
+    std::unique_ptr<Packet> generateMalformedTimestamp()
+    {
+        auto packet = std::make_unique<PacketTimestamp>();
+        std::array<std::uint8_t, 24> packetBytes{};
+
+        std::size_t index = 0;
+
+        // type
+        packetBytes[index++] = 2;
+        packetBytes[index++] = 0;
+        packetBytes[index++] = 0;
+        packetBytes[index++] = 0;
+
+        // counter
+        packetBytes[index++] = 1;
+        packetBytes[index++] = 0;
+        packetBytes[index++] = 0;
+        packetBytes[index++] = 0;
+
+        // invalid size for timestamp packet payload
+        packetBytes[index++] = 8;
+        packetBytes[index++] = 0;
+        packetBytes[index++] = 0;
+        packetBytes[index++] = 0;
+
+        // timestamp (8 bytes)
+        for (int i = 0; i < 8; ++i) packetBytes[index++] = 0;
+
+        // stc (4 bytes)
+        for (int i = 0; i < 4; ++i) packetBytes[index++] = 0;
+
+        DataBufferPtr buffer = std::make_unique<DataBuffer>(packetBytes.begin(), packetBytes.end());
+
+        packet->parse(std::move(buffer));
+
+        return packet;
+    }
+
 public:
     void setUp()
     {
@@ -445,8 +483,8 @@ public:
         
         // Multiple RESET_ALL packets should all be accepted
         CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
-        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
-        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAllWithCounter(7)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketResetAllWithCounter(0xFFFFFFFF)));
         
         CPPUNIT_ASSERT(validator.isValid());
     }
@@ -515,8 +553,8 @@ public:
         CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         
         // Test boundary values
-        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(0)));
-        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestamp(0xFFFFFFFF)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestampWithValues(0, 0, 0)));
+        CPPUNIT_ASSERT(validator.validate(*generatePacketTimestampWithValues(0xFFFFFFFF, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFF)));
         
         CPPUNIT_ASSERT(validator.isValid());
     }
@@ -565,15 +603,15 @@ public:
     {
         StreamValidator validator;
         
-        // Test corrupted packet structure using our invalid packet generator
-        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
+        // Test malformed TIMESTAMP packet with correct type but invalid payload size.
+        CPPUNIT_ASSERT(!validator.validate(*generateMalformedTimestamp()));
         CPPUNIT_ASSERT(!validator.isValid());
         
         // Reset
         CPPUNIT_ASSERT(validator.validate(*generatePacketResetAll()));
         
-        // Test another invalid packet scenario
-        CPPUNIT_ASSERT(!validator.validate(*generatePacketInvalid()));
+        // Test another malformed packet after recovery.
+        CPPUNIT_ASSERT(!validator.validate(*generateMalformedTimestamp()));
         CPPUNIT_ASSERT(!validator.isValid());
     }
 

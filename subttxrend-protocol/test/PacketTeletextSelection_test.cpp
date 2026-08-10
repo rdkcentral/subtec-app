@@ -64,6 +64,7 @@ CPPUNIT_TEST_SUITE( PacketTeletextSelectionTest );
     CPPUNIT_TEST(testCorruptedTypeField);
     CPPUNIT_TEST(testTruncatedPacketVariations);
     CPPUNIT_TEST(testEmptyBuffer);
+    CPPUNIT_TEST(testFullPacketReuse);
     CPPUNIT_TEST(testMultipleParseCalls);
     CPPUNIT_TEST(testParseAfterFailedParse);
     CPPUNIT_TEST(testPacketReuse);
@@ -211,7 +212,7 @@ public:
         };
         
         DataBufferPtr buffer = std::make_unique<DataBuffer>(std::begin(packetData), std::end(packetData));
-        packet.parse(std::move(buffer));
+        CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
         CPPUNIT_ASSERT(packet.getType() == Packet::Type::TELETEXT_SELECTION);
     }
 
@@ -839,6 +840,46 @@ public:
         CPPUNIT_ASSERT(!packet.isValid());
     }
 
+    void testFullPacketReuse()
+    {
+        PacketTeletextSelection packet;
+
+        std::uint8_t firstData[] = {
+            0x06, 0x00, 0x00, 0x00, // type
+            0x01, 0x00, 0x00, 0x00, // counter
+            0x0C, 0x00, 0x00, 0x00, // size = 12
+            0x11, 0x00, 0x00, 0x00, // channel id
+            0x02, 0x00, 0x00, 0x00, // magazine
+            0x03, 0x00, 0x00, 0x00, // page
+        };
+
+        DataBufferPtr firstBuffer = std::make_unique<DataBuffer>(std::begin(firstData), std::end(firstData));
+        CPPUNIT_ASSERT(packet.parse(std::move(firstBuffer)));
+        CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(packet.getCounter() == 1);
+        CPPUNIT_ASSERT(packet.getChannelId() == 0x11);
+        CPPUNIT_ASSERT(packet.getInitialMagazine() == 2);
+        CPPUNIT_ASSERT(packet.getInitialPage() == 3);
+
+        std::uint8_t secondData[] = {
+            0x06, 0x00, 0x00, 0x00, // type
+            0x04, 0x00, 0x00, 0x00, // counter
+            0x0C, 0x00, 0x00, 0x00, // size = 12
+            0x21, 0x00, 0x00, 0x00, // channel id
+            0x05, 0x00, 0x00, 0x00, // magazine
+            0x06, 0x00, 0x00, 0x00, // page
+        };
+
+        DataBufferPtr secondBuffer = std::make_unique<DataBuffer>(std::begin(secondData), std::end(secondData));
+        CPPUNIT_ASSERT(packet.parse(std::move(secondBuffer)));
+        CPPUNIT_ASSERT(packet.isValid());
+        CPPUNIT_ASSERT(packet.getCounter() == 4);
+        CPPUNIT_ASSERT(packet.getSize() == 12);
+        CPPUNIT_ASSERT(packet.getChannelId() == 0x21);
+        CPPUNIT_ASSERT(packet.getInitialMagazine() == 5);
+        CPPUNIT_ASSERT(packet.getInitialPage() == 6);
+    }
+
     void testMultipleParseCalls()
     {
         PacketTeletextSelection packet;
@@ -871,7 +912,10 @@ public:
         
         // Verify new values were parsed
         CPPUNIT_ASSERT(packet.getCounter() == 0x44332211);
+        CPPUNIT_ASSERT(packet.getSize() == 12);
         CPPUNIT_ASSERT(packet.getChannelId() == 0x08070605);
+        CPPUNIT_ASSERT(packet.getInitialMagazine() == 0x0C0B0A09);
+        CPPUNIT_ASSERT(packet.getInitialPage() == 0x100F0E0D);
     }
 
     void testParseAfterFailedParse()

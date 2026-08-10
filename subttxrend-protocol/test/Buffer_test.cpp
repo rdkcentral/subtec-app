@@ -21,6 +21,7 @@
 #include "Buffer.hpp"
 #include <vector>
 #include <cstring>
+#include <limits>
 
 using namespace subttxrend::protocol;
 
@@ -77,6 +78,8 @@ class BufferTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testExtractBufferOffsetExceedsSize);
     CPPUNIT_TEST(testExtractBufferInsufficientBytes);
     CPPUNIT_TEST(testExtractBufferZeroSize);
+    CPPUNIT_TEST(testExtractBufferZeroSizeEmpty);
+    CPPUNIT_TEST(testExtractBufferZeroSizeAtEnd);
     CPPUNIT_TEST(testExtractBufferFullBuffer);
     CPPUNIT_TEST(testExtractBufferSingleByte);
     CPPUNIT_TEST(testExtractBufferMultipleCalls);
@@ -605,7 +608,7 @@ public:
         bool result = buffer.extractLeInt64(0, value);
 
         CPPUNIT_ASSERT_EQUAL(true, result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int64_t>(0x8000000000000000LL), value);
+        CPPUNIT_ASSERT_EQUAL(std::numeric_limits<std::int64_t>::min(), value);
     }
 
     void testExtractLeInt64LittleEndianOrder()
@@ -631,7 +634,7 @@ public:
         bool result = buffer.extractLeInt64(0, value);
 
         CPPUNIT_ASSERT_EQUAL(true, result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int64_t>(0x8000000000000001LL), value);
+        CPPUNIT_ASSERT_EQUAL(std::numeric_limits<std::int64_t>::min() + 1, value);
         CPPUNIT_ASSERT(value < 0);
     }
 
@@ -720,6 +723,34 @@ public:
 
         CPPUNIT_ASSERT_EQUAL(true, result);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), outBuffer.size());
+    }
+
+    void testExtractBufferZeroSizeEmpty()
+    {
+        char data[] = {0x00};
+        Buffer buffer(data, 0);
+        std::vector<char> outBuffer;
+        outBuffer.push_back(0xFF);
+
+        bool result = buffer.extractBuffer(0, 0, outBuffer);
+
+        CPPUNIT_ASSERT_EQUAL(false, result);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), outBuffer.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0xFF), outBuffer[0]);
+    }
+
+    void testExtractBufferZeroSizeAtEnd()
+    {
+        char data[] = {0x01, 0x02, 0x03, 0x04};
+        Buffer buffer(data, 4);
+        std::vector<char> outBuffer;
+        outBuffer.push_back(0xFF);
+
+        bool result = buffer.extractBuffer(4, 0, outBuffer);
+
+        CPPUNIT_ASSERT_EQUAL(false, result);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), outBuffer.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0xFF), outBuffer[0]);
     }
 
     void testExtractBufferFullBuffer()
@@ -1137,7 +1168,7 @@ public:
         Buffer buffer(data, 3);
         std::uint32_t val32 = 0xAAAAAAAA;
         std::uint64_t val64 = 0xBBBBBBBBBBBBBBBBULL;
-        std::int64_t vali64 = 0xCCCCCCCCCCCCCCCCLL;
+        std::int64_t vali64 = -1234567890123456789LL;
         std::vector<char> buf;
         buf.push_back(0xDD);
 
@@ -1152,7 +1183,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(false, r4);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xAAAAAAAA), val32);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0xBBBBBBBBBBBBBBBBULL), val64);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int64_t>(0xCCCCCCCCCCCCCCCCLL), vali64);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int64_t>(-1234567890123456789LL), vali64);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), buf.size());
     }
 

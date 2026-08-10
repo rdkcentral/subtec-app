@@ -20,8 +20,8 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include "BufferReader.hpp"
 #include "Buffer.hpp"
+#include <limits>
 #include <vector>
-#include <cstring>
 
 using namespace subttxrend::protocol;
 
@@ -63,6 +63,8 @@ class BufferReaderTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testExtractLeInt64FailurePreservesOffset);
     CPPUNIT_TEST(testExtractBufferWithValidSize);
     CPPUNIT_TEST(testExtractBufferWithZeroSize);
+    CPPUNIT_TEST(testExtractBufferZeroSizeOnEmpty);
+    CPPUNIT_TEST(testExtractBufferZeroSizeAtEnd);
     CPPUNIT_TEST(testExtractBufferSizeExceedsRemaining);
     CPPUNIT_TEST(testExtractBufferOffsetIncrementsCorrectly);
     CPPUNIT_TEST(testExtractBufferAtEndOfBuffer);
@@ -127,7 +129,7 @@ public:
 
         const Buffer& returnedBuffer = reader.getBuffer();
 
-        CPPUNIT_ASSERT_EQUAL(buffer.getSize(), returnedBuffer.getSize());
+        CPPUNIT_ASSERT(&buffer == &returnedBuffer);
     }
 
     void testGetSizeReturnsCorrectSize()
@@ -483,7 +485,7 @@ public:
         bool result = reader.extractLeInt64(value);
 
         CPPUNIT_ASSERT_EQUAL(true, result);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int64_t>(0x8000000000000000LL), value);
+        CPPUNIT_ASSERT_EQUAL(std::numeric_limits<std::int64_t>::min(), value);
     }
 
     void testExtractLeInt64OffsetIncrementsCorrectly()
@@ -557,6 +559,43 @@ public:
         CPPUNIT_ASSERT_EQUAL(true, result);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), outBuffer.size());
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), reader.getOffset());
+    }
+
+    void testExtractBufferZeroSizeOnEmpty()
+    {
+        char data[] = {0x00};
+        Buffer buffer(data, 0);
+        BufferReader reader(buffer);
+        std::vector<char> outBuffer;
+        outBuffer.push_back(0xFF);
+
+        bool result = reader.extractBuffer(0, outBuffer);
+
+        CPPUNIT_ASSERT_EQUAL(false, result);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), outBuffer.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0xFF), outBuffer[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), reader.getOffset());
+    }
+
+    void testExtractBufferZeroSizeAtEnd()
+    {
+        char data[] = {0x01, 0x02, 0x03, 0x04};
+        Buffer buffer(data, 4);
+        BufferReader reader(buffer);
+        std::vector<char> consumed;
+        std::vector<char> outBuffer;
+        outBuffer.push_back(0xFF);
+
+        bool consumeResult = reader.extractBuffer(4, consumed);
+        CPPUNIT_ASSERT_EQUAL(true, consumeResult);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), reader.getOffset());
+
+        bool result = reader.extractBuffer(0, outBuffer);
+
+        CPPUNIT_ASSERT_EQUAL(false, result);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), outBuffer.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<char>(0xFF), outBuffer[0]);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), reader.getOffset());
     }
 
     void testExtractBufferSizeExceedsRemaining()
@@ -785,7 +824,7 @@ public:
         BufferReader reader(buffer);
         std::uint32_t val32 = 0xAAAAAAAA;
         std::uint64_t val64 = 0xBBBBBBBBBBBBBBBBULL;
-        std::int64_t vali64 = 0xCCCCCCCCCCCCCCCCLL;
+        std::int64_t vali64 = std::numeric_limits<std::int64_t>::min();
         std::vector<char> buf;
         buf.push_back(0xDD);
 
@@ -801,7 +840,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), reader.getOffset());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xAAAAAAAA), val32);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint64_t>(0xBBBBBBBBBBBBBBBBULL), val64);
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::int64_t>(0xCCCCCCCCCCCCCCCCLL), vali64);
+        CPPUNIT_ASSERT_EQUAL(std::numeric_limits<std::int64_t>::min(), vali64);
     }
 
     void testFailedExtractionDoesNotCorruptSubsequentSuccess()
@@ -890,7 +929,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(true, r1);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), reader.getOffset());
 
-        // Try to extract uint32 with only 5 bytes remaining - should fail
+        // Extract uint32 with 5 bytes remaining - should succeed
         bool r2 = reader.extractLeUint32(val2);
         bool r3 = reader.extractBuffer(6, buf1);
         CPPUNIT_ASSERT_EQUAL(true, r2);

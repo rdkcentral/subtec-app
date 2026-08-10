@@ -21,7 +21,6 @@
 #include "ScteRawBitmap.hpp"
 #include "ScteExceptions.hpp"
 #include <vector>
-#include <cstring>
 #include <algorithm>
 
 using namespace subttxrend::scte;
@@ -47,6 +46,9 @@ CPPUNIT_TEST_SUITE( ScteRawBitmapTest );
     CPPUNIT_TEST(testSetRawDataCreatesDeepCopy);
     CPPUNIT_TEST(testSetRawDataWithRvalueReference);
     CPPUNIT_TEST(testSetRawDataFromStdMove);
+    CPPUNIT_TEST(testCopyConstructor);
+    CPPUNIT_TEST(testCopyAssignment);
+    CPPUNIT_TEST(testMoveConstructor);
     CPPUNIT_TEST(testIsCompressedAfterConstructionTrue);
     CPPUNIT_TEST(testIsCompressedAfterConstructionFalse);
     CPPUNIT_TEST(testIsCompressedReflectsSetCompression);
@@ -241,11 +243,13 @@ protected:
         std::vector<uint8_t> smallerData = createTestData(5, 0x11);
         bitmap.setRawData(smallerData.data(), smallerData.size());
         CPPUNIT_ASSERT_EQUAL(smallerData.size(), bitmap.getRawData().size());
+        CPPUNIT_ASSERT(dataMatches(bitmap.getRawData(), smallerData.data(), smallerData.size()));
 
         // Replace with larger data
         std::vector<uint8_t> largerData = createTestData(200, 0x22);
         bitmap.setRawData(largerData.data(), largerData.size());
         CPPUNIT_ASSERT_EQUAL(largerData.size(), bitmap.getRawData().size());
+        CPPUNIT_ASSERT(dataMatches(bitmap.getRawData(), largerData.data(), largerData.size()));
     }
 
     void testSetRawDataMultipleTimes()
@@ -327,6 +331,42 @@ protected:
         CPPUNIT_ASSERT(dataMatches(bitmap.getRawData(), expectedData.data(), expectedData.size()));
     }
 
+    void testCopyConstructor()
+    {
+        std::vector<uint8_t> testData = createSequentialData(8);
+        RawBitmap original(true, testData.data(), testData.size());
+
+        RawBitmap copy(original);
+
+        CPPUNIT_ASSERT_EQUAL(original.isCompressed(), copy.isCompressed());
+        CPPUNIT_ASSERT(dataMatches(copy.getRawData(), testData.data(), testData.size()));
+    }
+
+    void testCopyAssignment()
+    {
+        std::vector<uint8_t> sourceData = createSequentialData(6);
+        RawBitmap source(true, sourceData.data(), sourceData.size());
+
+        std::vector<uint8_t> initialData = createTestData(3, 0xAA);
+        RawBitmap assigned(false, initialData.data(), initialData.size());
+
+        assigned = source;
+
+        CPPUNIT_ASSERT_EQUAL(source.isCompressed(), assigned.isCompressed());
+        CPPUNIT_ASSERT(dataMatches(assigned.getRawData(), sourceData.data(), sourceData.size()));
+    }
+
+    void testMoveConstructor()
+    {
+        std::vector<uint8_t> testData = createSequentialData(7);
+        RawBitmap source(true, testData.data(), testData.size());
+
+        RawBitmap moved(std::move(source));
+
+        CPPUNIT_ASSERT_EQUAL(true, moved.isCompressed());
+        CPPUNIT_ASSERT(dataMatches(moved.getRawData(), testData.data(), testData.size()));
+    }
+
     void testIsCompressedAfterConstructionTrue()
     {
         std::vector<uint8_t> testData = createTestData(10);
@@ -381,13 +421,18 @@ protected:
     {
         std::vector<uint8_t> testData = createTestData(10);
         RawBitmap bitmap(true, testData.data(), testData.size());
+        bool expected = true;
 
         for (int i = 0; i < 10; ++i)
         {
-            bool expected = (i % 2 == 0);
+            expected = (i % 2 == 0);
             bitmap.setCompression(expected);
             CPPUNIT_ASSERT_EQUAL(expected, bitmap.isCompressed());
         }
+
+        std::vector<uint8_t> newData = createTestData(12, 0x33);
+        bitmap.setRawData(newData.data(), newData.size());
+        CPPUNIT_ASSERT_EQUAL(expected, bitmap.isCompressed());
     }
 
     void testLargeDataPayload()
@@ -448,6 +493,7 @@ protected:
 
         // Default constructed bitmap should have empty data
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), bitmap.getRawData().size());
+        CPPUNIT_ASSERT_EQUAL(false, bitmap.isCompressed());
     }
 };
 

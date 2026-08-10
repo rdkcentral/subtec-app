@@ -24,7 +24,6 @@
 #include "PacketResetAll.hpp"
 #include "PacketResetChannel.hpp"
 #include "Buffer.hpp"
-#include "BufferReader.hpp"
 
 using subttxrend::common::DataBuffer;
 using subttxrend::common::DataBufferPtr;
@@ -34,7 +33,6 @@ using subttxrend::protocol::PacketChannelSpecific;
 using subttxrend::protocol::PacketResetAll;
 using subttxrend::protocol::PacketResetChannel;
 using subttxrend::protocol::Buffer;
-using subttxrend::protocol::BufferReader;
 
 class PacketTest : public CppUnit::TestFixture
 {
@@ -59,6 +57,7 @@ CPPUNIT_TEST_SUITE( PacketTest );
     CPPUNIT_TEST(testIsDataPacketTimestamp);
     CPPUNIT_TEST(testIsDataPacketResetAll);
     CPPUNIT_TEST(testIsDataPacketInvalid);
+    CPPUNIT_TEST(testIsDataPacketViaParse);
     CPPUNIT_TEST(testGetHeaderSize);
     CPPUNIT_TEST(testGetSizeFromHeader);
     CPPUNIT_TEST(testGetSizeFromHeaderLittleEndian);
@@ -107,25 +106,27 @@ CPPUNIT_TEST_SUITE( PacketTest );
     CPPUNIT_TEST(testStateConsistencyAcrossGetters);
     CPPUNIT_TEST(testStateConsistencyFailureToSuccess);
     CPPUNIT_TEST(testStateConsistencyZeroSize);
-    CPPUNIT_TEST(testBufferReaderIntegrationHeaderParsing);
-    CPPUNIT_TEST(testBufferReaderIntegrationPayloadParsing);
-    CPPUNIT_TEST(testBufferReaderIntegrationOffsetTracking);
+    CPPUNIT_TEST(testPacketParseHeaderFields);
+    CPPUNIT_TEST(testPacketParseChannelId);
+    CPPUNIT_TEST(testPacketParseRejectsExtraBytes);
     CPPUNIT_TEST(testErrorRecoverySequentialParsing);
     CPPUNIT_TEST(testErrorRecoveryAlternatingValidInvalid);
     CPPUNIT_TEST(testErrorRecoveryCorruptedData);
     CPPUNIT_TEST(testTypeIdentificationExtractThenParse);
-    CPPUNIT_TEST(testTypeIdentificationGetTypeFactory);
+    CPPUNIT_TEST(testTypeIdentificationGetTypeMapping);
     CPPUNIT_TEST(testTypeIdentificationIsDataPacketFiltering);
     CPPUNIT_TEST(testEdgeCaseChannelIdBoundaries);
-    CPPUNIT_TEST(testEdgeCaseCounterSequenceWrapping);
+    CPPUNIT_TEST(testEdgeCaseCounterBoundaries);
     CPPUNIT_TEST(testEdgeCaseZeroLengthPayload);
     CPPUNIT_TEST(testProtocolComplianceHeaderStructure);
     CPPUNIT_TEST(testProtocolComplianceFieldOrdering);
     CPPUNIT_TEST(testProtocolComplianceLittleEndianConsistency);
-    CPPUNIT_TEST(testMemorySafetyLargeSizeValue);
+    CPPUNIT_TEST(testPacketParseRejectsLargeSizeMismatch);
     CPPUNIT_TEST(testSequentialReuseUpdatesParsedState);
     CPPUNIT_TEST(testIntegrationStaticHelpersCombined);
     CPPUNIT_TEST(testIntegrationParseWithAllStaticHelpers);
+    CPPUNIT_TEST(testGetTypeUnknownValue);
+    CPPUNIT_TEST(testIsDataPacketAllTypes);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -218,6 +219,15 @@ public:
 
         Packet::Type type = Packet::getType(buffer);
         CPPUNIT_ASSERT(type == Packet::Type::INVALID);
+    }
+
+    void testGetTypeUnknownValue()
+    {
+        std::uint8_t data[] = {0x15, 0x00, 0x00, 0x00};
+        DataBuffer buffer(std::begin(data), std::end(data));
+
+        Packet::Type type = Packet::getType(buffer);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(21), static_cast<std::uint32_t>(type));
     }
 
     void testGetCounterValid()
@@ -1068,7 +1078,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), packet.getSize());
     }
 
-    void testBufferReaderIntegrationHeaderParsing()
+    void testPacketParseHeaderFields()
     {
         // Verify BufferReader integration for header extraction
         std::uint8_t packetData[] = {
@@ -1088,7 +1098,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), packet.getSize());
     }
 
-    void testBufferReaderIntegrationPayloadParsing()
+    void testPacketParseChannelId()
     {
         // Verify BufferReader advances offset correctly for payload
         std::uint8_t packetData[] = {
@@ -1107,7 +1117,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xDDCCBBAA), packet.getChannelId());
     }
 
-    void testBufferReaderIntegrationOffsetTracking()
+    void testPacketParseRejectsExtraBytes()
     {
         // Test that BufferReader offset detection works correctly
         std::uint8_t packetData[] = {
@@ -1214,7 +1224,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x50), packet.getCounter());
     }
 
-    void testTypeIdentificationGetTypeFactory()
+    void testTypeIdentificationGetTypeMapping()
     {
         // Simulate factory pattern: use getType() to determine packet class
         std::uint8_t resetAllData[] = {0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -1265,6 +1275,32 @@ public:
         CPPUNIT_ASSERT_EQUAL(3, controlPacketCount);
     }
 
+    void testIsDataPacketAllTypes()
+    {
+        CPPUNIT_ASSERT(Packet::isDataPacket(Packet::Type::PES_DATA));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::TIMESTAMP));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::RESET_ALL));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::RESET_CHANNEL));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::SUBTITLE_SELECTION));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::TELETEXT_SELECTION));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::TTML_SELECTION));
+        CPPUNIT_ASSERT(Packet::isDataPacket(Packet::Type::TTML_DATA));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::TTML_TIMESTAMP));
+        CPPUNIT_ASSERT(Packet::isDataPacket(Packet::Type::CC_DATA));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::PAUSE));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::RESUME));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::MUTE));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::UNMUTE));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::WEBVTT_SELECTION));
+        CPPUNIT_ASSERT(Packet::isDataPacket(Packet::Type::WEBVTT_DATA));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::WEBVTT_TIMESTAMP));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::SET_CC_ATTRIBUTES));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::TTML_INFO));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::FLUSH));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::MAX));
+        CPPUNIT_ASSERT(!Packet::isDataPacket(Packet::Type::INVALID));
+    }
+
     void testEdgeCaseChannelIdBoundaries()
     {
         // Test boundary values in derived class integration
@@ -1296,7 +1332,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0), zeroPacket.getChannelId());
     }
 
-    void testEdgeCaseCounterSequenceWrapping()
+    void testEdgeCaseCounterBoundaries()
     {
         // Test counter values across boundaries
         PacketResetAll packet;
@@ -1398,7 +1434,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x08070605), counter);
     }
 
-    void testMemorySafetyLargeSizeValue()
+    void testPacketParseRejectsLargeSizeMismatch()
     {
         // Test safe handling of malicious large size values
         std::uint8_t packetData[] = {

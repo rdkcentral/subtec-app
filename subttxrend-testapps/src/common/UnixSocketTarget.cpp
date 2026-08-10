@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
+#include <cerrno>
 
 namespace subttxrend
 {
@@ -100,13 +101,24 @@ bool UnixSocketTarget::wantsMorePackets()
 
 bool UnixSocketTarget::writePacket(const DataPacket& packet)
 {
-    auto size = packet.getSize();
-    auto written = ::write(m_socketHandle, packet.getBuffer(), size);
+    if (m_socketHandle == -1)
+    {
+        return false;
+    }
+
+    const auto size = packet.getSize();
+    ssize_t written = -1;
+
+    do
+    {
+        written = ::write(m_socketHandle, packet.getBuffer(), size);
+    }
+    while ((written < 0) && (errno == EINTR));
 
     std::cout << "Write operation - requested: " << size << " written: "
             << written << std::endl;
 
-    return written == static_cast<int>(size);
+    return written == static_cast<ssize_t>(size);
 }
 
 } // namespace testapps

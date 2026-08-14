@@ -547,6 +547,8 @@ private:
 
     /** Wayland display loop. */
     std::unique_ptr<WaylandBackendLoop> m_loop;
+
+    Size m_outputSize;
 };
 
 } // namespace gfx

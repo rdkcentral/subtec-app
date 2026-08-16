@@ -200,7 +200,7 @@ protected:
     // Helper to create a regular file at path
     bool createRegularFile(const std::string& path)
     {
-        int fd = ::open(path.c_str(), O_CREAT | O_WRONLY, 0666);
+        int fd = ::open(path.c_str(), O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
         if (fd < 0)
         {
             return false;
@@ -504,19 +504,13 @@ protected:
         UnixSocketSource source(path);
         CPPUNIT_ASSERT_EQUAL(true, source.open());
 
-        // Send data in background thread
         std::vector<std::uint8_t> testData = {0x01, 0x02, 0x03, 0x04, 0x05};
-        bool sendResult = false;
-        JoiningThread senderThread(std::thread([this, &sendResult, path, testData]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            sendResult = sendDatagram(path, testData);
-        }));
+        bool sendResult = sendDatagram(path, testData);
+        CPPUNIT_ASSERT_EQUAL(true, sendResult);
 
         DataPacket packet(1024);
         bool readResult = source.readPacket(packet);
-        senderThread.join();
 
-        CPPUNIT_ASSERT_EQUAL(true, sendResult);
         CPPUNIT_ASSERT_EQUAL(true, readResult);
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(5), packet.getSize());
         CPPUNIT_ASSERT_EQUAL(0, memcmp(packet.getBuffer(), testData.data(), 5));

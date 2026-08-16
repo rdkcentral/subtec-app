@@ -197,7 +197,7 @@ protected:
     // Helper to create a regular file at path
     bool createRegularFile(const std::string& path)
     {
-        int fd = ::open(path.c_str(), O_CREAT | O_WRONLY, 0666);
+        int fd = ::open(path.c_str(), O_CREAT | O_WRONLY, 0600);
         if (fd < 0)
         {
             return false;

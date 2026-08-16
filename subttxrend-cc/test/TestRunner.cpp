@@ -19,7 +19,7 @@
 
 #include <cppunit/ui/text/TestRunner.h>
 #include <cppunit/extensions/TestFactoryRegistry.h>
-
+#include <cstdlib>
 int main()
 {
     CppUnit::TextUi::TestRunner runner;

@@ -185,7 +185,7 @@ function run_tests_coverage {
 }
 
 function build_components {
-    build_project_cmake     $BASE_DIR/src/rdklogger                     build/rdklogger                     $INSTALL_DIR    ""
+    build_project_cmake     $AV_PROJECTS_DIR/subttxrend-app/x86_builder/src/rdklogger                     build/rdklogger                     $INSTALL_DIR    ""
     build_project_cmake     $AV_PROJECTS_DIR/subttxrend-common          build/subttxrend-common             $INSTALL_DIR    "${SUBTTXREND_COMMON_DFLAGS}"
     build_project_cmake     $AV_PROJECTS_DIR/ttxdecoder                 build/ttxdecoder                    $INSTALL_DIR    ""
     build_project_cmake     $AV_PROJECTS_DIR/dvbsubdecoder              build/dvbsubdecoder                 $INSTALL_DIR    ""

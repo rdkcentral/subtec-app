@@ -49,8 +49,8 @@ public:
      * @param description
      *      Source type description.
      */
-    TypedFactoryEntry(const std::string prefix,
-                      const std::string description);
+    TypedFactoryEntry(std::string prefix,
+                      std::string description);
 
     /** Destructor. */
     virtual ~TypedFactoryEntry() = default;
@@ -60,10 +60,10 @@ public:
             override;
 };
 
-DataSourceFactoryEntry::DataSourceFactoryEntry(const std::string prefix,
-                                               const std::string description) :
-        m_prefix(prefix),
-        m_description(description)
+DataSourceFactoryEntry::DataSourceFactoryEntry(std::string prefix,
+                                               std::string description) :
+        m_prefix(std::move(prefix)),
+        m_description(std::move(description))
 {
     // noop
 }
@@ -79,9 +79,9 @@ const std::string& DataSourceFactoryEntry::getDescription() const
 }
 
 template<class SourceType>
-TypedFactoryEntry<SourceType>::TypedFactoryEntry(const std::string prefix,
-                                                 const std::string description) :
-        DataSourceFactoryEntry(prefix, description)
+TypedFactoryEntry<SourceType>::TypedFactoryEntry(std::string prefix,
+                                                 std::string description) :
+        DataSourceFactoryEntry(std::move(prefix), std::move(description))
 {
     // noop
 }

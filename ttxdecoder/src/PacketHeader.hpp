@@ -133,10 +133,10 @@ private:
     PageId m_pageId;
 
     /** Control information value. */
-    std::uint8_t m_controlInfo;
+    std::uint8_t m_controlInfo = 0;
 
     /** National option value. */
-    std::uint8_t m_nationalOption;
+    std::uint8_t m_nationalOption = 0;
 
     /** Data buffer. */
     std::int8_t m_buffer[BUFFER_LENGTH];

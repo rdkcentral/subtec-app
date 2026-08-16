@@ -44,8 +44,8 @@ public:
      * @param description
      *      Source type description.
      */
-    DataSourceFactoryEntry(const std::string prefix,
-                           const std::string description);
+    DataSourceFactoryEntry(std::string prefix,
+                           std::string description);
 
     /**
      * Destructor.

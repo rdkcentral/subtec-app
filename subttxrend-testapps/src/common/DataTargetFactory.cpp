@@ -46,8 +46,8 @@ public:
      * @param description
      *      Target type description.
      */
-    TypedFactoryEntry(const std::string prefix,
-                      const std::string description);
+    TypedFactoryEntry(std::string prefix,
+                      std::string description);
 
     /** Destructor. */
     virtual ~TypedFactoryEntry() = default;
@@ -57,10 +57,10 @@ public:
             override;
 };
 
-DataTargetFactoryEntry::DataTargetFactoryEntry(const std::string prefix,
-                                               const std::string description) :
-        m_prefix(prefix),
-        m_description(description)
+DataTargetFactoryEntry::DataTargetFactoryEntry(std::string prefix,
+                                               std::string description) :
+        m_prefix(std::move(prefix)),
+        m_description(std::move(description))
 {
     // noop
 }
@@ -76,9 +76,9 @@ const std::string& DataTargetFactoryEntry::getDescription() const
 }
 
 template<class TargetType>
-TypedFactoryEntry<TargetType>::TypedFactoryEntry(const std::string prefix,
-                                                 const std::string description) :
-        DataTargetFactoryEntry(prefix, description)
+TypedFactoryEntry<TargetType>::TypedFactoryEntry(std::string prefix,
+                                                 std::string description) :
+        DataTargetFactoryEntry(std::move(prefix), std::move(description))
 {
     // noop
 }

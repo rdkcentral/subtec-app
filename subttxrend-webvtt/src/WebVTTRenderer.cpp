@@ -176,7 +176,7 @@ void RenderCues(const linebuilder::LineList& line_list, gfx::DrawContext& dc, co
         dc.fillRectangle(windowColor, lineRectangle);
 
         for (const auto &token : line.tokenVector) {
-            auto style = token.style;
+            const auto &style = token.style;
             g_logger.osdebug(__LOGGER_FUNC__, " - Style: fs:", style.getFontStyle(),
                                                        " tc:", (int)style.textColour().m_r,
                                                        " fptr:", token.font.get());

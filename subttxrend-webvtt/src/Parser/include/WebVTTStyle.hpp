@@ -71,7 +71,7 @@ public:
                 m_edgeColour(kDefaultTextColour){}
 
     Style(std::string fontFamily, FontStyleType fontStyle, gfx::ColorArgb textColour, gfx::ColorArgb bgColour, gfx::ColorArgb edgeColour = {}) :
-                m_fontFamily(fontFamily),
+                m_fontFamily(std::move(fontFamily)),
                 m_fontStyle(fontStyle),
                 m_textColour(textColour),
                 m_backgroundColour(bgColour),
@@ -95,7 +95,7 @@ public:
     gfx::ColorArgb  bgColour() const { return m_backgroundColour; }
     gfx::ColorArgb  edgeColour() const { return m_edgeColour; }
 
-    void            fontFamily(std::string family)     { m_fontFamily = family; }
+    void            fontFamily(std::string family)     { m_fontFamily = std::move(family); }
     void            fontStyle(FontStyleType style)        { m_fontStyle = style; }
     void            textColour(gfx::ColorArgb txt_colour) { m_textColour = txt_colour; }
     void            bgColour(gfx::ColorArgb bgColour)    { m_backgroundColour = bgColour; }

@@ -72,12 +72,12 @@ function install_pkgs_ubuntu() {
     fi
 
     echo "Installing required packages..."
-    sudo apt update
+    apt update
 
     for package in "${required_packages_ubuntu[@]}"; do
         if ! is_package_installed_ubuntu "$package"; then
             echo "Installing: $package"
-            sudo apt install -y "$package"
+            apt install -y "$package"
             if [ $? -ne 0 ]; then
                 echo "Error: Failed to install package '$package'."
                 exit 1

@@ -44,8 +44,8 @@ public:
      * @param description
      *      Target type description.
      */
-    DataTargetFactoryEntry(const std::string prefix,
-                           const std::string description);
+    DataTargetFactoryEntry(std::string prefix,
+                           std::string description);
 
     /**
      * Destructor.

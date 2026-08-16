@@ -65,7 +65,8 @@ bool Packet::parse(common::DataBufferPtr dataBuffer)
     const std::uint32_t thisType = static_cast<std::uint32_t>(getType());
     std::uint32_t bufferType = 0;
 
-    BufferReader bufferReader(Buffer(dataBuffer->data(), dataBuffer->size()));
+    Buffer buffer(dataBuffer->data(), dataBuffer->size());
+    BufferReader bufferReader(buffer);
 
     m_logger.ostrace("parsing packet type: ", thisType);
     if (!bufferReader.extractLeUint32(bufferType))

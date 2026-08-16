@@ -63,7 +63,7 @@ LineList splitLinesByScreenWidth(const Line& tokens, int maxWidthPx) {
             // token width).
             if ((currentLine.lineWidth > maxWidthPx) && (currentLine.lineWidth > token.width)) {
                 //Pop the last token and add it to the start of the next line
-                auto last_token = currentLine.tokenVector.back();
+                auto last_token = std::move(currentLine.tokenVector.back());
                 currentLine.tokenVector.pop_back();
                 currentLine.lineWidth -= token.width;
                 
@@ -71,7 +71,7 @@ LineList splitLinesByScreenWidth(const Line& tokens, int maxWidthPx) {
                 g_logger.ostrace(__LOGGER_FUNC__, " - push_back after pop line l_w:", currentLine.lineWidth);
                 
                 currentLine.tokenVector.clear();
-                currentLine.tokenVector.push_back(last_token);
+                currentLine.tokenVector.push_back(std::move(last_token));
                 currentLine.lineWidth = token.width;
                 totalAdvance = token.width;
             } else {
@@ -87,7 +87,7 @@ LineList splitLinesByScreenWidth(const Line& tokens, int maxWidthPx) {
     if (totalAdvance > 0) {
         currentLine.lineWidth = totalAdvance;
         g_logger.ostrace(__LOGGER_FUNC__, " - final push_back line l_w:", currentLine.lineWidth);
-        lines.push_back(currentLine);
+        lines.push_back(std::move(currentLine));
     }
 
     return lines;
@@ -297,10 +297,10 @@ std::string searchTag(const std::string& search, std::vector<Result>& results, s
             for (const auto& styleString : localList)
                 addStyle(styleString, style);
 
-            result.style = style;
+            result.style = std::move(style);
             if (!result.text.empty()) {
                 g_logger.osdebug(__LOGGER_FUNC__, " - push_back t:", result.text, " s:", result.style.getStyleName());
-                results.push_back(result);
+                results.push_back(std::move(result));
             }
         }
         // I know - I want to ensure that the caller has the opportunity to
@@ -358,7 +358,7 @@ std::vector<Result> parseStyles(const std::string &line) {
                 for (const auto& styleString : styleList)
                     addStyle(styleString, result.style);
             }
-            results.push_back(result);
+            results.push_back(std::move(result));
         }
 
         std::reverse(results.begin(), results.end());
@@ -371,7 +371,7 @@ std::vector<Result> parseStyles(const std::string &line) {
         results.clear();
         std::string stripped = line;
         stripHtmlTags(stripped);
-        results.emplace_back(Result{stripped, Style{}});
+        results.emplace_back(Result{std::move(stripped), Style{}});
         g_logger.info("Badly formed tags in %s", line.c_str());
     }
     
@@ -474,7 +474,7 @@ Line LineBuilder::buildTokensForLine(const std::vector<Result> &lineSegments) {
         getUserDefinedColorAttributes(style);
         auto fontname = m_fontFamily + " " + style.getFontStyle();
         auto fontSize = m_converter.fontSizePixels();
-        auto font = getFont(fontname, fontSize);
+        auto font = getFont(std::move(fontname), fontSize);
         for (const auto &token : font->textToTokens(lineSegment.text)) {
             auto tokenWidth = static_cast<int>(token.totalAdvanceX);
             g_logger.osdebug(__LOGGER_FUNC__, " - token width:", tokenWidth);
@@ -520,7 +520,7 @@ std::list<Line> LineBuilder::buildLines(const std::vector<std::string> line_stri
             g_logger.osdebug(__LOGGER_FUNC__, " split line into ", split_lines.size());
             lines.insert(lines.end(), split_lines.begin(), split_lines.end());
         } else {
-            lines.push_back(fullLine);
+            lines.push_back(std::move(fullLine));
         }
     }
     return lines;
@@ -625,9 +625,9 @@ std::list<Line> LineBuilder::getRegionLines(const CueSharedList &cueList, const 
         };
         
         if (region.scroll == Region::Scroll::kUp) {
-            std::for_each(cueList.begin(), cueList.end(), doTokens);
+            std::for_each(cueList.begin(), cueList.end(), std::move(doTokens));
         } else {
-            std::for_each(cueList.rbegin(), cueList.rend(), doTokens);
+            std::for_each(cueList.rbegin(), cueList.rend(), std::move(doTokens));
         }
         
         std::for_each(regionLines.begin(), regionLines.end(), yAdjust);
@@ -795,7 +795,7 @@ std::list<Line> LineBuilder::buildOutputLines(const CueSharedList& webvttCueList
     auto cuesByRegion = sortCuesByRegion(webvttCueList);
     
     for (const auto &obj : cuesByRegion) {
-        const auto regionId = obj.first;
+        const auto &regionId = obj.first;
         const auto &cueList = obj.second;
         if (regionId != "m_Empty") {
             try {

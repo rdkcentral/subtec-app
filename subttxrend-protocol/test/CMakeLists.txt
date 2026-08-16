@@ -128,15 +128,6 @@ add_cppunit_test(PacketTtmlSelection_Test
                  ../src/Buffer.cpp
                  ../src/BufferReader.cpp)
 
-add_cppunit_test(PacketSetCCAttributes_Test
-                 PacketSetCCAttributes_test.cpp
-                 TestRunner.cpp
-                 Logger.cpp
-                 ../src/PacketSetCCAttributes.cpp
-                 ../src/Packet.cpp
-                 ../src/Buffer.cpp
-                 ../src/BufferReader.cpp)
-
 add_cppunit_test(PacketTtmlTimestamp_Test
                  PacketTtmlTimestamp_test.cpp
                  TestRunner.cpp

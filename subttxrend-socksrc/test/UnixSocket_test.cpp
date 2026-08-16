@@ -217,10 +217,17 @@ public:
 
     void testConstructorWithEmptyStringPath()
     {
-        // Empty string path is not a valid filesystem socket endpoint and bind() should fail.
+        // Linux permits an empty path for an unnamed UNIX socket.
         std::string path;
 
-        CPPUNIT_ASSERT_THROW((void)UnixSocket(path), UnixSocket::SocketException);
+        try {
+            UnixSocket socket(path);
+            CPPUNIT_ASSERT(!socketFileExists(path));
+            CPPUNIT_ASSERT(socket.getSocketBufferSize() > 0);
+        }
+        catch (const std::exception& e) {
+            CPPUNIT_FAIL(std::string("Unexpected exception: ") + e.what());
+        }
     }
 
     void testConstructorUnlinkAndReusePath()

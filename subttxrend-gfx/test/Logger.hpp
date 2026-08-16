@@ -23,7 +23,10 @@
 
 #include <string>
 #include <chrono>
+#include <cstdint>
 #include <sstream>
+#include <string>
+#include <utility>
 
 #include "NonCopyable.hpp"
 

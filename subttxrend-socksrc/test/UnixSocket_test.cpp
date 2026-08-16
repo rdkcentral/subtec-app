@@ -217,17 +217,10 @@ public:
 
     void testConstructorWithEmptyStringPath()
     {
-        // Empty string path
-        std::string path = "";
+        // Empty string path is not a valid filesystem socket endpoint and bind() should fail.
+        std::string path;
 
-        try {
-            UnixSocket socket(path);
-            CPPUNIT_ASSERT(!socketFileExists(path));
-            CPPUNIT_ASSERT(socket.getSocketBufferSize() > 0);
-        }
-        catch (const std::exception& e) {
-            CPPUNIT_FAIL(std::string("Unexpected exception: ") + e.what());
-        }
+        CPPUNIT_ASSERT_THROW((void)UnixSocket(path), UnixSocket::SocketException);
     }
 
     void testConstructorUnlinkAndReusePath()
@@ -1341,8 +1334,6 @@ public:
         enqueueDatagram(path1, data1, strlen(data1));
         enqueueDatagram(path2, data2, strlen(data2));
 
-        sleep(1);
-
         // Read from both sockets
         DataBuffer buffer1, buffer2;
         buffer1.resize(1024);
@@ -1443,7 +1434,6 @@ public:
         // Send first message using helper
         const char* msg1 = "FirstMessage";
         enqueueDatagram(path, msg1, strlen(msg1));
-        sleep(1);
 
         // Peek first message
         DataBuffer buffer;
@@ -1469,7 +1459,6 @@ public:
         // Send second message using helper
         const char* msg2 = "SecondMessage";
         enqueueDatagram(path, msg2, strlen(msg2));
-        sleep(1);
 
         // Read second message directly
         buffer.resize(1024);

@@ -82,9 +82,9 @@ macro (add_cppunit_test _name)
 
     target_compile_definitions(${_name} PRIVATE BACKEND_TYPE_EGL=2 BACKEND_TYPE_SHM=1)
     if(WITH_OPENGL)
-    add_definitions(-DBACKEND_TYPE=BACKEND_TYPE_EGL)
+        target_compile_definitions(${_name} PRIVATE BACKEND_TYPE=BACKEND_TYPE_EGL)
     else()
-    add_definitions(-DBACKEND_TYPE=BACKEND_TYPE_SHM)
+        target_compile_definitions(${_name} PRIVATE BACKEND_TYPE=BACKEND_TYPE_SHM)
     endif()
 
     add_test(NAME ${_name} COMMAND ${_name} )

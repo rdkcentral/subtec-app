@@ -20,41 +20,40 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
 #include "ParserODS.hpp"
 #include "PesPacketReader.hpp"
 #include "Database.hpp"
 #include "PixmapAllocator.hpp"
-#include "ParserException.hpp"
 
 #include "DecoderClientMock.hpp"
 #include "BitStreamWriter.hpp"
-#include "Misc.hpp"
 #include "ObjectParserStub.hpp"
 
 using dvbsubdecoder::Database;
-using dvbsubdecoder::Page;
 using dvbsubdecoder::ParserODS;
 using dvbsubdecoder::PesPacketReader;
-using dvbsubdecoder::ParserException;
 using dvbsubdecoder::PixmapAllocator;
 using dvbsubdecoder::Specification;
 using dvbsubdecoder::StcTime;
-using dvbsubdecoder::StcTimeType;
 
 class ParserODSTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( ParserODSTest );
     CPPUNIT_TEST(testSimple);
     CPPUNIT_TEST(testBadCoding);
-    CPPUNIT_TEST(testDepth);
+    CPPUNIT_TEST(testDepthDispatch);
     CPPUNIT_TEST(testVersionNumberBoundaries);
-    CPPUNIT_TEST(testNonModifyingColorFlag);
+    CPPUNIT_TEST(testColorFlagDispatch);
     CPPUNIT_TEST(testNoMatchingObjects);
     CPPUNIT_TEST(testZeroLengthFields);
     CPPUNIT_TEST(testLargeFieldLengths);
     CPPUNIT_TEST(testAllCodingMethods);
     CPPUNIT_TEST(testInsufficientData);
-    CPPUNIT_TEST(testRegionStateAfterParse);
+    CPPUNIT_TEST(testMatchingObjectDispatch);
     CPPUNIT_TEST_SUITE_END()
     ;
 
@@ -168,7 +167,7 @@ public:
         }
     }
 
-    void testDepth()
+    void testDepthDispatch()
     {
         const std::uint16_t REGION_ID = 1000;
 
@@ -194,7 +193,7 @@ public:
             auto region = m_database->getRegionByIndex(0);
             CPPUNIT_ASSERT(m_database->addRegionObject(region, REGION_ID, 0, 0));
 
-            // parse, failure on coding expected
+            // parse, pixel coding expected
             {
                 ObjectParserStub::resetCallCounter();
 
@@ -218,7 +217,7 @@ public:
             auto region = m_database->getRegionByIndex(0);
             CPPUNIT_ASSERT(m_database->addRegionObject(region, REGION_ID, 0, 0));
 
-            // parse, failure on coding expected
+            // parse, pixel coding expected
             {
                 ObjectParserStub::resetCallCounter();
 
@@ -242,7 +241,7 @@ public:
             auto region = m_database->getRegionByIndex(0);
             CPPUNIT_ASSERT(m_database->addRegionObject(region, REGION_ID, 0, 0));
 
-            // parse, failure on coding expected
+            // parse, pixel coding expected
             {
                 ObjectParserStub::resetCallCounter();
 
@@ -311,7 +310,7 @@ public:
         }
     }
 
-    void testNonModifyingColorFlag()
+    void testColorFlagDispatch()
     {
         const std::uint16_t OBJECT_ID = 1000;
 
@@ -552,7 +551,7 @@ public:
                 ParserODS().parseObjectDataSegment(*m_database, reader);
                 CPPUNIT_ASSERT(!ObjectParserStub::wasCalled());
             }
-            catch (...)
+            catch (const PesPacketReader::Exception&)
             {
                 // Expected to throw on insufficient data
                 CPPUNIT_ASSERT(!ObjectParserStub::wasCalled());
@@ -570,20 +569,25 @@ public:
             CPPUNIT_ASSERT(m_database->addRegionObject(region, 0x1000, 0, 0));
 
             ObjectParserStub::resetCallCounter();
-            std::vector<uint8_t> corruptData = {0xFF, 0x00, 0xAA};
-            PesPacketReader reader(corruptData.data(), corruptData.size(), nullptr, 0);
-            try {
+            std::vector<std::uint8_t> truncatedData = {
+                    0x10, 0x00, 0xC0, 0x00, 0x02, 0xAA};
+            PesPacketReader reader(truncatedData.data(), truncatedData.size(),
+                    nullptr, 0);
+            try
+            {
                 ParserODS().parseObjectDataSegment(*m_database, reader);
                 CPPUNIT_ASSERT(!ObjectParserStub::wasCalled());
-            } catch (...) {
+            }
+            catch (const PesPacketReader::Exception&)
+            {
                 CPPUNIT_ASSERT(!ObjectParserStub::wasCalled());
             }
         }
     }
 
-    void testRegionStateAfterParse()
+    void testMatchingObjectDispatch()
     {
-        // Valid parse should update region
+        // A matching object should dispatch to the object parser.
         const std::uint16_t OBJECT_ID = 1000;
         m_database->epochReset();
         m_database->getPage().startParsing(0, StcTime(), 0);

@@ -20,7 +20,10 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#include <list>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <string>
 #include <vector>
 
 #include "ObjectTablePool.hpp"
@@ -47,6 +50,8 @@ CPPUNIT_TEST_SUITE( ObjectTablePoolTest );
     CPPUNIT_TEST(testHighFrequencyOperations);
     CPPUNIT_TEST(testObjectStateResetAfterReuse);
     CPPUNIT_TEST(testOverfillWithUniqueIDs);
+    CPPUNIT_TEST(testZeroCapacity);
+    CPPUNIT_TEST(testResetBehavior);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -171,6 +176,11 @@ public:
 
         CPPUNIT_ASSERT_THROW(pool.add(0), std::logic_error);
         CPPUNIT_ASSERT_THROW(pool.add(1), std::logic_error);
+
+        CPPUNIT_ASSERT(pool.getCount() == 2);
+        CPPUNIT_ASSERT(pool.canAdd());
+        CPPUNIT_ASSERT(pool.getById(0) != nullptr);
+        CPPUNIT_ASSERT(pool.getById(1) != nullptr);
     }
 
     void testConstructorAndInitialState()
@@ -224,8 +234,8 @@ public:
         CPPUNIT_ASSERT(pool.getCount() == 0);
         
         // Add some objects again
-        pool.add(10);
-        pool.add(20);
+        CPPUNIT_ASSERT(pool.add(10) != nullptr);
+        CPPUNIT_ASSERT(pool.add(20) != nullptr);
         CPPUNIT_ASSERT(pool.getCount() == 2);
     }
 
@@ -451,7 +461,7 @@ public:
         CPPUNIT_ASSERT_THROW(pool.getByIndex(0), std::range_error);
         CPPUNIT_ASSERT_THROW(pool.getByIndex(1), std::range_error);
         CPPUNIT_ASSERT_THROW(pool.getByIndex(100), std::range_error);
-        CPPUNIT_ASSERT_THROW(pool.getByIndex(SIZE_MAX), std::range_error);
+        CPPUNIT_ASSERT_THROW(pool.getByIndex(std::numeric_limits<std::size_t>::max()), std::range_error);
         
         // Add one object
         auto obj1 = pool.add(42);
@@ -577,7 +587,7 @@ public:
             CPPUNIT_ASSERT(widePool.getById(500) == nullptr);
         }
         
-        // Test with simple POD type
+        // Test with a simple object type
         {
             ObjectTablePool<SimpleItem, IdType, 2> simplePool;
             
@@ -718,14 +728,12 @@ public:
     {
         const std::size_t POOL_SIZE = 3;
         ObjectTablePool<ComplexItem, IdType, POOL_SIZE> pool;
-        std::vector<ComplexItem*> objects;
         // Add objects and mutate fields
         for (IdType i = 0; i < POOL_SIZE; ++i) {
             auto obj = pool.add(i);
             CPPUNIT_ASSERT(obj);
             obj->value = 9999 + i;
             obj->name = "changed";
-            objects.push_back(obj);
         }
         pool.reset();
         // Re-add with new IDs, check all fields are reset
@@ -757,6 +765,53 @@ public:
         for (IdType i = 0; i < POOL_SIZE; ++i) {
             CPPUNIT_ASSERT(pool.getById(i) == objects[i]);
         }
+
+        pool.reset();
+        CPPUNIT_ASSERT(pool.add(99) != nullptr);
+        CPPUNIT_ASSERT(pool.getCount() == 1);
+    }
+
+    void testZeroCapacity()
+    {
+        ObjectTablePool<PoolItem, IdType, 0> pool;
+
+        CPPUNIT_ASSERT(pool.getCount() == 0);
+        CPPUNIT_ASSERT(!pool.canAdd());
+        CPPUNIT_ASSERT(pool.getById(0) == nullptr);
+        CPPUNIT_ASSERT(pool.add(0) == nullptr);
+
+        pool.reset();
+        CPPUNIT_ASSERT(pool.getCount() == 0);
+    }
+
+    void testResetBehavior()
+    {
+        ObjectTablePool<ResetTrackingItem, IdType, 2> pool;
+
+        pool.reset();
+        CPPUNIT_ASSERT(pool.getCount() == 0);
+
+        auto first = pool.add(1);
+        auto second = pool.add(2);
+        CPPUNIT_ASSERT(first != nullptr);
+        CPPUNIT_ASSERT(second != nullptr);
+        CPPUNIT_ASSERT(first->resetCount == 0);
+        CPPUNIT_ASSERT(second->resetCount == 0);
+
+        pool.reset();
+        CPPUNIT_ASSERT(first->resetCount == 1);
+        CPPUNIT_ASSERT(second->resetCount == 1);
+        CPPUNIT_ASSERT(pool.getCount() == 0);
+
+        pool.reset();
+        CPPUNIT_ASSERT(first->resetCount == 1);
+        CPPUNIT_ASSERT(second->resetCount == 1);
+
+        CPPUNIT_ASSERT(pool.add(3) == first);
+        CPPUNIT_ASSERT(pool.add(4) == second);
+        pool.reset();
+        CPPUNIT_ASSERT(first->resetCount == 2);
+        CPPUNIT_ASSERT(second->resetCount == 2);
     }
 
 private:
@@ -863,6 +918,41 @@ private:
         }
 
         int data;
+
+    private:
+        IdType m_id;
+        bool m_idValid;
+    };
+
+    class ResetTrackingItem
+    {
+    public:
+        ResetTrackingItem() :
+                m_id(0),
+                m_idValid(false),
+                resetCount(0)
+        {
+        }
+
+        void reset()
+        {
+            m_idValid = false;
+            ++resetCount;
+        }
+
+        void setId(IdType id)
+        {
+            m_id = id;
+            m_idValid = true;
+        }
+
+        IdType getId() const
+        {
+            CPPUNIT_ASSERT(m_idValid);
+            return m_id;
+        }
+
+        unsigned int resetCount;
 
     private:
         IdType m_id;

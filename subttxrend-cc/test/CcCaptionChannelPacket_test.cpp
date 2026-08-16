@@ -36,6 +36,7 @@ class CcCaptionChannelPacketTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testReset);
     CPPUNIT_TEST(testAddInvalidCcData);
     CPPUNIT_TEST(testAddDataToNotStartedPacket);
+    CPPUNIT_TEST(testRejects608Data);
     CPPUNIT_TEST(testAddStartToAlreadyStartedPacket);
     CPPUNIT_TEST(testAddMoreDataThanAllowed);
     CPPUNIT_TEST(testZeroSizePacket);
@@ -48,7 +49,7 @@ class CcCaptionChannelPacketTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCompletePacketFlow);
     CPPUNIT_TEST(testMultipleDataPackets);
     CPPUNIT_TEST(testPacketReusability);
-    CPPUNIT_TEST(testDifferentSequenceNumbers);
+    CPPUNIT_TEST(testSequenceBitsDoNotAffectSize);
     CPPUNIT_TEST(testMixedValidInvalidOperations);
 CPPUNIT_TEST_SUITE_END();
 
@@ -119,11 +120,13 @@ public:
     {
         CaptionChannelPacket packet;
         CcData startData = createValidStartData(2, 4);  // seqNo=2, size=4
+        startData.data2 = 0xA5;
 
         packet.addCcData(startData);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), packet.getCcpData().size());
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(8), packet.getSize());  // size=4 means 4*2=8 bytes
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xA5), packet.getCcpData()[0]);
         CPPUNIT_ASSERT_EQUAL(false, packet.isFull());
     }
 
@@ -206,6 +209,22 @@ public:
         CPPUNIT_ASSERT_THROW(packet.addCcData(dataPacket), InvalidOperation);
     }
 
+    void testRejects608Data()
+    {
+        CcData field1Data = createValidDataData();
+        field1Data.ccType = CcData::CcType::CEA_608_FIELD_1;
+        CcData field2Data = createValidDataData();
+        field2Data.ccType = CcData::CcType::CEA_608_FIELD_2;
+
+        CaptionChannelPacket packet;
+        CPPUNIT_ASSERT_THROW(packet.addCcData(field1Data), InvalidOperation);
+        CPPUNIT_ASSERT_THROW(packet.addCcData(field2Data), InvalidOperation);
+
+        packet.addCcData(createValidStartData());
+        CPPUNIT_ASSERT_THROW(packet.addCcData(field1Data), InvalidOperation);
+        CPPUNIT_ASSERT_THROW(packet.addCcData(field2Data), InvalidOperation);
+    }
+
     void testAddStartToAlreadyStartedPacket()
     {
         CaptionChannelPacket packet;
@@ -228,6 +247,9 @@ public:
 
         CcData dataPacket2 = createValidDataData();  // Would add 2 more bytes (total 5 > 4)
         CPPUNIT_ASSERT_THROW(packet.addCcData(dataPacket2), InvalidOperation);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), packet.getCcpData().size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), packet.getSize());
+        CPPUNIT_ASSERT_EQUAL(true, packet.isFull());
     }
 
     void testZeroSizePacket()
@@ -399,9 +421,9 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xDD), data[2]);   // new data2
     }
 
-    void testDifferentSequenceNumbers()
+    void testSequenceBitsDoNotAffectSize()
     {
-        // Test creating packets with different sequence numbers
+        // Sequence bits are part of the start byte and must not change size.
         for (uint8_t seqNo = 0; seqNo < 4; ++seqNo)
         {
             CaptionChannelPacket packet;
@@ -415,7 +437,6 @@ public:
             CPPUNIT_ASSERT_EQUAL(true, packet.isFull());
             CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), packet.getSize());
 
-            // Verify sequence-specific data
             const std::vector<std::uint8_t>& data = packet.getCcpData();
             CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0x50 + seqNo), data[1]);
             CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0x60 + seqNo), data[2]);

@@ -20,6 +20,8 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <cstring> // for strlen
+#include <exception>
+#include <string>
 #include <utility> // for std::declval used in static_assert noexcept checks
 
 #include "ParserException.hpp"
@@ -37,7 +39,7 @@ CPPUNIT_TEST_SUITE( ExceptionTest );
     CPPUNIT_TEST(testMessageBoundaryValues);
     CPPUNIT_TEST(testExceptionCopySemantics);
     CPPUNIT_TEST(testExceptionPropagation);
-    CPPUNIT_TEST(testMessageLifetimeSafety);
+    CPPUNIT_TEST(testMessageSources);
     CPPUNIT_TEST(testExceptionConsistency);
     CPPUNIT_TEST(testNoexceptGuarantee);
     CPPUNIT_TEST(testMultipleWhatCalls);
@@ -46,7 +48,7 @@ CPPUNIT_TEST_SUITE( ExceptionTest );
     CPPUNIT_TEST(testExceptionInheritanceHierarchy);
     CPPUNIT_TEST(testMessagePointerStability);
     CPPUNIT_TEST(testExceptionConstCorrectness);
-    CPPUNIT_TEST(testMessageSourceImmutability);
+    CPPUNIT_TEST(testImmutableSources);
     CPPUNIT_TEST(testPolymorphicCatchOrder);
     CPPUNIT_TEST(testNullptrHandlingContract);
 CPPUNIT_TEST_SUITE_END();
@@ -240,7 +242,7 @@ public:
         }
     }
 
-    void testMessageLifetimeSafety()
+    void testMessageSources()
     {
         // Test with string literal (guaranteed static lifetime)
         // String literals have static storage duration, so pointer remains valid
@@ -516,9 +518,12 @@ public:
         // Test const exception through std::exception interface
         const std::exception& stdRef = constParserEx;
         CPPUNIT_ASSERT_EQUAL(message, std::string(stdRef.what()));
+
+        const std::exception& constPesStdRef = constPesEx;
+        CPPUNIT_ASSERT_EQUAL(message, std::string(constPesStdRef.what()));
     }
 
-    void testMessageSourceImmutability()
+    void testImmutableSources()
     {
         // Test that exceptions work correctly when created from immutable sources
         // String literals have static storage duration - safe to use

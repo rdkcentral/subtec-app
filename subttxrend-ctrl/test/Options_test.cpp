@@ -23,6 +23,7 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <iostream>
 
 using namespace subttxrend::ctrl;
 
@@ -100,12 +101,14 @@ class OptionsTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testParseHelpOptionShortName);
     CPPUNIT_TEST(testHelpWithOtherOptionsFails);
     CPPUNIT_TEST(testHelpWithValueFails);
+    CPPUNIT_TEST(testDuplicateHelpFails);
     CPPUNIT_TEST(testHasSeparateReturnsTrueForHelp);
     CPPUNIT_TEST(testHasSeparateReturnsFalseWhenNoSeparate);
     CPPUNIT_TEST(testGetSeparateReturnsHelpKey);
     CPPUNIT_TEST(testParseMainSocketPathLongName);
     CPPUNIT_TEST(testParseMainSocketPathShortName);
     CPPUNIT_TEST(testMainSocketPathWithoutValueFails);
+    CPPUNIT_TEST(testShortMainSocketPathWithoutValueFails);
     CPPUNIT_TEST(testMainSocketPathWithEmptyString);
     CPPUNIT_TEST(testMainSocketPathWithSpaces);
     CPPUNIT_TEST(testMainSocketPathWithSpecialCharacters);
@@ -113,6 +116,7 @@ class OptionsTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testGetMainSocketPathWhenNotSpecified);
     CPPUNIT_TEST(testParseConfigFilePathLongName);
     CPPUNIT_TEST(testParseConfigFilePathShortName);
+    CPPUNIT_TEST(testConfigFilePathWithoutValueFails);
     CPPUNIT_TEST(testConfigFilePathNotSpecifiedReturnsDefault);
     CPPUNIT_TEST(testConfigFilePathWithRelativePath);
     CPPUNIT_TEST(testConfigFilePathWithAbsolutePath);
@@ -120,12 +124,15 @@ class OptionsTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testParseSameOptionTwiceFails);
     CPPUNIT_TEST(testParseAllNonSeparateOptions);
     CPPUNIT_TEST(testUnknownOptionFails);
+    CPPUNIT_TEST(testUnknownOptionWithoutValueFails);
     CPPUNIT_TEST(testOptionWithOnlyEqualSign);
     CPPUNIT_TEST(testGetOptionValueForUnsetOptionalWithDefault);
     CPPUNIT_TEST(testGetOptionValueForUnsetOptionalWithoutDefault);
     CPPUNIT_TEST(testGetOptionValueForSetOption);
     CPPUNIT_TEST(testGetOptionValueForHelpOption);
     CPPUNIT_TEST(testPrintUsageDoesNotCrash);
+    CPPUNIT_TEST(testPrintUsageContainsOptions);
+    CPPUNIT_TEST(testNullArgumentIsIgnored);
     CPPUNIT_TEST(testVeryLongOptionValue);
     CPPUNIT_TEST(testOptionValueWithTrailingEquals);
     CPPUNIT_TEST(testMultipleOptionsInDifferentOrder);
@@ -201,6 +208,12 @@ protected:
         CPPUNIT_ASSERT(!options->isValid());
     }
 
+    void testDuplicateHelpFails()
+    {
+        auto options = OptionsBuilder::createFromArgs({"subttxrend-app", "--help", "--help"});
+        CPPUNIT_ASSERT(!options->isValid());
+    }
+
     void testHasSeparateReturnsTrueForHelp()
     {
         auto options = OptionsBuilder::createWithHelp();
@@ -239,6 +252,12 @@ protected:
     void testMainSocketPathWithoutValueFails()
     {
         auto options = OptionsBuilder::createFromArgs({"subttxrend-app", "--main-socket-path"});
+        CPPUNIT_ASSERT(!options->isValid());
+    }
+
+    void testShortMainSocketPathWithoutValueFails()
+    {
+        auto options = OptionsBuilder::createFromArgs({"subttxrend-app", "-msp"});
         CPPUNIT_ASSERT(!options->isValid());
     }
 
@@ -295,6 +314,14 @@ protected:
         auto options = OptionsBuilder::createWithConfigFilePathShort(testPath);
         CPPUNIT_ASSERT(options->isValid());
         CPPUNIT_ASSERT_EQUAL(testPath, options->getOptionValue(Options::Key::CONFIG_FILE_PATH));
+    }
+
+    void testConfigFilePathWithoutValueFails()
+    {
+        auto longName = OptionsBuilder::createFromArgs({"subttxrend-app", "--config-file-path"});
+        auto shortName = OptionsBuilder::createFromArgs({"subttxrend-app", "-cfp"});
+        CPPUNIT_ASSERT(!longName->isValid());
+        CPPUNIT_ASSERT(!shortName->isValid());
     }
 
     void testConfigFilePathNotSpecifiedReturnsDefault()
@@ -365,6 +392,12 @@ protected:
         CPPUNIT_ASSERT(!options->isValid());
     }
 
+    void testUnknownOptionWithoutValueFails()
+    {
+        auto options = OptionsBuilder::createFromArgs({"subttxrend-app", "--unknown-option"});
+        CPPUNIT_ASSERT(!options->isValid());
+    }
+
     void testOptionWithOnlyEqualSign()
     {
         // --main-socket-path= should accept empty value
@@ -413,6 +446,31 @@ protected:
         CPPUNIT_ASSERT(options->isValid());
         // Ensure printUsage doesn't throw
         CPPUNIT_ASSERT_NO_THROW(options->printUsage());
+    }
+
+    void testPrintUsageContainsOptions()
+    {
+        auto options = OptionsBuilder::createEmpty();
+        std::ostringstream output;
+        auto* originalBuffer = std::cout.rdbuf(output.rdbuf());
+        options->printUsage();
+        std::cout.rdbuf(originalBuffer);
+
+        const auto usage = output.str();
+        CPPUNIT_ASSERT(usage.find("--help | -h") != std::string::npos);
+        CPPUNIT_ASSERT(usage.find("--main-socket-path | -msp") != std::string::npos);
+        CPPUNIT_ASSERT(usage.find("--config-file-path | -cfp") != std::string::npos);
+        CPPUNIT_ASSERT(usage.find("Default:  /etc/subttxrend/config.ini") != std::string::npos);
+    }
+
+    void testNullArgumentIsIgnored()
+    {
+        char program[] = "subttxrend-app";
+        char* arguments[] = {program, nullptr};
+        Options options(2, arguments);
+
+        CPPUNIT_ASSERT(options.isValid());
+        CPPUNIT_ASSERT(!options.hasSeparate());
     }
 
     void testVeryLongOptionValue()

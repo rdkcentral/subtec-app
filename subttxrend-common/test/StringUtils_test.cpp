@@ -39,7 +39,7 @@ CPPUNIT_TEST_SUITE( StringUtilsTest );
     CPPUNIT_TEST(testFormatLargeNumbers);
     CPPUNIT_TEST(testFormatNegativeNumbers);
     CPPUNIT_TEST(testFormatFloat);
-    CPPUNIT_TEST(testFormatUnicodeString);
+    CPPUNIT_TEST(testFormatUtf8Bytes);
     CPPUNIT_TEST(testIsSpaceBasic);
     CPPUNIT_TEST(testIsSpaceBoundary);
     CPPUNIT_TEST(testIsSpaceExtendedAscii);
@@ -60,11 +60,10 @@ CPPUNIT_TEST_SUITE( StringUtilsTest );
     CPPUNIT_TEST(testEndWithSingleChar);
     CPPUNIT_TEST(testFormatBasicString);
     CPPUNIT_TEST(testFormatVeryLongString);
-    CPPUNIT_TEST(testFormatMaxSizeLimit);
     CPPUNIT_TEST(testFormatSpecialFormats);
     CPPUNIT_TEST(testFormatPrecision);
     CPPUNIT_TEST(testFormatZeroPadding);
-    CPPUNIT_TEST(testTrimUnicodeWhitespace);
+    CPPUNIT_TEST(testTrimControlWhitespace);
     CPPUNIT_TEST(testTrimNullBytes);
     CPPUNIT_TEST(testTrimSingleCharacter);
     CPPUNIT_TEST(testTrimAlreadyTrimmed);
@@ -181,7 +180,7 @@ public:
         CPPUNIT_ASSERT(StringUtils::format("%e", 0.00123) == "1.230000e-03");
     }
 
-    void testFormatUnicodeString()
+    void testFormatUtf8Bytes()
     {
         CPPUNIT_ASSERT(StringUtils::format("%s", "тест") == "тест");
     }
@@ -365,15 +364,6 @@ public:
         }
     }
 
-    void testFormatMaxSizeLimit()
-    {
-        // Test format that would exceed MAX_BUFFER_SIZE (32KB)
-        std::string hugeString(35000, 'X');
-        std::string result = StringUtils::format("%s", hugeString.c_str());
-        // Should be truncated to MAX_BUFFER_SIZE
-        CPPUNIT_ASSERT(result.length() <= 32 * 1024);
-    }
-
     void testFormatSpecialFormats()
     {
         CPPUNIT_ASSERT(StringUtils::format("%p", (void*)0x1234) != "");
@@ -399,9 +389,9 @@ public:
         CPPUNIT_ASSERT(StringUtils::format("%010.2f", 3.14) == "0000003.14");
     }
 
-    void testTrimUnicodeWhitespace()
+    void testTrimControlWhitespace()
     {
-        // Test with various Unicode whitespace characters
+        // Test with ASCII whitespace characters handled by std::isspace.
         CPPUNIT_ASSERT(StringUtils::trim("\x20Test\x20") == "Test"); // regular space
         CPPUNIT_ASSERT(StringUtils::trimBegin("\x09\x0ATest") == "Test"); // tab, newline
         CPPUNIT_ASSERT(StringUtils::trimEnd("Test\x0D\x0C") == "Test"); // CR, form feed

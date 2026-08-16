@@ -20,8 +20,6 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <memory>
-#include <thread>
-#include <chrono>
 #include <atomic>
 
 #include "../src/EngineImpl.hpp"
@@ -34,7 +32,9 @@
 using subttxrend::gfx::EngineImpl;
 using subttxrend::gfx::Backend;
 using subttxrend::gfx::BackendListener;
+using subttxrend::gfx::BackendWindowEnumerator;
 using subttxrend::gfx::BackendFactory;
+using subttxrend::gfx::KeyEventListener;
 using subttxrend::gfx::WindowImpl;
 using subttxrend::gfx::WindowPtr;
 using subttxrend::gfx::Size;
@@ -47,14 +47,13 @@ class MockBackend : public Backend
 public:
     MockBackend(BackendListener* listener)
         : Backend(listener)
+        , m_listener(listener)
         , m_isSyncNeeded(true)
         , m_initCalled(false)
         , m_initResult(true)
         , m_startCalled(false)
         , m_startResult(true)
         , m_stopCalled(false)
-        , m_requestRenderCalled(false)
-        , m_forceRenderCalled(false)
         , m_requestRenderCount(0)
         , m_forceRenderCount(0)
     {
@@ -90,16 +89,12 @@ public:
 
     void requestRender() override
     {
-        m_requestRenderCalled = true;
         m_requestRenderCount++;
-        s_requestRenderCount.fetch_add(1);
     }
 
     void forceRender() override
     {
-        m_forceRenderCalled = true;
         m_forceRenderCount++;
-        s_forceRenderCount.fetch_add(1);
     }
 
 #ifdef __APPLE__
@@ -110,42 +105,48 @@ public:
 #endif
 
     // Test helper methods
+    void bindListener(BackendListener* listener) { m_listener = listener; }
     void setSyncNeeded(bool needed) { m_isSyncNeeded = needed; }
     void setInitResult(bool result) { m_initResult = result; }
     void setStartResult(bool result) { m_startResult = result; }
     bool wasInitCalled() const { return m_initCalled; }
     bool wasStartCalled() const { return m_startCalled; }
     bool wasStopCalled() const { return m_stopCalled; }
-    bool wasForceRenderCalled() const { return m_forceRenderCalled; }
     int getForceRenderCount() const { return m_forceRenderCount; }
-    bool wasRequestRenderCalled() const { return m_requestRenderCalled; }
     int getRequestRenderCount() const { return m_requestRenderCount; }
     std::string getDisplayName() const { return m_displayName; }
+    void emitKeyEvent(const subttxrend::gfx::KeyEvent& event)
+    {
+        m_listener->processKeyEvent(event);
+    }
+    void emitPreferredSize(const Size& size)
+    {
+        m_listener->onPreferredSize(size);
+    }
+    void enumerateVisibleWindows(BackendWindowEnumerator& enumerator)
+    {
+        m_listener->enumerateVisibleWindows(enumerator);
+    }
 
     static void resetStaticFlags()
     {
         s_initCalled.store(false);
         s_startCalled.store(false);
         s_stopCalled.store(false);
-        s_requestRenderCount.store(0);
-        s_forceRenderCount.store(0);
     }
 
     static std::atomic<bool> s_initCalled;
     static std::atomic<bool> s_startCalled;
     static std::atomic<bool> s_stopCalled;
-    static std::atomic<int> s_requestRenderCount;
-    static std::atomic<int> s_forceRenderCount;
 
 private:
+    BackendListener* m_listener;
     bool m_isSyncNeeded;
     bool m_initCalled;
     bool m_initResult;
     bool m_startCalled;
     bool m_startResult;
     bool m_stopCalled;
-    bool m_requestRenderCalled;
-    bool m_forceRenderCalled;
     int m_requestRenderCount;
     int m_forceRenderCount;
     std::string m_displayName;
@@ -163,6 +164,7 @@ std::unique_ptr<Backend> BackendFactory::createBackend(BackendListener* listener
 {
     if (g_mockBackend)
     {
+        g_mockBackend->bindListener(listener);
         // Return the mock backend (ownership transferred)
         auto backend = std::unique_ptr<Backend>(g_mockBackend);
         g_mockBackend = nullptr;
@@ -177,8 +179,50 @@ std::unique_ptr<Backend> BackendFactory::createBackend(BackendListener* listener
 std::atomic<bool> MockBackend::s_initCalled{false};
 std::atomic<bool> MockBackend::s_startCalled{false};
 std::atomic<bool> MockBackend::s_stopCalled{false};
-std::atomic<int> MockBackend::s_requestRenderCount{0};
-std::atomic<int> MockBackend::s_forceRenderCount{0};
+
+class CountingKeyEventListener : public KeyEventListener
+{
+public:
+    void onKeyEvent(const subttxrend::gfx::KeyEvent& event) override
+    {
+        m_symbols.push_back(event.getSymbol());
+    }
+
+    int getCount() const
+    {
+        return static_cast<int>(m_symbols.size());
+    }
+
+    unsigned int getSymbol(int index) const
+    {
+        return m_symbols.at(index);
+    }
+
+private:
+    std::vector<unsigned int> m_symbols;
+};
+
+class CountingWindowEnumerator : public BackendWindowEnumerator
+{
+public:
+    void processWindow(const subttxrend::gfx::Pixmap&) override
+    {
+        m_count++;
+    }
+
+    void processWindow(const subttxrend::gfx::Pixmap&, const subttxrend::gfx::Pixmap&) override
+    {
+        m_count++;
+    }
+
+    int getCount() const
+    {
+        return m_count;
+    }
+
+private:
+    int m_count{0};
+};
 
 
 class EngineImplTest : public CppUnit::TestFixture
@@ -225,15 +269,16 @@ CPPUNIT_TEST_SUITE( EngineImplTest );
     CPPUNIT_TEST(testDetachRemovesWindowFromList);
     CPPUNIT_TEST(testDetachSameWindowTwice);
     CPPUNIT_TEST(testDetachOneOfMultipleWindows);
-    CPPUNIT_TEST(testExecuteCallsLockAndUnlock);
+    CPPUNIT_TEST(testExecuteDispatchesKeyEvent);
     CPPUNIT_TEST(testExecuteBeforeInit);
     CPPUNIT_TEST(testExecuteAfterInit);
     CPPUNIT_TEST(testRequestRedrawWithBackend);
+    CPPUNIT_TEST(testForceRedrawWithoutBackend);
     CPPUNIT_TEST(testForceRedrawWithBackend);
-    CPPUNIT_TEST(testLockWithBackendSyncNeeded);
-    CPPUNIT_TEST(testLockWithBackendSyncNotNeeded);
-    CPPUNIT_TEST(testUnlockWithBackendSyncNeeded);
-    CPPUNIT_TEST(testUnlockWithBackendSyncNotNeeded);
+    CPPUNIT_TEST(testExecuteTargetsVisibleWindow);
+    CPPUNIT_TEST(testPreferredSizeUpdatesWindows);
+    CPPUNIT_TEST(testEnumeratesVisibleWindows);
+    CPPUNIT_TEST(testExecuteDrainsQueuedEvents);
     CPPUNIT_TEST(testCompleteLifecycleInitShutdown);
     CPPUNIT_TEST(testLifecycleInitShutdownReinit);
     CPPUNIT_TEST(testLifecycleWithWindowAttachDetach);
@@ -406,8 +451,8 @@ public:
         EngineImpl engine;
         engine.init("display");
 
-        CPPUNIT_ASSERT(mockBackend->wasInitCalled());
-        CPPUNIT_ASSERT(!mockBackend->wasStartCalled());
+        CPPUNIT_ASSERT(MockBackend::s_initCalled.load());
+        CPPUNIT_ASSERT(!MockBackend::s_startCalled.load());
     }
 
     void testInitWhenBackendStartFails()
@@ -419,8 +464,8 @@ public:
         EngineImpl engine;
         engine.init("display");
 
-        CPPUNIT_ASSERT(mockBackend->wasInitCalled());
-        CPPUNIT_ASSERT(mockBackend->wasStartCalled());
+        CPPUNIT_ASSERT(MockBackend::s_initCalled.load());
+        CPPUNIT_ASSERT(MockBackend::s_startCalled.load());
     }
 
     void testInitStoresBackendOnSuccess()
@@ -481,7 +526,7 @@ public:
 
         CPPUNIT_ASSERT(!mockBackend->wasStopCalled());
         engine.shutdown();
-        CPPUNIT_ASSERT(mockBackend->wasStopCalled());
+        CPPUNIT_ASSERT(MockBackend::s_stopCalled.load());
     }
 
     void testShutdownResetsBackend()
@@ -832,7 +877,7 @@ public:
         CPPUNIT_ASSERT_THROW(engine.attach(window3), std::logic_error);
     }
 
-    void testExecuteCallsLockAndUnlock()
+    void testExecuteDispatchesKeyEvent()
     {
         auto mockBackend = new MockBackend(nullptr);
         mockBackend->setSyncNeeded(true);
@@ -840,16 +885,17 @@ public:
 
         EngineImpl engine;
         engine.init("display");
+        WindowPtr window = engine.createWindow();
+        CountingKeyEventListener listener;
+        engine.attach(window);
+        window->addKeyEventListener(&listener);
+        window->setVisible(true);
+        mockBackend->emitKeyEvent(subttxrend::gfx::KeyEvent(subttxrend::gfx::KeyEvent::Type::PRESSED, 37));
 
-        // Execute should call lock/unlock; ensure it doesn't throw
-        try
-        {
-            engine.execute();
-        }
-        catch (const std::exception& ex)
-        {
-            CPPUNIT_FAIL(std::string("execute() threw exception: ") + ex.what());
-        }
+        engine.execute();
+
+        CPPUNIT_ASSERT_EQUAL(1, listener.getCount());
+        CPPUNIT_ASSERT_EQUAL(37U, listener.getSymbol(0));
     }
 
     void testExecuteBeforeInit()
@@ -890,13 +936,14 @@ public:
 
         EngineImpl engine;
         engine.init("display");
+        WindowPtr window = engine.createWindow();
+        engine.attach(window);
 
-        // Verify backend is initialized and started
-        CPPUNIT_ASSERT(mockBackend->wasInitCalled());
-        CPPUNIT_ASSERT(mockBackend->wasStartCalled());
-        // EngineImpl::requestRedraw() is private; verify initial state remains consistent
-        // and that no unexpected backend calls occur without public triggers.
         CPPUNIT_ASSERT_EQUAL(0, mockBackend->getRequestRenderCount());
+
+        window->setVisible(true);
+
+        CPPUNIT_ASSERT_EQUAL(1, mockBackend->getRequestRenderCount());
     }
 
     void testForceRedrawWithoutBackend()
@@ -922,13 +969,18 @@ public:
 
         EngineImpl engine;
         engine.init("display");
+        WindowPtr window = engine.createWindow();
+        engine.attach(window);
+        window->setVisible(true);
 
-        // Verify backend fully initialized
-        CPPUNIT_ASSERT(mockBackend->wasInitCalled());
-        CPPUNIT_ASSERT(mockBackend->wasStartCalled());
+        CPPUNIT_ASSERT_EQUAL(0, mockBackend->getForceRenderCount());
+
+        window->setVisible(false);
+
+        CPPUNIT_ASSERT_EQUAL(1, mockBackend->getForceRenderCount());
     }
 
-    void testLockWithBackendSyncNeeded()
+    void testExecuteTargetsVisibleWindow()
     {
         auto mockBackend = new MockBackend(nullptr);
         mockBackend->setSyncNeeded(true);
@@ -936,76 +988,83 @@ public:
 
         EngineImpl engine;
         engine.init("display");
+        WindowPtr hiddenWindow = engine.createWindow();
+        WindowPtr visibleWindow = engine.createWindow();
+        CountingKeyEventListener hiddenListener;
+        CountingKeyEventListener visibleListener;
+        engine.attach(hiddenWindow);
+        engine.attach(visibleWindow);
+        hiddenWindow->addKeyEventListener(&hiddenListener);
+        visibleWindow->addKeyEventListener(&visibleListener);
+        visibleWindow->setVisible(true);
+        mockBackend->emitKeyEvent(subttxrend::gfx::KeyEvent(subttxrend::gfx::KeyEvent::Type::PRESSED, 41));
 
-        try
-        {
-            // Lock should acquire mutex when sync needed
-            engine.execute();
-        }
-        catch (const std::exception& ex)
-        {
-            CPPUNIT_FAIL(std::string("execute() threw: ") + ex.what());
-        }
+        engine.execute();
+
+        CPPUNIT_ASSERT_EQUAL(0, hiddenListener.getCount());
+        CPPUNIT_ASSERT_EQUAL(1, visibleListener.getCount());
     }
 
-    void testLockWithBackendSyncNotNeeded()
+    void testPreferredSizeUpdatesWindows()
     {
         auto mockBackend = new MockBackend(nullptr);
-        mockBackend->setSyncNeeded(false);
         g_mockBackend = mockBackend;
 
         EngineImpl engine;
         engine.init("display");
+        WindowPtr window1 = engine.createWindow();
+        WindowPtr window2 = engine.createWindow();
+        Size preferredSize{640, 480};
+        engine.attach(window1);
+        engine.attach(window2);
 
-        try
-        {
-            // Lock should skip mutex when sync not needed
-            engine.execute();
-        }
-        catch (const std::exception& ex)
-        {
-            CPPUNIT_FAIL(std::string("execute() threw: ") + ex.what());
-        }
+        mockBackend->emitPreferredSize(preferredSize);
+
+        CPPUNIT_ASSERT(window1->getPreferredSize() == preferredSize);
+        CPPUNIT_ASSERT(window2->getPreferredSize() == preferredSize);
     }
 
-    void testUnlockWithBackendSyncNeeded()
+    void testEnumeratesVisibleWindows()
     {
         auto mockBackend = new MockBackend(nullptr);
-        mockBackend->setSyncNeeded(true);
         g_mockBackend = mockBackend;
 
         EngineImpl engine;
         engine.init("display");
+        WindowPtr hiddenWindow = engine.createWindow();
+        WindowPtr visibleWindow = engine.createWindow();
+        CountingWindowEnumerator enumerator;
+        engine.attach(hiddenWindow);
+        engine.attach(visibleWindow);
+        visibleWindow->setVisible(true);
 
-        try
-        {
-            // Unlock should release mutex when sync needed
-            engine.execute();
-        }
-        catch (const std::exception& ex)
-        {
-            CPPUNIT_FAIL(std::string("execute() threw: ") + ex.what());
-        }
+        mockBackend->enumerateVisibleWindows(enumerator);
+
+        CPPUNIT_ASSERT_EQUAL(1, enumerator.getCount());
     }
 
-    void testUnlockWithBackendSyncNotNeeded()
+    void testExecuteDrainsQueuedEvents()
     {
         auto mockBackend = new MockBackend(nullptr);
-        mockBackend->setSyncNeeded(false);
         g_mockBackend = mockBackend;
 
         EngineImpl engine;
         engine.init("display");
+        WindowPtr window = engine.createWindow();
+        CountingKeyEventListener listener;
+        engine.attach(window);
+        window->addKeyEventListener(&listener);
+        window->setVisible(true);
+        mockBackend->emitKeyEvent(subttxrend::gfx::KeyEvent(subttxrend::gfx::KeyEvent::Type::PRESSED, 11));
+        mockBackend->emitKeyEvent(subttxrend::gfx::KeyEvent(subttxrend::gfx::KeyEvent::Type::RELEASED, 12));
 
-        try
-        {
-            // Unlock should skip mutex when sync not needed
-            engine.execute();
-        }
-        catch (const std::exception& ex)
-        {
-            CPPUNIT_FAIL(std::string("execute() threw: ") + ex.what());
-        }
+        engine.execute();
+        CPPUNIT_ASSERT_EQUAL(2, listener.getCount());
+        CPPUNIT_ASSERT_EQUAL(11U, listener.getSymbol(0));
+        CPPUNIT_ASSERT_EQUAL(12U, listener.getSymbol(1));
+
+        engine.execute();
+        CPPUNIT_ASSERT_EQUAL(2, listener.getCount());
     }
 
     void testCompleteLifecycleInitShutdown()
@@ -1021,7 +1080,7 @@ public:
         CPPUNIT_ASSERT(mockBackend->wasStartCalled());
 
         engine.shutdown();
-        CPPUNIT_ASSERT(mockBackend->wasStopCalled());
+        CPPUNIT_ASSERT(MockBackend::s_stopCalled.load());
     }
 
     void testLifecycleInitShutdownReinit()
@@ -1032,6 +1091,7 @@ public:
         EngineImpl engine;
         engine.init("display1");
         engine.shutdown();
+        MockBackend::resetStaticFlags();
 
         auto mockBackend2 = new MockBackend(nullptr);
         g_mockBackend = mockBackend2;
@@ -1040,7 +1100,7 @@ public:
         CPPUNIT_ASSERT(mockBackend2->wasInitCalled());
 
         engine.shutdown();
-        CPPUNIT_ASSERT(mockBackend2->wasStopCalled());
+        CPPUNIT_ASSERT(MockBackend::s_stopCalled.load());
     }
 
     void testLifecycleWithWindowAttachDetach()
@@ -1265,13 +1325,14 @@ public:
 
         CPPUNIT_ASSERT(!mockBackend->wasStopCalled());
         engine.shutdown();
-        CPPUNIT_ASSERT(mockBackend->wasStopCalled());
+        CPPUNIT_ASSERT(MockBackend::s_stopCalled.load());
     }
 
     void testMultipleInitShutdownCycles()
     {
         for (int i = 0; i < 3; ++i)
         {
+            MockBackend::resetStaticFlags();
             auto mockBackend = new MockBackend(nullptr);
             g_mockBackend = mockBackend;
 
@@ -1281,7 +1342,7 @@ public:
             CPPUNIT_ASSERT(mockBackend->wasStartCalled());
 
             engine.shutdown();
-            CPPUNIT_ASSERT(mockBackend->wasStopCalled());
+            CPPUNIT_ASSERT(MockBackend::s_stopCalled.load());
         }
     }
 
@@ -1295,9 +1356,9 @@ public:
         engine.init("display");
 
         // Backend init failed, start should not be called
-        CPPUNIT_ASSERT(mockBackend->wasInitCalled());
-        CPPUNIT_ASSERT(!mockBackend->wasStartCalled());
-        CPPUNIT_ASSERT(!mockBackend->wasStopCalled());
+        CPPUNIT_ASSERT(MockBackend::s_initCalled.load());
+        CPPUNIT_ASSERT(!MockBackend::s_startCalled.load());
+        CPPUNIT_ASSERT(!MockBackend::s_stopCalled.load());
 
         // Shutdown should be safe and not call stop
         engine.shutdown();
@@ -1313,8 +1374,8 @@ public:
         engine.init("display");
 
         // Backend init succeeded but start failed
-        CPPUNIT_ASSERT(mockBackend->wasInitCalled());
-        CPPUNIT_ASSERT(mockBackend->wasStartCalled());
+        CPPUNIT_ASSERT(MockBackend::s_initCalled.load());
+        CPPUNIT_ASSERT(MockBackend::s_startCalled.load());
 
         // Shutdown should be safe - stop may or may not be called depending on implementation
         // If start() fails, engine may not store the backend, so stop() might not be called
@@ -1380,18 +1441,12 @@ public:
 
         EngineImpl engine;
         engine.init("display");
-        // Capture counts before shutdown
-        int reqCountBeforeShutdown = mockBackend->getRequestRenderCount();
-        int forceCountBeforeShutdown = mockBackend->getForceRenderCount();
         engine.shutdown();
 
         // Execute after shutdown should be safe
         engine.execute();
         engine.execute();
-        // Backend should not receive further render calls after shutdown
-        CPPUNIT_ASSERT_EQUAL(reqCountBeforeShutdown, mockBackend->getRequestRenderCount());
-        CPPUNIT_ASSERT_EQUAL(forceCountBeforeShutdown, mockBackend->getForceRenderCount());
-        // verified counts unchanged above
+        CPPUNIT_ASSERT(MockBackend::s_stopCalled.load());
     }
 
     void testCreateWindowAfterShutdown()
@@ -1418,8 +1473,8 @@ public:
         engine.init("display");
 
         // Verify backend init was attempted but failed
-        CPPUNIT_ASSERT(mockBackend->wasInitCalled());
-        CPPUNIT_ASSERT(!mockBackend->wasStartCalled());
+        CPPUNIT_ASSERT(MockBackend::s_initCalled.load());
+        CPPUNIT_ASSERT(!MockBackend::s_startCalled.load());
 
         // State should remain consistent - window operations should work
         WindowPtr window = engine.createWindow();

@@ -25,7 +25,6 @@
 #include <subttxrend/gfx/Window.hpp>
 #include <subttxrend/gfx/DrawContext.hpp>
 #include "CcWindow.hpp"
-#include "CcTextDrawer.hpp"
 #include "CcGfx.hpp"
 #include "CcCommand.hpp"
 
@@ -35,14 +34,10 @@ using namespace subttxrend::gfx;
 class MockDrawContext : public DrawContext
 {
 public:
-    int fillRectCalls = 0;
     int drawStringCalls = 0;
     int drawUnderlineCalls = 0;
-    int drawGlyphCalls = 0;
 
-    void fillRectangle(ColorArgb color, const Rectangle& rectangle) override {
-        fillRectCalls++;
-    }
+    void fillRectangle(ColorArgb color, const Rectangle& rectangle) override {}
 
     void drawUnderline(ColorArgb color, const Rectangle& rectangle) override {
         drawUnderlineCalls++;
@@ -52,9 +47,7 @@ public:
     void drawBitmap(const Bitmap& bitmap, const Rectangle& dstRect) override {}
 
     void drawGlyph(const FontStripPtr& fontStrip, std::int32_t glyphIndex, const Rectangle& rect,
-                   ColorArgb fgColor, ColorArgb bgColor) override {
-        drawGlyphCalls++;
-    }
+                   ColorArgb fgColor, ColorArgb bgColor) override {}
 
     void drawString(PrerenderedFont& font, const Rectangle &destinationRect,
                    const std::vector<GlyphData>& glyphs, const ColorArgb fgColor,
@@ -63,10 +56,8 @@ public:
     }
 
     void reset() {
-        fillRectCalls = 0;
         drawStringCalls = 0;
         drawUnderlineCalls = 0;
-        drawGlyphCalls = 0;
     }
 };
 
@@ -106,50 +97,7 @@ public:
     }
 };
 
-class MockPrerenderedFont : public PrerenderedFont
-{
-public:
-    int height = 20;
-    int advance = 12;
-    int descender = -5;
-    int ascender = 15;
-
-    std::vector<TextTokenData> textToTokens(const std::string& text) override {
-        std::vector<TextTokenData> tokens;
-        if (text.empty()) return tokens;
-
-        for (char c : text) {
-            TextTokenData token;
-            token.totalAdvanceX = advance;
-            token.isWhite = (c == ' ');
-            token.glyphs.push_back(GlyphData());
-            tokens.push_back(token);
-        }
-        return tokens;
-    }
-
-    std::int32_t getFontHeight() const override { return height; }
-    std::int32_t getFontDescender() const override { return descender; }
-    std::int32_t getFontAscender() const override { return ascender; }
-    std::int32_t getMaxAdvance() const override { return advance; }
-};
-
-class MockFontCache : public PrerenderedFontCache
-{
-public:
-    std::shared_ptr<MockPrerenderedFont> mockFont;
-
-    MockFontCache() {
-        mockFont = std::make_shared<MockPrerenderedFont>();
-    }
-
-    std::shared_ptr<PrerenderedFont> getFont(const std::string& fontName,
-                                             int fontSize,
-                                             bool strictHeight = false,
-                                             bool italics = false) {
-        return mockFont;
-    }
-};
+using MockFontCache = PrerenderedFontCache;
 
 class MockGfx : public Gfx
 {
@@ -157,10 +105,6 @@ public:
     std::shared_ptr<MockGfxWindow> mockWindow;
     int drawBackgroundCalls = 0;
     int drawBorderCalls = 0;
-    int updateCalls = 0;
-    int clearCalls = 0;
-    int showCalls = 0;
-    int hideCalls = 0;
 
     MockGfx() {
         mockWindow = std::make_shared<MockGfxWindow>();
@@ -179,29 +123,17 @@ public:
         drawBorderCalls++;
     }
 
-    void update() override {
-        updateCalls++;
-    }
+    void update() override {}
 
-    void clear() override {
-        clearCalls++;
-    }
+    void clear() override {}
 
-    void show() override {
-        showCalls++;
-    }
+    void show() override {}
 
-    void hide() override {
-        hideCalls++;
-    }
+    void hide() override {}
 
     void reset() {
         drawBackgroundCalls = 0;
         drawBorderCalls = 0;
-        updateCalls = 0;
-        clearCalls = 0;
-        showCalls = 0;
-        hideCalls = 0;
         mockWindow->mockContext.reset();
     }
 };
@@ -280,6 +212,7 @@ class CcWindowTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testHasTextOnNonExistentRow);
     CPPUNIT_TEST(testSetFlashStateShow);
     CPPUNIT_TEST(testSetFlashStateHide);
+    CPPUNIT_TEST(testDrawUsesPrintDirection);
     CPPUNIT_TEST(testUpdateRowCountIncreaseWithAdjust);
     CPPUNIT_TEST(testUpdateRowCountDecreaseWithAdjust);
     CPPUNIT_TEST(testUpdateRowCountWithoutAdjust);
@@ -522,6 +455,7 @@ public:
 
         testWin->report("Hidden Text");
         CPPUNIT_ASSERT_EQUAL(false, testWin->changed());
+        CPPUNIT_ASSERT_EQUAL(false, testWin->hasText(0));
 
         delete testWin;
     }
@@ -592,7 +526,7 @@ public:
     void testHorizontalCarriageReturnWithText()
     {
         window->report("Test");
-        window->horizontalCarriageReturn();
+        CPPUNIT_ASSERT_NO_THROW(window->horizontalCarriageReturn());
         CPPUNIT_ASSERT_EQUAL(true, window->changed());
     }
 
@@ -616,6 +550,7 @@ public:
 
     void testBackspaceWithText()
     {
+        window->setPenLocation(0, 0);
         window->report("Test");
 
         // Backspace should not throw and should keep window usable
@@ -625,6 +560,7 @@ public:
         mockGfx->reset();
         window->draw();
         CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
+        CPPUNIT_ASSERT(mockGfx->mockWindow->mockContext.drawStringCalls > 0);
     }
 
     void testSetPenLocationOutOfBoundsRow()
@@ -1032,6 +968,7 @@ public:
         mockGfx->reset();
         window->draw();
         CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
+        CPPUNIT_ASSERT(mockGfx->mockWindow->mockContext.drawStringCalls > 0);
     }
 
     void testSetFlashStateHide()
@@ -1047,6 +984,7 @@ public:
         mockGfx->reset();
         window->draw();
         CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
+        CPPUNIT_ASSERT_EQUAL(0, mockGfx->mockWindow->mockContext.drawStringCalls);
     }
 
     void testUpdateRowCountIncreaseWithAdjust()
@@ -1148,6 +1086,18 @@ public:
         CPPUNIT_ASSERT_EQUAL(0, mockGfx->drawBorderCalls);
 
         delete testWin;
+    }
+
+    void testDrawUsesPrintDirection()
+    {
+        WindowAttributes attrs = windowDef.win_style;
+        attrs.print_direction = WindowPd::RIGHT_LEFT;
+        window->setWindowAttributes(attrs);
+        window->report("Text");
+
+        window->draw();
+        CPPUNIT_ASSERT_EQUAL(DrawDirection::RIGHT_TO_LEFT,
+                             mockGfx->mockWindow->currentDirection);
     }
 
     void testDrawResetsChangedFlag()
@@ -1368,6 +1318,7 @@ public:
         window->draw();
         CPPUNIT_ASSERT(mockGfx->drawBorderCalls > 0);
         CPPUNIT_ASSERT_EQUAL(true, window->hasFlashingText());
+        CPPUNIT_ASSERT(mockGfx->mockWindow->mockContext.drawUnderlineCalls > 0);
     }
 
     void testMaxTextDrawersLimit()
@@ -1760,11 +1711,14 @@ public:
 
     void testPrintDirectionChangeClears()
     {
+        window->setPenLocation(0, 0);
         window->report("Original Text");
+        CPPUNIT_ASSERT_EQUAL(true, window->hasText(0));
 
         WindowAttributes newAttrs = windowDef.win_style;
         newAttrs.print_direction = WindowPd::RIGHT_LEFT;
         window->setWindowAttributes(newAttrs);
+        CPPUNIT_ASSERT_EQUAL(false, window->hasText(0));
 
         // After direction change, add new text
         window->report("New Direction Text");
@@ -1775,6 +1729,7 @@ public:
 
     void testScrollDirectionChangeClears()
     {
+        window->setPenLocation(0, 0);
         window->report("Line 1");
         window->carriageReturn();
         window->report("Line 2");
@@ -1782,6 +1737,7 @@ public:
         WindowAttributes newAttrs = windowDef.win_style;
         newAttrs.scroll_direction = WindowSd::TOP_BOTTOM;
         window->setWindowAttributes(newAttrs);
+        CPPUNIT_ASSERT_EQUAL(false, window->hasText(0));
 
         window->report("New Scroll Text");
         mockGfx->reset();

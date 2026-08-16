@@ -21,12 +21,8 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include <thread>
-#include <chrono>
 
 #include <subttxrend/gfx/PrerenderedFont.hpp>
-#include <subttxrend/gfx/Window.hpp>
-#include <subttxrend/gfx/DrawContext.hpp>
 #include <subttxrend/protocol/PacketSetCCAttributes.hpp>
 #include "CcWindowController.hpp"
 #include "CcGfx.hpp"
@@ -35,71 +31,6 @@
 using namespace subttxrend::cc;
 using namespace subttxrend::gfx;
 using namespace subttxrend::protocol;
-
-class MockDrawContext : public DrawContext
-{
-public:
-    int fillRectCalls = 0;
-    int drawStringCalls = 0;
-
-    void fillRectangle(ColorArgb color, const Rectangle& rectangle) override {
-        fillRectCalls++;
-    }
-
-    void drawUnderline(ColorArgb color, const Rectangle& rectangle) override {}
-    void drawPixmap(const ClutBitmap& bitmap, const Rectangle& srcRect, const Rectangle& dstRect) override {}
-    void drawBitmap(const Bitmap& bitmap, const Rectangle& dstRect) override {}
-
-    void drawGlyph(const FontStripPtr& fontStrip, std::int32_t glyphIndex, const Rectangle& rect,
-                   ColorArgb fgColor, ColorArgb bgColor) override {}
-
-    void drawString(PrerenderedFont& font, const Rectangle &destinationRect,
-                   const std::vector<GlyphData>& glyphs, const ColorArgb fgColor,
-                   const ColorArgb bgColor, int outlineSize = 0, int verticalOffset = 0) override {
-        drawStringCalls++;
-    }
-
-    void reset() {
-        fillRectCalls = 0;
-        drawStringCalls = 0;
-    }
-};
-
-class MockGfxWindow : public subttxrend::gfx::Window
-{
-public:
-    MockDrawContext mockContext;
-    DrawDirection currentDirection = DrawDirection::LEFT_TO_RIGHT;
-
-    void addKeyEventListener(KeyEventListener* listener) override {}
-    void removeKeyEventListener(KeyEventListener* listener) override {}
-
-    Rectangle getBounds() const override {
-        return Rectangle(0, 0, 1920, 1080);
-    }
-
-    DrawContext& getDrawContext() override {
-        return mockContext;
-    }
-
-    Size getPreferredSize() const override {
-        return Size(1920, 1080);
-    }
-
-    void setSize(const Size& newSize) override {}
-
-    Size getSize() const override {
-        return Size(1920, 1080);
-    }
-
-    void setVisible(bool visible) override {}
-    void clear() override {}
-    void update() override {}
-
-    void setDrawDirection(DrawDirection dir) override {
-        currentDirection = dir;
-    }
-};
 
 class MockPrerenderedFont : public PrerenderedFont
 {
@@ -144,21 +75,10 @@ public:
 class MockGfx : public Gfx
 {
 public:
-    std::shared_ptr<MockGfxWindow> mockWindow;
-    int drawBackgroundCalls = 0;
     int clearCalls = 0;
     int updateCalls = 0;
 
-    MockGfx() {
-        mockWindow = std::make_shared<MockGfxWindow>();
-    }
-
-    subttxrend::gfx::Window* getInternalWindow() override {
-        return mockWindow.get();
-    }
-
     void drawBackground(const Point& point, const Dimensions& dim, Color color) override {
-        drawBackgroundCalls++;
     }
 
     void drawBorder(const Point& p, const Dimensions& dimensions, Color color,
@@ -177,10 +97,8 @@ public:
     void hide() override {}
 
     void reset() {
-        drawBackgroundCalls = 0;
         clearCalls = 0;
         updateCalls = 0;
-        mockWindow->mockContext.reset();
     }
 };
 
@@ -215,6 +133,7 @@ class CcWindowControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testClearWindowsAll);
     CPPUNIT_TEST(testDisplayWindowsNormal);
     CPPUNIT_TEST(testDisplayWindows608Mode);
+    CPPUNIT_TEST(testDisplayChangesVisibility);
     CPPUNIT_TEST(testHideWindowsNormal);
     CPPUNIT_TEST(testHideWindows608Mode);
     CPPUNIT_TEST(testToggleWindows);
@@ -222,6 +141,7 @@ class CcWindowControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testReportNoWindow);
     CPPUNIT_TEST(testReportValidText);
     CPPUNIT_TEST(testReportEmptyString);
+    CPPUNIT_TEST(testReportSetsText);
     CPPUNIT_TEST(testFormFeedNoWindow);
     CPPUNIT_TEST(testFormFeedWithWindow);
     CPPUNIT_TEST(testCarriageReturnNoWindow);
@@ -235,6 +155,7 @@ class CcWindowControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testOverridePenAttributesMidRowTrue);
     CPPUNIT_TEST(testOverridePenAttributesMidRowFalse);
     CPPUNIT_TEST(testSetPenColorNoWindow);
+    CPPUNIT_TEST(testSetPenColorUpdatesDefinition);
     CPPUNIT_TEST(testSetPenLocationNoWindow);
     CPPUNIT_TEST(testSetPenLocationZeroZero);
     CPPUNIT_TEST(testSetTabOffsetNoWindow);
@@ -326,6 +247,23 @@ public:
             wm[i] = (mask & (1 << i)) != 0;
         }
         return wm;
+    }
+
+    std::vector<std::uint8_t> createFontColorPacket(std::uint32_t color) {
+        std::vector<std::uint8_t> packet = {
+            0x12, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00,
+            0x44, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00,
+            static_cast<std::uint8_t>(color & 0xFF),
+            static_cast<std::uint8_t>((color >> 8) & 0xFF),
+            static_cast<std::uint8_t>((color >> 16) & 0xFF),
+            static_cast<std::uint8_t>((color >> 24) & 0xFF)
+        };
+        packet.insert(packet.end(), 13 * 4, 0x00);
+        return packet;
     }
 
     void testConstructorInitialization()
@@ -659,6 +597,9 @@ public:
         WindowsMap wm = createWindowsMap(0x01);
         controller->displayWindows(wm); // Should call drawWindows in normal mode
 
+        CPPUNIT_ASSERT(mockGfx->clearCalls > 0);
+        CPPUNIT_ASSERT(mockGfx->updateCalls > 0);
+
         // Verify window still exists after display
         WindowDefinition retrieved;
         CPPUNIT_ASSERT_EQUAL(true, controller->getWindowDefinition(0, retrieved));
@@ -674,9 +615,26 @@ public:
         WindowsMap wm = createWindowsMap(0x01);
         controller->displayWindows(wm);
 
+        CPPUNIT_ASSERT_EQUAL(0, mockGfx->updateCalls);
+
         // Verify window still exists (608 mode doesn't auto-draw but maintains state)
         WindowDefinition retrieved;
         CPPUNIT_ASSERT_EQUAL(true, controller->getWindowDefinition(0, retrieved));
+    }
+
+    void testDisplayChangesVisibility()
+    {
+        controller->defineWindow(createDefaultWindowDefinition());
+        WindowsMap wm = createWindowsMap(0x01);
+
+        controller->hideWindows(wm);
+        WindowDefinition retrieved;
+        CPPUNIT_ASSERT(controller->getWindowDefinition(0, retrieved));
+        CPPUNIT_ASSERT_EQUAL(false, retrieved.visible);
+
+        controller->displayWindows(wm);
+        CPPUNIT_ASSERT(controller->getWindowDefinition(0, retrieved));
+        CPPUNIT_ASSERT_EQUAL(true, retrieved.visible);
     }
 
     void testHideWindowsNormal()
@@ -769,6 +727,16 @@ public:
         // Verify window still exists after reporting empty string
         WindowDefinition retrieved;
         CPPUNIT_ASSERT_EQUAL(true, controller->getWindowDefinition(retrieved));
+    }
+
+    void testReportSetsText()
+    {
+        controller->defineWindow(createDefaultWindowDefinition());
+        CPPUNIT_ASSERT_EQUAL(false, controller->hasText(3));
+
+        controller->report("Hello");
+
+        CPPUNIT_ASSERT_EQUAL(true, controller->hasText(3));
     }
 
     void testFormFeedNoWindow()
@@ -924,6 +892,23 @@ public:
 
         bool hadWindowAfter = controller->getWindowDefinition(wd);
         CPPUNIT_ASSERT_EQUAL(hadWindowBefore, hadWindowAfter);
+    }
+
+    void testSetPenColorUpdatesDefinition()
+    {
+        controller->defineWindow(createDefaultWindowDefinition());
+
+        PenColor color;
+        color.fg_color = 0xFF112233;
+        color.bg_color = 0xFF445566;
+        color.edge_color = 0xFF778899;
+        controller->setPenColor(color);
+
+        WindowDefinition retrieved;
+        CPPUNIT_ASSERT(controller->getWindowDefinition(retrieved));
+        CPPUNIT_ASSERT_EQUAL(color.fg_color, retrieved.pen_style.pen_color.fg_color);
+        CPPUNIT_ASSERT_EQUAL(color.bg_color, retrieved.pen_style.pen_color.bg_color);
+        CPPUNIT_ASSERT_EQUAL(color.edge_color, retrieved.pen_style.pen_color.edge_color);
     }
 
     void testSetPenLocationNoWindow()
@@ -1141,17 +1126,19 @@ public:
 
     void testProcessSetCCAttributesPacketFontColor()
     {
-        // Create a packet
         PacketSetCCAttributes packet;
+        const auto packetData = createFontColorPacket(0xFF102030);
+        subttxrend::common::DataBufferPtr buffer =
+            std::make_unique<subttxrend::common::DataBuffer>(packetData.begin(), packetData.end());
+        CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
 
-        WindowDefinition wd;
-        bool hadWindowBefore = controller->getWindowDefinition(wd);
-
+        controller->defineWindow(createDefaultWindowDefinition());
         controller->processSetCCAttributesPacket(packet);
 
-        // Verify state remains consistent
-        bool hadWindowAfter = controller->getWindowDefinition(wd);
-        CPPUNIT_ASSERT_EQUAL(hadWindowBefore, hadWindowAfter);
+        WindowDefinition retrieved;
+        CPPUNIT_ASSERT(controller->getWindowDefinition(retrieved));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xFF102030),
+                             retrieved.pen_style.pen_color.fg_color);
     }
 
     void testUpdateWindowRowCountNonExistent()

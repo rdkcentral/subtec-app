@@ -311,6 +311,12 @@ public:
         return block;
     }
 
+    void assertWindowMap(const WindowsMap& actual, uint8_t expected) {
+        for (int i = 0; i < MAX_WINDOWS; ++i) {
+            CPPUNIT_ASSERT_EQUAL((bool)((expected >> i) & 0x1), actual[i]);
+        }
+    }
+
     void testConstructorWithValidClock()
     {
         auto clock = std::make_unique<MockClock>();
@@ -564,54 +570,61 @@ public:
 
     void testProcessC1_ClearWindows()
     {
-        auto block = createBlock({C1_CLW, 0x01});
+        auto block = createBlock({C1_CLW, 0xA5});
         mock->clearCalls();
 
         parser->process(block);
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("clearWindows"));
+        assertWindowMap(mock->getLastCall("clearWindows").windowsMap, 0xA5);
     }
 
     void testProcessC1_DisplayWindows()
     {
-        auto block = createBlock({C1_DSW, 0x01});
+        auto block = createBlock({C1_DSW, 0xA5});
         mock->clearCalls();
 
         parser->process(block);
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("displayWindows"));
         CPPUNIT_ASSERT(mock->wasMethodCalled("resetWindowTimeout"));
+        assertWindowMap(mock->getLastCall("displayWindows").windowsMap, 0xA5);
+        CPPUNIT_ASSERT_EQUAL(10, mock->getLastCall("resetWindowTimeout").intParams[0]);
     }
 
     void testProcessC1_HideWindows()
     {
-        auto block = createBlock({C1_HDW, 0x01});
+        auto block = createBlock({C1_HDW, 0xA5});
         mock->clearCalls();
 
         parser->process(block);
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("hideWindows"));
+        assertWindowMap(mock->getLastCall("hideWindows").windowsMap, 0xA5);
     }
 
     void testProcessC1_ToggleWindows()
     {
-        auto block = createBlock({C1_TGW, 0x01});
+        auto block = createBlock({C1_TGW, 0xA5});
         mock->clearCalls();
 
         parser->process(block);
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("toggleWindows"));
         CPPUNIT_ASSERT(mock->wasMethodCalled("resetWindowTimeout"));
+        assertWindowMap(mock->getLastCall("toggleWindows").windowsMap, 0xA5);
+        CPPUNIT_ASSERT_EQUAL(10, mock->getLastCall("resetWindowTimeout").intParams[0]);
     }
 
     void testProcessC1_DeleteWindows()
     {
-        auto block = createBlock({C1_DLW, 0x01});
+        auto block = createBlock({C1_DLW, 0xA5});
         mock->clearCalls();
 
         parser->process(block);
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("deleteWindows"));
+        assertWindowMap(mock->getLastCall("deleteWindows").windowsMap, 0xA5);
     }
 
     void testProcessC1_AllWindowSelections()
@@ -630,22 +643,34 @@ public:
 
     void testProcessC1_SetPenAttributes()
     {
-        auto block = createBlock({C1_SPA, 0x00, 0x00});
+        auto block = createBlock({C1_SPA, 0xA5, 0xD9});
         mock->clearCalls();
 
         parser->process(block);
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("setPenAttributes"));
+        auto attrs = mock->getLastCall("setPenAttributes").penAttrs;
+        CPPUNIT_ASSERT_EQUAL(1, (int)attrs.pen_size);
+        CPPUNIT_ASSERT_EQUAL(1, (int)attrs.offset);
+        CPPUNIT_ASSERT_EQUAL(10, (int)attrs.text_tag);
+        CPPUNIT_ASSERT_EQUAL(1, (int)attrs.font_tag);
+        CPPUNIT_ASSERT_EQUAL(3, (int)attrs.edge_type);
+        CPPUNIT_ASSERT_EQUAL(1, (int)attrs.underline);
+        CPPUNIT_ASSERT_EQUAL(1, (int)attrs.italics);
     }
 
     void testProcessC1_SetPenColor()
     {
-        auto block = createBlock({C1_SPC, 0x00, 0x00, 0x00});
+        auto block = createBlock({C1_SPC, 0x55, 0xAA, 0x3F});
         mock->clearCalls();
 
         parser->process(block);
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("setPenColor"));
+        auto color = mock->getLastCall("setPenColor").penColor;
+        CPPUNIT_ASSERT_EQUAL(decodeColor(0x15, 1), color.fg_color);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(0x2A, 2), color.bg_color);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(0x3F, 1), color.edge_color);
     }
 
     void testProcessC1_SetPenLocation()
@@ -663,12 +688,23 @@ public:
 
     void testProcessC1_SetWindowAttributes()
     {
-        auto block = createBlock({C1_SWA, 0x00, 0x00, 0x00, 0x00});
+        auto block = createBlock({C1_SWA, 0xFF, 0xFF, 0xFF, 0xFF});
         mock->clearCalls();
 
         parser->process(block);
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("setWindowAttributes"));
+        auto attrs = mock->getLastCall("setWindowAttributes").windowAttrs;
+        CPPUNIT_ASSERT_EQUAL(decodeColor(0x3F, 3), attrs.fill_color);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(0x3F), attrs.border_color);
+        CPPUNIT_ASSERT_EQUAL(3, (int)attrs.justify);
+        CPPUNIT_ASSERT_EQUAL(3, (int)attrs.scroll_direction);
+        CPPUNIT_ASSERT_EQUAL(3, (int)attrs.print_direction);
+        CPPUNIT_ASSERT_EQUAL(1, (int)attrs.word_wrap);
+        CPPUNIT_ASSERT_EQUAL(7, (int)attrs.border_type);
+        CPPUNIT_ASSERT_EQUAL(3, (int)attrs.display_effect);
+        CPPUNIT_ASSERT_EQUAL(3, (int)attrs.effect_direction);
+        CPPUNIT_ASSERT_EQUAL(15, (int)attrs.effect_speed);
     }
 
     void testProcessC1_DefineWindow()
@@ -775,7 +811,9 @@ public:
         auto block3 = createBlock({0x42});
         parser->process(block3);
 
-        CPPUNIT_ASSERT(mock->getCallCount() >= 2);
+        CPPUNIT_ASSERT_EQUAL(2, mock->getCallCount("report"));
+        CPPUNIT_ASSERT_EQUAL(std::string("A"), mock->calls[0].stringParams[0]);
+        CPPUNIT_ASSERT_EQUAL(std::string("B"), mock->calls[1].stringParams[0]);
     }
 
     void testProcess_DelayBufferOverflow()
@@ -800,6 +838,9 @@ public:
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("reset"));
         CPPUNIT_ASSERT(mock->wasMethodCalled("report"));
+        CPPUNIT_ASSERT_EQUAL(2, mock->getCallCount());
+        CPPUNIT_ASSERT_EQUAL(std::string("reset"), mock->calls[0].method);
+        CPPUNIT_ASSERT_EQUAL(std::string("B"), mock->calls[1].stringParams[0]);
     }
 
     void testProcess_DelayCancelCommand()
@@ -874,6 +915,12 @@ public:
         CPPUNIT_ASSERT(mock->wasMethodCalled("report"));
         CPPUNIT_ASSERT(mock->wasMethodCalled("setCurrentWindow"));
         CPPUNIT_ASSERT(mock->wasMethodCalled("carriageReturn"));
+        CPPUNIT_ASSERT_EQUAL(5, mock->getCallCount());
+        CPPUNIT_ASSERT_EQUAL(std::string("formFeed"), mock->calls[0].method);
+        CPPUNIT_ASSERT_EQUAL(std::string("report"), mock->calls[1].method);
+        CPPUNIT_ASSERT_EQUAL(std::string("setCurrentWindow"), mock->calls[2].method);
+        CPPUNIT_ASSERT_EQUAL(std::string("report"), mock->calls[3].method);
+        CPPUNIT_ASSERT_EQUAL(std::string("carriageReturn"), mock->calls[4].method);
     }
 
     void testProcess_MultipleBlocks()
@@ -927,8 +974,17 @@ public:
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("setPenAttributes"));
         auto call = mock->getLastCall("setPenAttributes");
+        CPPUNIT_ASSERT_EQUAL(3, (int)call.penAttrs.pen_size);
+        CPPUNIT_ASSERT_EQUAL(3, (int)call.penAttrs.offset);
+        CPPUNIT_ASSERT_EQUAL(15, (int)call.penAttrs.text_tag);
+        CPPUNIT_ASSERT_EQUAL(7, (int)call.penAttrs.font_tag);
+        CPPUNIT_ASSERT_EQUAL(7, (int)call.penAttrs.edge_type);
         CPPUNIT_ASSERT_EQUAL(1, (int)call.penAttrs.underline);
         CPPUNIT_ASSERT_EQUAL(1, (int)call.penAttrs.italics);
+        CPPUNIT_ASSERT_EQUAL(false, call.penAttrs.flashing);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(COLOR_WHITE), call.penAttrs.pen_color.fg_color);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(COLOR_BLACK), call.penAttrs.pen_color.bg_color);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(COLOR_WHITE), call.penAttrs.pen_color.edge_color);
     }
 
     void testDecoding_PenColorAllFields()
@@ -954,7 +1010,16 @@ public:
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("setWindowAttributes"));
         auto call = mock->getLastCall("setWindowAttributes");
+        CPPUNIT_ASSERT_EQUAL(decodeColor(0x3F, 3), call.windowAttrs.fill_color);
+        CPPUNIT_ASSERT_EQUAL(decodeColor(0x3F), call.windowAttrs.border_color);
+        CPPUNIT_ASSERT_EQUAL(3, (int)call.windowAttrs.justify);
+        CPPUNIT_ASSERT_EQUAL(3, (int)call.windowAttrs.scroll_direction);
+        CPPUNIT_ASSERT_EQUAL(3, (int)call.windowAttrs.print_direction);
         CPPUNIT_ASSERT_EQUAL(1, (int)call.windowAttrs.word_wrap);
+        CPPUNIT_ASSERT_EQUAL(7, (int)call.windowAttrs.border_type);
+        CPPUNIT_ASSERT_EQUAL(3, (int)call.windowAttrs.display_effect);
+        CPPUNIT_ASSERT_EQUAL(3, (int)call.windowAttrs.effect_direction);
+        CPPUNIT_ASSERT_EQUAL(15, (int)call.windowAttrs.effect_speed);
     }
 
     void testDecoding_WindowDefinitionBoundary()

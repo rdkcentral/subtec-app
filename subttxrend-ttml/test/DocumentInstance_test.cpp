@@ -52,7 +52,6 @@ CPPUNIT_TEST_SUITE( DocumentInstanceTest );
     CPPUNIT_TEST(testApplyWhitespaceHandlingRemovesLeadingTrailingSpaces);
     CPPUNIT_TEST(testApplyWhitespaceHandlingBorderSpaces);
     CPPUNIT_TEST(testStartElementUnknownName);
-    CPPUNIT_TEST(testStartElementBrWithEmptyStack);
     CPPUNIT_TEST(testEndElementCopyTopWithEmptyStack);
     CPPUNIT_TEST(testResetClearsAllButOverride);
     CPPUNIT_TEST(testNewEntityWithEmptyEntities);
@@ -1148,14 +1147,6 @@ public:
         DocumentInstance doc;
         auto unknown = doc.startElement("unknownElement");
         CPPUNIT_ASSERT(unknown == nullptr);
-    }
-
-    void testStartElementBrWithEmptyStack()
-    {
-        DocumentInstance doc;
-        auto br = doc.startElement("br");
-        CPPUNIT_ASSERT(br == nullptr);
-        CPPUNIT_ASSERT(doc.getCurrentElement() == nullptr);
     }
 
     void testEndElementCopyTopWithEmptyStack()

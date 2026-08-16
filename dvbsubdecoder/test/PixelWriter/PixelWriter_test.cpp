@@ -23,6 +23,10 @@
 #include "PixelWriter.hpp"
 
 #include <array>
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <stdexcept>
 
 using dvbsubdecoder::PixelWriter;
 using dvbsubdecoder::Pixmap;
@@ -83,19 +87,19 @@ public:
     {
         CPPUNIT_ASSERT_THROW(
                 std::make_shared<PixelWriter>(false, 2, m_pixmap, -1, 0),
-                std::logic_error);
+                std::invalid_argument);
         CPPUNIT_ASSERT_THROW(
                 std::make_shared<PixelWriter>(false, 2, m_pixmap, 0, -1),
-                std::logic_error);
+                std::invalid_argument);
         CPPUNIT_ASSERT_THROW(
                 std::make_shared<PixelWriter>(false, 2, m_pixmap, -1, -1),
-                std::logic_error);
+                std::invalid_argument);
         CPPUNIT_ASSERT_THROW(
                 std::make_shared<PixelWriter>(false, 0, m_pixmap, 0, 0),
-                std::logic_error);
+                std::invalid_argument);
         CPPUNIT_ASSERT_THROW(
                 std::make_shared<PixelWriter>(false, 10, m_pixmap, 0, 0),
-                std::logic_error);
+                std::invalid_argument);
     }
 
     void testBadSetPixels()
@@ -104,9 +108,10 @@ public:
             PixelWriter testWriter2(false, 2, m_pixmap, 0, 0);
 
             CPPUNIT_ASSERT_NO_THROW(testWriter2.setPixels(1, 1));
-            CPPUNIT_ASSERT_THROW(testWriter2.setPixels(4, 1), std::logic_error);
+            CPPUNIT_ASSERT_THROW(testWriter2.setPixels(4, 1),
+                    std::invalid_argument);
             CPPUNIT_ASSERT_THROW(testWriter2.setPixels(255, 1),
-                    std::logic_error);
+                    std::invalid_argument);
         }
 
         {
@@ -114,9 +119,9 @@ public:
 
             CPPUNIT_ASSERT_NO_THROW(testWriter4.setPixels(1, 1));
             CPPUNIT_ASSERT_THROW(testWriter4.setPixels(16, 1),
-                    std::logic_error);
+                    std::invalid_argument);
             CPPUNIT_ASSERT_THROW(testWriter4.setPixels(255, 1),
-                    std::logic_error);
+                    std::invalid_argument);
         }
 
         {
@@ -243,7 +248,7 @@ public:
             {
                 if ((line % 2) == 0)
                 {
-                    for (auto i = 0; i < SMALL_HEIGHT; ++i)
+                    for (auto i = 0; i < SMALL_WIDTH; ++i)
                     {
                         CPPUNIT_ASSERT_EQUAL(0x55,
                                 static_cast<int>(m_pixmapBuffer[line
@@ -252,7 +257,7 @@ public:
                 }
                 else
                 {
-                    for (auto i = 0; i < SMALL_HEIGHT; ++i)
+                    for (auto i = 0; i < SMALL_WIDTH; ++i)
                     {
                         CPPUNIT_ASSERT_EQUAL(0xFF,
                                 static_cast<int>(m_pixmapBuffer[line
@@ -389,9 +394,18 @@ public:
     void testConstructorBoundaryCoordinates()
     {
         // Test coordinates at pixmap boundaries
-        CPPUNIT_ASSERT_NO_THROW(PixelWriter(false, 4, m_pixmap, WIDTH, 0));
-        CPPUNIT_ASSERT_NO_THROW(PixelWriter(false, 4, m_pixmap, 0, HEIGHT));
-        CPPUNIT_ASSERT_NO_THROW(PixelWriter(false, 4, m_pixmap, WIDTH, HEIGHT));
+        m_pixmap.clear(0xAA);
+        PixelWriter rightWriter(false, 4, m_pixmap, WIDTH, 0);
+        PixelWriter bottomWriter(false, 4, m_pixmap, 0, HEIGHT);
+        PixelWriter cornerWriter(false, 4, m_pixmap, WIDTH, HEIGHT);
+
+        rightWriter.setPixels(1, 1);
+        bottomWriter.setPixels(2, 1);
+        cornerWriter.setPixels(3, 1);
+
+        CPPUNIT_ASSERT_EQUAL(0xAA, static_cast<int>(m_pixmap.getLine(0)[0]));
+        CPPUNIT_ASSERT_EQUAL(0xAA,
+            static_cast<int>(m_pixmap.getLine(HEIGHT - 1)[WIDTH - 1]));
     }
 
     void testConstructorOutOfBoundsCoordinates()
@@ -436,41 +450,49 @@ public:
         {
             PixelWriter writer1(false, 1, m_pixmap, 0, 0);
             CPPUNIT_ASSERT_NO_THROW(writer1.setPixels(1, 1)); // 2^1 - 1 = 1
+            CPPUNIT_ASSERT_EQUAL(1, static_cast<int>(m_pixmap.getLine(0)[0]));
         }
         
         {
-            PixelWriter writer2(false, 2, m_pixmap, 0, 0);
+            PixelWriter writer2(false, 2, m_pixmap, 1, 0);
             CPPUNIT_ASSERT_NO_THROW(writer2.setPixels(3, 1)); // 2^2 - 1 = 3
+            CPPUNIT_ASSERT_EQUAL(3, static_cast<int>(m_pixmap.getLine(0)[1]));
         }
         
         {
-            PixelWriter writer3(false, 3, m_pixmap, 0, 0);
+            PixelWriter writer3(false, 3, m_pixmap, 2, 0);
             CPPUNIT_ASSERT_NO_THROW(writer3.setPixels(7, 1)); // 2^3 - 1 = 7
+            CPPUNIT_ASSERT_EQUAL(7, static_cast<int>(m_pixmap.getLine(0)[2]));
         }
         
         {
-            PixelWriter writer4(false, 4, m_pixmap, 0, 0);
+            PixelWriter writer4(false, 4, m_pixmap, 3, 0);
             CPPUNIT_ASSERT_NO_THROW(writer4.setPixels(15, 1)); // 2^4 - 1 = 15
+            CPPUNIT_ASSERT_EQUAL(15, static_cast<int>(m_pixmap.getLine(0)[3]));
         }
         
         {
-            PixelWriter writer5(false, 5, m_pixmap, 0, 0);
+            PixelWriter writer5(false, 5, m_pixmap, 4, 0);
             CPPUNIT_ASSERT_NO_THROW(writer5.setPixels(31, 1)); // 2^5 - 1 = 31
+            CPPUNIT_ASSERT_EQUAL(31, static_cast<int>(m_pixmap.getLine(0)[4]));
         }
         
         {
-            PixelWriter writer6(false, 6, m_pixmap, 0, 0);
+            PixelWriter writer6(false, 6, m_pixmap, 5, 0);
             CPPUNIT_ASSERT_NO_THROW(writer6.setPixels(63, 1)); // 2^6 - 1 = 63
+            CPPUNIT_ASSERT_EQUAL(63, static_cast<int>(m_pixmap.getLine(0)[5]));
         }
         
         {
-            PixelWriter writer7(false, 7, m_pixmap, 0, 0);
+            PixelWriter writer7(false, 7, m_pixmap, 6, 0);
             CPPUNIT_ASSERT_NO_THROW(writer7.setPixels(127, 1)); // 2^7 - 1 = 127
+            CPPUNIT_ASSERT_EQUAL(127, static_cast<int>(m_pixmap.getLine(0)[6]));
         }
         
         {
-            PixelWriter writer8(false, 8, m_pixmap, 0, 0);
+            PixelWriter writer8(false, 8, m_pixmap, 7, 0);
             CPPUNIT_ASSERT_NO_THROW(writer8.setPixels(255, 1)); // 2^8 - 1 = 255
+            CPPUNIT_ASSERT_EQUAL(255, static_cast<int>(m_pixmap.getLine(0)[7]));
         }
     }
 
@@ -511,6 +533,15 @@ public:
             CPPUNIT_ASSERT_EQUAL(0xEE, static_cast<int>(m_pixmap.getLine(0)[1]));
             CPPUNIT_ASSERT_EQUAL(0xEE, static_cast<int>(m_pixmap.getLine(0)[2]));
         }
+
+        m_pixmap.clear(0xAB);
+        PixelWriter boundaryWriter(true, 8, m_pixmap, WIDTH - 2, 0);
+        boundaryWriter.setPixels(1, 2);
+        boundaryWriter.setPixels(1, 1);
+        CPPUNIT_ASSERT_EQUAL(0xAB,
+            static_cast<int>(m_pixmap.getLine(0)[WIDTH - 2]));
+        CPPUNIT_ASSERT_EQUAL(0xAB,
+            static_cast<int>(m_pixmap.getLine(0)[WIDTH - 1]));
     }
 
     void testSetPixelsLineBoundary()

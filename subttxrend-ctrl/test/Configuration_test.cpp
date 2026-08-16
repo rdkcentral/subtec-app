@@ -23,13 +23,9 @@
 #include <fstream>
 #include <memory>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <vector>
 #include <unistd.h>
-#include <fcntl.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 
 using namespace subttxrend::ctrl;
 
@@ -116,7 +112,7 @@ public:
 
     static std::unique_ptr<Options> createEmpty()
     {
-        std::vector<std::string> args = {"program"};
+        std::vector<std::string> args = {"program", "--config-file-path="};
         return createFromArgs(args);
     }
 
@@ -157,6 +153,7 @@ class ConfigurationTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testSocketPathWithEmptyOptions);
     CPPUNIT_TEST(testSocketPathWithSpecialCharacters);
     CPPUNIT_TEST(testSocketPathCalledMultipleTimes);
+    CPPUNIT_TEST(testMalformedConfigFile);
     CPPUNIT_TEST(testGetTeletextConfigReturnsValidProvider);
     CPPUNIT_TEST(testGetTeletextConfigCalledMultipleTimes);
     CPPUNIT_TEST(testGetRdkEnvConfigReturnsValidProvider);
@@ -169,6 +166,7 @@ class ConfigurationTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testGetTtmlConfigCalledMultipleTimes);
     CPPUNIT_TEST(testGetWebvttConfigReturnsValidProvider);
     CPPUNIT_TEST(testGetWebvttConfigCalledMultipleTimes);
+    CPPUNIT_TEST(testProviderDefaults);
     CPPUNIT_TEST(testConfigPrecedenceConfigFileOverDefaults);
     CPPUNIT_TEST(testAllProvidersWorkTogether);
     CPPUNIT_TEST(testConfigWithCustomValues);
@@ -291,6 +289,21 @@ protected:
         const auto& r1 = config.getRdkEnvConfig();
         const auto& r2 = config.getRdkEnvConfig();
         CPPUNIT_ASSERT_EQUAL(&r1, &r2);
+    }
+
+    void testMalformedConfigFile()
+    {
+        TempConfigFile tempFile(
+            "MAIN_CONTEXT.SOCKET_PATH=/before/error\n"
+            "MALFORMED_LINE\n"
+            "MAIN_CONTEXT.SOCKET_PATH=/after/error\n"
+        );
+
+        auto options = OptionsBuilder::createWithConfigFile(tempFile.getFilename());
+        Configuration config(*options);
+
+        CPPUNIT_ASSERT_EQUAL(std::string("/before/error"),
+                config.getMainContextSocketPath());
     }
 
     void testSocketPathFromOptionsOnly()
@@ -442,6 +455,10 @@ protected:
 
         // Verify we can get the provider reference and it's stable
         CPPUNIT_ASSERT_NO_THROW(config.getRdkEnvConfig());
+        CPPUNIT_ASSERT_EQUAL(std::string("2560"),
+            config.getRdkEnvConfig().get("GFX.VL.APP.1.WIDTH"));
+        CPPUNIT_ASSERT_EQUAL(std::string("1440"),
+            config.getRdkEnvConfig().get("GFX.VL.APP.1.HEIGHT"));
         const auto& r_c = config.getRdkEnvConfig();
         const auto& r_d = config.getRdkEnvConfig();
         CPPUNIT_ASSERT_EQUAL(&r_c, &r_d);
@@ -479,6 +496,8 @@ protected:
 
         // Verify we can get the provider reference and it's stable
         CPPUNIT_ASSERT_NO_THROW(config.getLoggerConfig());
+        CPPUNIT_ASSERT_EQUAL(std::string("custom"),
+            config.getLoggerConfig().get("BACKEND"));
         const auto& l3 = config.getLoggerConfig();
         const auto& l4 = config.getLoggerConfig();
         CPPUNIT_ASSERT_EQUAL(&l3, &l4);
@@ -541,6 +560,25 @@ protected:
         CPPUNIT_ASSERT_EQUAL(&provider1, &provider2);
     }
 
+    void testProviderDefaults()
+    {
+        auto options = OptionsBuilder::createEmpty();
+        Configuration config(*options);
+
+        CPPUNIT_ASSERT_EQUAL(std::string("1280"),
+            config.getRdkEnvConfig().get("GFX.VL.APP.1.WIDTH"));
+        CPPUNIT_ASSERT_EQUAL(std::string("720"),
+            config.getRdkEnvConfig().get("GFX.VL.APP.1.HEIGHT"));
+        CPPUNIT_ASSERT_EQUAL(std::string("rdk"),
+            config.getLoggerConfig().get("BACKEND"));
+        CPPUNIT_ASSERT_EQUAL(std::string("fallback"),
+            config.getTeletextConfig().get("MISSING", "fallback"));
+        CPPUNIT_ASSERT_EQUAL(std::string("fallback"),
+            config.getTtmlConfig().get("MISSING", "fallback"));
+        CPPUNIT_ASSERT_EQUAL(std::string("fallback"),
+            config.getWebvttConfig().get("MISSING", "fallback"));
+    }
+
     void testConfigPrecedenceConfigFileOverDefaults()
     {
         TempConfigFile tempFile(
@@ -588,6 +626,17 @@ protected:
         const auto& ttmlConfig = config.getTtmlConfig();
         const auto& webvttConfig = config.getWebvttConfig();
 
+        CPPUNIT_ASSERT_EQUAL(std::string("1920"),
+            rdkConfig.get("GFX.VL.APP.1.WIDTH"));
+        CPPUNIT_ASSERT_EQUAL(std::string("test"),
+            loggerConfig.get("BACKEND"));
+        CPPUNIT_ASSERT_EQUAL(std::string("custom_value"),
+            ttxConfig.get("CUSTOM_KEY"));
+        CPPUNIT_ASSERT_EQUAL(std::string("ttml_value"),
+            ttmlConfig.get("TTML_KEY"));
+        CPPUNIT_ASSERT_EQUAL(std::string("webvtt_value"),
+            webvttConfig.get("WEBVTT_KEY"));
+
         // Verify stability of each provider
         const auto& r_g = config.getRdkEnvConfig();
         const auto& r_h = config.getRdkEnvConfig();
@@ -623,6 +672,10 @@ protected:
         // Config provider accessible and stable
         const auto& r_i = config.getRdkEnvConfig();
         const auto& r_j = config.getRdkEnvConfig();
+        CPPUNIT_ASSERT_EQUAL(std::string("1000"),
+            r_i.get("FEATURE.TTX.GRID_W"));
+        CPPUNIT_ASSERT_EQUAL(std::string("800"),
+            r_i.get("FEATURE.TTX.GRID_H"));
         CPPUNIT_ASSERT_EQUAL(&r_i, &r_j);
     }
 
@@ -643,6 +696,10 @@ protected:
         // Config providers should still be accessible and stable
         const auto& r_k = config.getRdkEnvConfig();
         const auto& r_l = config.getRdkEnvConfig();
+        CPPUNIT_ASSERT_EQUAL(std::string("1280"),
+            r_k.get("GFX.VL.APP.1.WIDTH"));
+        CPPUNIT_ASSERT_EQUAL(std::string("rdk"),
+            config.getLoggerConfig().get("BACKEND"));
         CPPUNIT_ASSERT_EQUAL(&r_k, &r_l);
         const auto& l_k = config.getLoggerConfig();
         const auto& l_l = config.getLoggerConfig();

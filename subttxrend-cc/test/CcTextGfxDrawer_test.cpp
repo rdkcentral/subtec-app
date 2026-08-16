@@ -21,7 +21,6 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include <cmath>
 
 #include <subttxrend/gfx/PrerenderedFont.hpp>
 #include <subttxrend/gfx/Window.hpp>
@@ -36,16 +35,13 @@ using namespace subttxrend::gfx;
 class MockDrawContext : public DrawContext
 {
 public:
-    int fillRectCalls = 0;
     int drawStringCalls = 0;
     int drawUnderlineCalls = 0;
-    int drawGlyphCalls = 0;
 
-    std::vector<ColorArgb> fgColors;
-    std::vector<ColorArgb> bgColors;
+    std::vector<Rectangle> drawStringRects;
+    std::vector<ColorArgb> drawStringFgColors;
 
     void fillRectangle(ColorArgb color, const Rectangle& rectangle) override {
-        fillRectCalls++;
     }
 
     void drawUnderline(ColorArgb color, const Rectangle& rectangle) override {
@@ -57,26 +53,21 @@ public:
 
     void drawGlyph(const FontStripPtr& fontStrip, std::int32_t glyphIndex, const Rectangle& rect,
                    ColorArgb fgColor, ColorArgb bgColor) override {
-        drawGlyphCalls++;
-        fgColors.push_back(fgColor);
-        bgColors.push_back(bgColor);
     }
 
     void drawString(PrerenderedFont& font, const Rectangle &destinationRect,
                    const std::vector<GlyphData>& glyphs, const ColorArgb fgColor,
                    const ColorArgb bgColor, int outlineSize = 0, int verticalOffset = 0) override {
         drawStringCalls++;
-        fgColors.push_back(fgColor);
-        bgColors.push_back(bgColor);
+            drawStringRects.push_back(destinationRect);
+            drawStringFgColors.push_back(fgColor);
     }
 
     void reset() {
-        fillRectCalls = 0;
         drawStringCalls = 0;
         drawUnderlineCalls = 0;
-        drawGlyphCalls = 0;
-        fgColors.clear();
-        bgColors.clear();
+        drawStringRects.clear();
+        drawStringFgColors.clear();
     }
 };
 
@@ -116,95 +107,11 @@ public:
     }
 };
 
-class MockPrerenderedFont : public PrerenderedFont
-{
-public:
-    int height = 20;
-    int advance = 12;
-    int descender = -5;
-    int ascender = 15;
-    std::string lastFontName;
-    bool lastItalics = false;
-
-    std::vector<TextTokenData> textToTokens(const std::string& text) override {
-        std::vector<TextTokenData> tokens;
-        if (text.empty()) return tokens;
-
-        // Simple tokenization: split by spaces
-        std::string current;
-        for (char c : text) {
-            if (c == ' ') {
-                if (!current.empty()) {
-                    TextTokenData token;
-                    token.totalAdvanceX = current.size() * advance;
-                    token.isWhite = false;
-                    for (size_t i = 0; i < current.size(); ++i) {
-                        token.glyphs.push_back(GlyphData());
-                    }
-                    tokens.push_back(token);
-                    current.clear();
-                }
-                // Add space token
-                TextTokenData spaceToken;
-                spaceToken.totalAdvanceX = advance;
-                spaceToken.isWhite = true;
-                spaceToken.glyphs.push_back(GlyphData());
-                tokens.push_back(spaceToken);
-            } else {
-                current += c;
-            }
-        }
-        if (!current.empty()) {
-            TextTokenData token;
-            token.totalAdvanceX = current.size() * advance;
-            token.isWhite = false;
-            for (size_t i = 0; i < current.size(); ++i) {
-                token.glyphs.push_back(GlyphData());
-            }
-            tokens.push_back(token);
-        }
-        return tokens;
-    }
-
-    std::int32_t getFontHeight() const override { return height; }
-    std::int32_t getFontDescender() const override { return descender; }
-    std::int32_t getFontAscender() const override { return ascender; }
-    std::int32_t getMaxAdvance() const override { return advance; }
-};
-
-class MockFontCache : public PrerenderedFontCache
-{
-public:
-    std::shared_ptr<MockPrerenderedFont> mockFont;
-
-    MockFontCache() {
-        mockFont = std::make_shared<MockPrerenderedFont>();
-    }
-
-    std::shared_ptr<PrerenderedFont> getFont(const std::string& fontName,
-                                             int fontSize,
-                                             bool strictHeight = false,
-                                             bool italics = false) {
-        // Reflect requested font characteristics in the mock
-        mockFont->lastFontName = fontName;
-        mockFont->lastItalics = italics;
-        mockFont->height = fontSize > 0 ? fontSize : 20;
-        // Advance loosely proportional to height; italics adds a small offset
-        mockFont->advance = static_cast<int>(std::round(mockFont->height * 0.6)) + (italics ? 1 : 0);
-        // Descender/ascender scale with height
-        mockFont->ascender = static_cast<int>(std::round(mockFont->height * 0.75));
-        mockFont->descender = -static_cast<int>(std::round(mockFont->height * 0.25));
-        return mockFont;
-    }
-};
-
 class MockGfx : public Gfx
 {
 public:
     std::shared_ptr<MockWindow> mockWindow;
     int drawBackgroundCalls = 0;
-    struct BgCall { Point p; Dimensions d; Color c; };
-    std::vector<BgCall> bgCalls;
 
     MockGfx() {
         mockWindow = std::make_shared<MockWindow>();
@@ -216,7 +123,6 @@ public:
 
     void drawBackground(const Point& point, const Dimensions& dim, Color color) override {
         drawBackgroundCalls++;
-        bgCalls.push_back({point, dim, color});
     }
 
     void drawBorder(const Point& p, const Dimensions& dimensions, Color color,
@@ -242,7 +148,6 @@ public:
 
     void reset() {
         drawBackgroundCalls = 0;
-        bgCalls.clear();
         mockWindow->mockContext.reset();
     }
 };
@@ -260,6 +165,7 @@ class CcTextGfxDrawerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testBackspaceOnEmptyText);
     CPPUNIT_TEST(testBackspaceOnSingleChar);
     CPPUNIT_TEST(testBackspaceOnMultipleChars);
+    CPPUNIT_TEST(testUtf8Backspace);
     CPPUNIT_TEST(testBackspaceReturnValue);
     CPPUNIT_TEST(testMultipleBackspaces);
     CPPUNIT_TEST(testReportWithEmptyString);
@@ -320,6 +226,7 @@ class CcTextGfxDrawerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testDrawWithEdgeRightShadow);
     CPPUNIT_TEST(testDrawWithEdgeUniform);
     CPPUNIT_TEST(testDrawWithUnderline);
+    CPPUNIT_TEST(testDrawColors);
     CPPUNIT_TEST(testDrawWithoutUnderline);
     CPPUNIT_TEST(testDrawWithFlashingShow);
     CPPUNIT_TEST(testDrawWithFlashingHide);
@@ -328,6 +235,7 @@ class CcTextGfxDrawerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testFullWorkflowReportDimensionsDraw);
     CPPUNIT_TEST(testEditingWorkflowReportBackspaceReport);
     CPPUNIT_TEST(testMultipleDrawCalls);
+    CPPUNIT_TEST(testFullJustify);
     CPPUNIT_TEST(testClearAndReuse);
     CPPUNIT_TEST(testTransparentSpaceIntegration);
     CPPUNIT_TEST(testLongTextHandling);
@@ -338,7 +246,7 @@ class CcTextGfxDrawerTest : public CppUnit::TestFixture
 
 private:
     std::shared_ptr<MockGfx> mockGfx;
-    std::shared_ptr<MockFontCache> mockFontCache;
+    std::shared_ptr<PrerenderedFontCache> fontCache;
     FontGroup fontGroup;
     TextGfxDrawer* drawer;
     WindowDefinition windowDef;
@@ -347,7 +255,7 @@ public:
     void setUp()
     {
         mockGfx = std::make_shared<MockGfx>();
-        mockFontCache = std::make_shared<MockFontCache>();
+        fontCache = std::make_shared<PrerenderedFontCache>();
 
         // Setup font group
         fontGroup.standard.fontHeight = 20;
@@ -360,14 +268,14 @@ public:
         windowDef.col_count = 32;
         windowDef.row_count = 15;
 
-        drawer = new TextGfxDrawer(mockGfx, mockFontCache, fontGroup, 0, 0);
+        drawer = new TextGfxDrawer(mockGfx, fontCache, fontGroup, 0, 0);
     }
 
     void tearDown()
     {
         delete drawer;
         mockGfx.reset();
-        mockFontCache.reset();
+        fontCache.reset();
     }
 
     PenAttributes createDefaultPenAttributes() {
@@ -386,7 +294,7 @@ public:
 
     void testConstructorWithValidParameters()
     {
-        TextGfxDrawer* d = new TextGfxDrawer(mockGfx, mockFontCache, fontGroup, 5, 10);
+        TextGfxDrawer* d = new TextGfxDrawer(mockGfx, fontCache, fontGroup, 5, 10);
         CPPUNIT_ASSERT(d != nullptr);
         CPPUNIT_ASSERT_EQUAL(5, d->row);
         CPPUNIT_ASSERT_EQUAL(10, d->column);
@@ -395,7 +303,7 @@ public:
 
     void testConstructorWithZeroRowColumn()
     {
-        TextGfxDrawer* d = new TextGfxDrawer(mockGfx, mockFontCache, fontGroup, 0, 0);
+        TextGfxDrawer* d = new TextGfxDrawer(mockGfx, fontCache, fontGroup, 0, 0);
         CPPUNIT_ASSERT(d != nullptr);
         CPPUNIT_ASSERT_EQUAL(0, d->row);
         CPPUNIT_ASSERT_EQUAL(0, d->column);
@@ -404,7 +312,7 @@ public:
 
     void testConstructorWithNegativeRowColumn()
     {
-        TextGfxDrawer* d = new TextGfxDrawer(mockGfx, mockFontCache, fontGroup, -5, -10);
+        TextGfxDrawer* d = new TextGfxDrawer(mockGfx, fontCache, fontGroup, -5, -10);
         CPPUNIT_ASSERT(d != nullptr);
         CPPUNIT_ASSERT_EQUAL(-5, d->row);
         CPPUNIT_ASSERT_EQUAL(-10, d->column);
@@ -460,6 +368,19 @@ public:
         bool result = drawer->backspace();
         CPPUNIT_ASSERT_EQUAL(true, result);
         CPPUNIT_ASSERT_EQUAL(std::string("AB"), drawer->getText());
+    }
+
+    void testUtf8Backspace()
+    {
+        std::string text = "A";
+        text += "\xC3\xA9";
+        text += "B";
+        drawer->report(text, windowDef);
+
+        CPPUNIT_ASSERT_EQUAL(true, drawer->backspace());
+        CPPUNIT_ASSERT_EQUAL(std::string("A\xC3\xA9"), drawer->getText());
+        CPPUNIT_ASSERT_EQUAL(true, drawer->backspace());
+        CPPUNIT_ASSERT_EQUAL(std::string("A"), drawer->getText());
     }
 
     void testBackspaceReturnValue()
@@ -674,12 +595,26 @@ public:
         PenAttributes attrs = createDefaultPenAttributes();
         attrs.underline = true;
         attrs.italics = true;
+        attrs.flashing = true;
+        attrs.edge_type = PenEdge::UNIFORM;
+        attrs.pen_size = PenSize::LARGE;
+        attrs.font_tag = PenFontStyle::CASUAL_FONT_TYPE;
+        attrs.pen_color.fg_color = 0xFF112233;
+        attrs.pen_color.bg_color = 0xFF445566;
+        attrs.pen_color.edge_color = 0xFF778899;
         drawer->setPenAttributes(attrs);
 
         PenAttributes retrieved;
         drawer->getPenAttributes(retrieved);
+        CPPUNIT_ASSERT_EQUAL((int)attrs.pen_size, (int)retrieved.pen_size);
+        CPPUNIT_ASSERT_EQUAL((int)attrs.font_tag, (int)retrieved.font_tag);
         CPPUNIT_ASSERT_EQUAL(true, (bool)retrieved.underline);
         CPPUNIT_ASSERT_EQUAL(true, (bool)retrieved.italics);
+        CPPUNIT_ASSERT_EQUAL(true, (bool)retrieved.flashing);
+        CPPUNIT_ASSERT_EQUAL((int)attrs.edge_type, (int)retrieved.edge_type);
+        CPPUNIT_ASSERT_EQUAL(attrs.pen_color.fg_color, retrieved.pen_color.fg_color);
+        CPPUNIT_ASSERT_EQUAL(attrs.pen_color.bg_color, retrieved.pen_color.bg_color);
+        CPPUNIT_ASSERT_EQUAL(attrs.pen_color.edge_color, retrieved.pen_color.edge_color);
     }
 
     void testSetPenAttributesAllFontStyles()
@@ -710,12 +645,14 @@ public:
     {
         drawer->setPenOverride(true);
         CPPUNIT_ASSERT_EQUAL(true, drawer->getPenOverride());
+        CPPUNIT_ASSERT_EQUAL(true, drawer->midrow);
     }
 
     void testSetPenOverrideFalse()
     {
         drawer->setPenOverride(false);
         CPPUNIT_ASSERT_EQUAL(true, drawer->getPenOverride()); // Still true because it was set
+        CPPUNIT_ASSERT_EQUAL(false, drawer->midrow);
     }
 
     void testGetPenOverrideInitialState()
@@ -782,16 +719,14 @@ public:
         attrs.edge_type = PenEdge::RAISED;
         drawer->setPenAttributes(attrs);
 
-        Dimensions dimNone = drawer->dimensions(WindowPd::LEFT_RIGHT);
+        Dimensions dimRaised = drawer->dimensions(WindowPd::LEFT_RIGHT);
         attrs.edge_type = PenEdge::NONE;
         drawer->setPenAttributes(attrs);
         Dimensions dimWithEdge = drawer->dimensions(WindowPd::LEFT_RIGHT);
 
         // Edge adds shadowEdge (2) to both dimensions
-        attrs.edge_type = PenEdge::RAISED;
-        drawer->setPenAttributes(attrs);
-        Dimensions dimRaised = drawer->dimensions(WindowPd::LEFT_RIGHT);
-        CPPUNIT_ASSERT(dimRaised.w >= dimWithEdge.w);
+        CPPUNIT_ASSERT_EQUAL(dimWithEdge.w + 2, dimRaised.w);
+        CPPUNIT_ASSERT_EQUAL(dimWithEdge.h + 2, dimRaised.h);
     }
 
     void testDimensionsWithEdgeDepressed()
@@ -1059,6 +994,23 @@ public:
         CPPUNIT_ASSERT_EQUAL(1, mockGfx->mockWindow->mockContext.drawUnderlineCalls);
     }
 
+    void testDrawColors()
+    {
+        drawer->report("A", windowDef);
+        PenAttributes attrs = createDefaultPenAttributes();
+        attrs.pen_color.fg_color = 0xFF123456;
+        attrs.pen_color.bg_color = 0xFF654321;
+        drawer->setPenAttributes(attrs);
+        drawer->dimensions(WindowPd::LEFT_RIGHT);
+
+        mockGfx->reset();
+        drawer->draw(Point{0, 0}, WindowPd::LEFT_RIGHT, WindowJustify::LEFT);
+
+        CPPUNIT_ASSERT(!mockGfx->mockWindow->mockContext.drawStringFgColors.empty());
+        CPPUNIT_ASSERT(ColorArgb(attrs.pen_color.fg_color) ==
+                   mockGfx->mockWindow->mockContext.drawStringFgColors.front());
+    }
+
     void testDrawWithoutUnderline()
     {
         drawer->report("Test", windowDef);
@@ -1186,6 +1138,20 @@ public:
         CPPUNIT_ASSERT(mockGfx->mockWindow->mockContext.drawStringCalls > firstCallCount);
     }
 
+    void testFullJustify()
+    {
+        drawer->report("A B", windowDef);
+        drawer->setMaxWidth(100);
+        drawer->dimensions(WindowPd::LEFT_RIGHT);
+
+        mockGfx->reset();
+        drawer->draw(Point{0, 0}, WindowPd::LEFT_RIGHT, WindowJustify::FULL);
+
+        CPPUNIT_ASSERT(mockGfx->mockWindow->mockContext.drawStringCalls >= 2);
+        CPPUNIT_ASSERT(mockGfx->mockWindow->mockContext.drawStringRects[1].m_x >
+                       mockGfx->mockWindow->mockContext.drawStringRects[0].m_x);
+    }
+
     void testClearAndReuse()
     {
         drawer->report("First", windowDef);
@@ -1253,7 +1219,7 @@ public:
 
     void testStaticCreateMethod()
     {
-        auto textDrawer = TextDrawer::create(mockGfx, mockFontCache, fontGroup, 5, 10);
+        auto textDrawer = TextDrawer::create(mockGfx, fontCache, fontGroup, 5, 10);
         CPPUNIT_ASSERT(textDrawer != nullptr);
         CPPUNIT_ASSERT_EQUAL(5, textDrawer->row);
         CPPUNIT_ASSERT_EQUAL(10, textDrawer->column);

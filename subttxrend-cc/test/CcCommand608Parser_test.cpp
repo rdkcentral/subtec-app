@@ -35,8 +35,10 @@ public:
         std::vector<int> intParams;
         std::vector<bool> boolParams;
         WindowDefinition windowDef;
+        WindowAttributes windowAttrs;
         PenAttributes penAttrs;
         WindowsMap windowsMap;
+        std::string text;
     };
 
     std::vector<CallRecord> calls;
@@ -45,6 +47,7 @@ public:
     bool windowTimedout = false;
     bool hasTextFlag = false;
     std::vector<bool> definedWindows;
+    std::vector<WindowDefinition> windowDefs;
 
     // Actually used methods (called by parser)
     void carriageReturn() override {
@@ -65,6 +68,9 @@ public:
         rec.intParams.push_back(id);
         calls.push_back(rec);
         currentWindowDef.id = id;
+        if (id < definedWindows.size() && definedWindows[id]) {
+            currentWindowDef = windowDefs[id];
+        }
     }
 
     void clearWindows(WindowsMap wm) override {
@@ -93,6 +99,15 @@ public:
         rec.method = "deleteWindows";
         rec.windowsMap = wm;
         calls.push_back(rec);
+        for (size_t id = 0; id < wm.size(); ++id) {
+            if (wm[id]) {
+                definedWindows[id] = false;
+                windowDefs[id].id = 255;
+                if (currentWindowDef.id == static_cast<int>(id)) {
+                    currentWindowDef.id = 255;
+                }
+            }
+        }
     }
 
     void setPenLocation(uint8_t row, uint8_t col) override {
@@ -104,7 +119,10 @@ public:
     }
 
     void setWindowAttributes(WindowAttributes attrs) override {
-        calls.push_back({"setWindowAttributes", {}, {}});
+        CallRecord rec;
+        rec.method = "setWindowAttributes";
+        rec.windowAttrs = attrs;
+        calls.push_back(rec);
     }
 
     void defineWindow(const WindowDefinition &wd) override {
@@ -115,6 +133,7 @@ public:
         currentWindowDef = wd;
         if (wd.id < definedWindows.size()) {
             definedWindows[wd.id] = true;
+            windowDefs[wd.id] = wd;
         }
     }
 
@@ -137,8 +156,7 @@ public:
             return false;
         }
 
-        wd = currentWindowDef;
-        wd.id = id;
+        wd = windowDefs[id];
         return true;
     }
 
@@ -172,6 +190,12 @@ public:
         rec.intParams.push_back(rowCount);
         rec.boolParams.push_back(adjust);
         calls.push_back(rec);
+        if (id < windowDefs.size() && definedWindows[id]) {
+            windowDefs[id].row_count = rowCount;
+            if (currentWindowDef.id == static_cast<int>(id)) {
+                currentWindowDef.row_count = rowCount;
+            }
+        }
     }
 
     void enable608(bool enabled) override {
@@ -189,6 +213,7 @@ public:
     void report(std::string str) override {
         CallRecord rec;
         rec.method = "report";
+        rec.text = str;
         calls.push_back(rec);
     }
 
@@ -226,6 +251,10 @@ public:
         currentWindowDef.id = 255;
         currentPenAttrs = PenAttributes();
         definedWindows.resize(8, false);
+        windowDefs.resize(8);
+        for (auto& wd : windowDefs) {
+            wd.id = 255;
+        }
     }
 };
 
@@ -275,6 +304,9 @@ class CcCommand608ParserTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testProcess608Data_ControlChar_Rejected);
     CPPUNIT_TEST(testProcess608Data_NoActiveWindow_NoAction);
     CPPUNIT_TEST(testProcess608Data_MultipleChars);
+    CPPUNIT_TEST(testProcess608Data_ReportText);
+    CPPUNIT_TEST(testProcess608Data_Field2);
+    CPPUNIT_TEST(testProcess608Data_FlashAndTab);
     CPPUNIT_TEST(testStateTransition_IdleToRollUp2);
     CPPUNIT_TEST(testStateTransition_IdleToPopOn1);
     CPPUNIT_TEST(testStateTransition_IdleToPaintOn1);
@@ -290,6 +322,7 @@ class CcCommand608ParserTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testStyleAttributes_MidrowColorChange);
     CPPUNIT_TEST(testStyleAttributes_BackgroundColor);
     CPPUNIT_TEST(testStyleAttributes_UnderlineToggle);
+    CPPUNIT_TEST(testTextModeAttributes);
     CPPUNIT_TEST(testE2E_CompletePopOnCycle);
     CPPUNIT_TEST(testE2E_RollupScrolling);
     CPPUNIT_TEST(testE2E_ServiceChangeMidCaption);
@@ -302,6 +335,7 @@ private:
 
     static const uint32_t CaptionChannel1 = 1000;
     static const uint32_t CaptionChannel2 = 1001;
+    static const uint32_t CaptionChannel3 = 1002;
     static const uint32_t TextChannel1 = 1004;
 
 public:
@@ -310,6 +344,13 @@ public:
         mock = new MockCommandProcessor();
         parser = new CommandParser();
         parser->setProcessor(mock);
+        parser->reset608();
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                               addParity(0x14), addParity(0x25));
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                               addParity(0x41), addParity(0x42));
+        parser->reset608();
+        mock->clearCalls();
     }
 
     void tearDown()
@@ -381,7 +422,8 @@ public:
         parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
                               0xC0, addParity(0x42));
 
-        CPPUNIT_ASSERT_EQUAL(0, mock->getCallCount());
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("report"));
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("defineWindow"));
     }
 
     void testProcess608Data_ParityFailData2_Rejected()
@@ -392,7 +434,8 @@ public:
         parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
                               addParity(0x41), 0xC0);
 
-        CPPUNIT_ASSERT_EQUAL(0, mock->getCallCount());
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("report"));
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("defineWindow"));
     }
 
     void testProcess608Data_NullPacket_Ignored()
@@ -403,7 +446,8 @@ public:
         parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
                               0x80, 0x80);
 
-        CPPUNIT_ASSERT_EQUAL(0, mock->getCallCount());
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("report"));
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("defineWindow"));
     }
 
     void testProcess608Data_WrongFieldForChannel_Rejected()
@@ -414,7 +458,8 @@ public:
         parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_2,
                               addParity(0x41), addParity(0x42));
 
-        CPPUNIT_ASSERT_EQUAL(0, mock->getCallCount());
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("report"));
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("defineWindow"));
     }
 
     void testProcess608Data_WrongChannel_Rejected()
@@ -424,7 +469,7 @@ public:
                               addParity(0x14), addParity(0x25)); // RU2
         mock->clearCalls();
 
-        parser->process608Data(CaptionChannel2, CcData::CEA_608_FIELD_1,
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
                               addParity(0x15), addParity(0x25)); // RU2 channel 2
 
         CPPUNIT_ASSERT(!mock->wasMethodCalled("report"));
@@ -660,7 +705,7 @@ public:
         mock->clearCalls();
 
         parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
-                              addParity(0x11), addParity(0x70));
+                      addParity(0x14), addParity(0x60));
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("setCurrentWindow"));
     }
@@ -673,7 +718,7 @@ public:
         mock->clearCalls();
 
         parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
-                              addParity(0x17), addParity(0x40));
+                      addParity(0x16), addParity(0x60));
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("setCurrentWindow"));
     }
@@ -781,7 +826,8 @@ public:
                               addParity(0x41), addParity(0x42));
 
         // With no active window, parser should perform no operations
-        CPPUNIT_ASSERT_EQUAL(0, mock->getCallCount());
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("report"));
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("defineWindow"));
     }
 
     void testProcess608Data_MultipleChars()
@@ -800,6 +846,66 @@ public:
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("report"));
         CPPUNIT_ASSERT(mock->getCallCount("report") >= 2);
+    }
+
+    void testProcess608Data_ReportText()
+    {
+        parser->set608();
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x14), addParity(0x25));
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x11), addParity(0x40));
+        mock->clearCalls();
+
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x41), addParity(0x42));
+
+        CPPUNIT_ASSERT_EQUAL(2, mock->getCallCount("report"));
+        CPPUNIT_ASSERT_EQUAL(std::string("A"), mock->calls[0].text);
+        CPPUNIT_ASSERT_EQUAL(std::string("B"), mock->calls[1].text);
+    }
+
+    void testProcess608Data_Field2()
+    {
+        parser->set608();
+        parser->process608Data(CaptionChannel3, CcData::CEA_608_FIELD_2,
+                              addParity(0x14), addParity(0x25));
+        parser->process608Data(CaptionChannel3, CcData::CEA_608_FIELD_2,
+                      addParity(0x11), addParity(0x40));
+        mock->clearCalls();
+
+        parser->process608Data(CaptionChannel3, CcData::CEA_608_FIELD_2,
+                              addParity(0x41), addParity(0x42));
+
+        CPPUNIT_ASSERT_EQUAL(2, mock->getCallCount("report"));
+        CPPUNIT_ASSERT_EQUAL(std::string("A"), mock->calls[0].text);
+        CPPUNIT_ASSERT_EQUAL(std::string("B"), mock->calls[1].text);
+    }
+
+    void testProcess608Data_FlashAndTab()
+    {
+        parser->set608();
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x14), addParity(0x25));
+        mock->clearCalls();
+
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x14), addParity(0x28));
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x17), addParity(0x21));
+
+        bool foundFlash = false;
+        bool foundTab = false;
+        for (const auto& call : mock->calls) {
+            if (call.method == "overridePenAttributes") {
+                foundFlash = call.penAttrs.flashing;
+            }
+            if (call.method == "setTabOffset") {
+                foundTab = call.intParams.size() == 1 && call.intParams[0] == 1;
+            }
+        }
+        CPPUNIT_ASSERT(foundFlash);
+        CPPUNIT_ASSERT(foundTab);
     }
 
     void testStateTransition_IdleToRollUp2()
@@ -1041,6 +1147,31 @@ public:
                               addParity(0x11), addParity(0x2F));
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("overridePenAttributes"));
+    }
+
+    void testTextModeAttributes()
+    {
+        parser->set608();
+        parser->process608Data(TextChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x14), addParity(0x2A));
+
+        bool foundFill = false;
+        for (const auto& call : mock->calls) {
+            if (call.method == "setWindowAttributes") {
+                foundFill = call.windowAttrs.fill_color == 0xFF000000;
+                break;
+            }
+        }
+        CPPUNIT_ASSERT(foundFill);
+        bool foundTimeout = false;
+        for (const auto& call : mock->calls) {
+            if (call.method == "resetWindowTimeout" &&
+                call.intParams.size() == 1 && call.intParams[0] == 0) {
+                foundTimeout = true;
+                break;
+            }
+        }
+        CPPUNIT_ASSERT(foundTimeout);
     }
 
     void testE2E_CompletePopOnCycle()

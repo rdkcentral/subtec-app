@@ -21,7 +21,6 @@
 #include "CcUserData.hpp"
 #include "CcExceptions.hpp"
 #include <vector>
-#include <cstring>
 
 using namespace subttxrend::cc;
 
@@ -66,7 +65,7 @@ class CcUserDataTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCcDataIsCcpStartWithValidStart);
     CPPUNIT_TEST(testCcDataIsCcpStartWithOtherType);
     CPPUNIT_TEST(testCcDataIsCcpDataWithValidData);
-    CPPUNIT_TEST(testCcDataIsCcpDataWithInvalidData);
+    CPPUNIT_TEST(testCcDataInvalidIsPadding);
     CPPUNIT_TEST(testCcDataIsCcpDataWithOtherType);
     CPPUNIT_TEST(testCcDataIs608DataWithField1);
     CPPUNIT_TEST(testCcDataIs608DataWithField2);
@@ -285,7 +284,9 @@ public:
 
         CPPUNIT_ASSERT_EQUAL(true, userData.isValid());
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), userData.getCcData().size());
-        // Verify the incomplete triplet is ignored
+        CPPUNIT_ASSERT_EQUAL(static_cast<int>(CcData::CEA_608_FIELD_1), static_cast<int>(userData.getCcData()[0]->ccType));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x11), userData.getCcData()[0]->data1);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x22), userData.getCcData()[0]->data2);
     }
 
     void testSetUserDataSizeOne()
@@ -346,6 +347,12 @@ public:
 
         CPPUNIT_ASSERT_EQUAL(true, userData.isValid());
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(100), userData.getCcData().size());
+
+        for (int i = 0; i < 100; ++i) {
+            CPPUNIT_ASSERT_EQUAL(static_cast<int>(i % 4), static_cast<int>(userData.getCcData()[i]->ccType));
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(i & 0xFF), userData.getCcData()[i]->data1);
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>((i + 1) & 0xFF), userData.getCcData()[i]->data2);
+        }
     }
 
     void testSetUserDataNullptr()
@@ -453,13 +460,11 @@ public:
 
     void testGetCcDataVerifyConstCorrectness()
     {
-        UserData userData;
         std::uint8_t data[] = {0x00, 0x11, 0x22};
-        userData.setUserData(data, 3);
+        const UserData userData(data, 3);
 
         const std::vector<std::unique_ptr<CcData>>& ccData = userData.getCcData();
 
-        // Method is const, should not modify userData
         CPPUNIT_ASSERT_EQUAL(true, userData.isValid());
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), ccData.size());
     }
@@ -521,15 +526,13 @@ public:
         CPPUNIT_ASSERT_EQUAL(true, ccData->isCcpData());
     }
 
-    void testCcDataIsCcpDataWithInvalidData()
+    void testCcDataInvalidIsPadding()
     {
-        // In ATSC_CC_POC path, ccValid is always true
-        UserData userData;
-        std::uint8_t data[] = {0x02, 0x11, 0x22};
-        userData.setUserData(data, 3);
+        CcData ccData{false, CcData::DTVCC_CCP_DATA, 0x11, 0x22};
 
-        const CcData* ccData = userData.getCcData()[0].get();
-        CPPUNIT_ASSERT_EQUAL(true, ccData->isCcpData());
+        CPPUNIT_ASSERT_EQUAL(true, ccData.isPadding());
+        CPPUNIT_ASSERT_EQUAL(false, ccData.isCcpData());
+        CPPUNIT_ASSERT_EQUAL(false, ccData.isCcpStart());
     }
 
     void testCcDataIsCcpDataWithOtherType()
@@ -714,6 +717,8 @@ public:
         userData.setUserData(data, 3);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), userData.getCcData().size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x11), userData.getCcData()[0]->data1);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x22), userData.getCcData()[0]->data2);
     }
 
     void testSixBytesExactly()
@@ -733,6 +738,8 @@ public:
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), userData.getCcData().size());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x11), userData.getCcData()[0]->data1);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x22), userData.getCcData()[0]->data2);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x11), userData.getCcData()[0]->data1);
     }
 
     void testFiveBytesOneTripletRemainder()
@@ -743,6 +750,7 @@ public:
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), userData.getCcData().size());
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x11), userData.getCcData()[0]->data1);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x22), userData.getCcData()[0]->data2);
     }
 
     void testMemoryManagementMultipleObjects()

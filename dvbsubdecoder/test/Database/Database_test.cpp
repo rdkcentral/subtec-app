@@ -20,10 +20,15 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <cstdint>
+#include <memory>
+#include <set>
+#include <stdexcept>
+#include <vector>
+
 #include "Database.hpp"
 #include "PixmapAllocator.hpp"
 
-#include "Misc.hpp"
 #include "DecoderClientMock.hpp"
 
 using dvbsubdecoder::Database;
@@ -36,6 +41,7 @@ class DatabaseTest : public CppUnit::TestFixture
 CPPUNIT_TEST_SUITE( DatabaseTest );
     CPPUNIT_TEST(testBasic);
     CPPUNIT_TEST(testSameClut);
+    CPPUNIT_TEST(testRegionData);
     CPPUNIT_TEST(testRenderingStates);
     CPPUNIT_TEST(testBadRegion);
     CPPUNIT_TEST(testNoPixmapMemory);
@@ -188,6 +194,28 @@ public:
         CPPUNIT_ASSERT(database.getClutById(CLUT_ID) == nullptr);
     }
 
+    void testRegionData()
+    {
+        Database& database = *m_database;
+
+        database.epochReset();
+        database.getPage().startParsing(0xF, StcTime(), 0);
+
+        auto region = database.addRegionAndClut(7, 23, 31,
+            dvbsubdecoder::RegionDepthBits::DEPTH_4BIT,
+            dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 9);
+        CPPUNIT_ASSERT(region);
+        CPPUNIT_ASSERT(region->getId() == 7);
+        CPPUNIT_ASSERT(region->getWidth() == 23);
+        CPPUNIT_ASSERT(region->getHeight() == 31);
+        CPPUNIT_ASSERT(region->getCompatibilityLevel()
+            == dvbsubdecoder::RegionDepthBits::DEPTH_4BIT);
+        CPPUNIT_ASSERT(region->getDepth()
+            == dvbsubdecoder::RegionDepthBits::DEPTH_8BIT);
+        CPPUNIT_ASSERT(region->getClutId() == 9);
+        CPPUNIT_ASSERT(region->getClut() == database.getClutById(9));
+    }
+
     void testBadRegion()
     {
         Database& database = *m_database;
@@ -221,6 +249,10 @@ public:
                 dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
                 dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 0);
         CPPUNIT_ASSERT(!result);
+
+        CPPUNIT_ASSERT(database.getRegionCount() == 1);
+        CPPUNIT_ASSERT(database.getClutById(0) != nullptr);
+        CPPUNIT_ASSERT(database.getClutById(1) == nullptr);
     }
 
     void testNoPixmapMemory()
@@ -349,6 +381,7 @@ public:
 
         auto& status = database.getStatus();
         CPPUNIT_ASSERT(database.getRegionCount() == 0);
+        CPPUNIT_ASSERT(status.getSpecVersion() == SPEC_VERSION);
 
         // Test that status persists across operations
         database.epochReset();
@@ -363,6 +396,8 @@ public:
         m_database.reset(new Database(Specification::VERSION_1_2_1, *m_pixmapAllocator));
 
         auto& status121 = m_database->getStatus();
+        CPPUNIT_ASSERT(status121.getSpecVersion()
+            == Specification::VERSION_1_2_1);
         // zero regions until parsing starts.
         CPPUNIT_ASSERT(m_database->getRegionCount() == 0);
     }
@@ -374,6 +409,16 @@ public:
         // Access display objects (references are inherently non-null).
         auto& currentDisplay = database.getCurrentDisplay();
         auto& parsedDisplay = database.getParsedDisplay();
+
+        const dvbsubdecoder::Rectangle currentBounds = { 1, 2, 101, 202 };
+        const dvbsubdecoder::Rectangle parsedBounds = { 3, 4, 303, 404 };
+        currentDisplay.set(1, currentBounds, currentBounds);
+        parsedDisplay.set(2, parsedBounds, parsedBounds);
+
+        CPPUNIT_ASSERT(currentDisplay.getVersion() == 1);
+        CPPUNIT_ASSERT(parsedDisplay.getVersion() == 2);
+        CPPUNIT_ASSERT(currentDisplay.getDisplayBounds().m_x1 == 1);
+        CPPUNIT_ASSERT(parsedDisplay.getDisplayBounds().m_x1 == 3);
 
         // Verify they are different objects
         CPPUNIT_ASSERT(&currentDisplay != &parsedDisplay);

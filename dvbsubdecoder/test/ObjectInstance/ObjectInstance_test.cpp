@@ -21,6 +21,10 @@
 #include <cppunit/extensions/HelperMacros.h>
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include <vector>
 
 #include "ObjectInstance.hpp"
 
@@ -46,7 +50,7 @@ CPPUNIT_TEST_SUITE( ObjectInstanceTest );
     CPPUNIT_TEST(testIterationEdgeCases);
     CPPUNIT_TEST(testLargeScaleOperations);
     CPPUNIT_TEST(testObjectOwnership);
-    CPPUNIT_TEST(testDanglingPointerAfterRemoval);
+    CPPUNIT_TEST(testRemovalBeforeLifetime);
     CPPUNIT_TEST(testListInvariantsInLargeOps);
     CPPUNIT_TEST(testExceptionSafetyBatch);
     CPPUNIT_TEST(testInvalidInputsBroader);
@@ -100,10 +104,15 @@ public:
         }
 
         // iterate all
+        int itemCount = 0;
         for (item = list.getFirst(); item; item = list.getNext(item))
         {
-            // noop
+            const int expectedIndex = (OBJECT_COUNT / 2) + itemCount;
+            const int expectedPoolIndex = expectedIndex < OBJECT_COUNT ? expectedIndex : expectedIndex - OBJECT_COUNT;
+            CPPUNIT_ASSERT(item == &pool[expectedPoolIndex]);
+            ++itemCount;
         }
+        CPPUNIT_ASSERT_EQUAL(OBJECT_COUNT, itemCount);
 
         // remove all
         while (list.getFirst())
@@ -427,6 +436,7 @@ public:
             current = list.getNext(current);
         }
         CPPUNIT_ASSERT(current == &objects[1]); // Last added
+        CPPUNIT_ASSERT(list.getNext(current) == nullptr);
     }
 
     void testConstObjectInstanceList()
@@ -458,7 +468,7 @@ public:
         while (constCurrent)
         {
             count++;
-            constCurrent = (constCurrent->m_objectId == 200) ? nullptr : constList.getNext(constCurrent);
+            constCurrent = constList.getNext(constCurrent);
         }
         CPPUNIT_ASSERT(count == 2);
     }
@@ -692,6 +702,10 @@ public:
             {
                 current = list.getNext(current);
             }
+            else
+            {
+                CPPUNIT_ASSERT(list.getNext(current) == nullptr);
+            }
         }
         
         // Remove all remaining objects
@@ -749,7 +763,7 @@ public:
         CPPUNIT_ASSERT(list.getFirst() == nullptr);
     }
 
-    void testDanglingPointerAfterRemoval()
+    void testRemovalBeforeLifetime()
     {
         ObjectInstanceList list;
         ObjectInstance* ptr = nullptr;
@@ -761,7 +775,7 @@ public:
             ObjectInstance* removed = list.removeFirst();
             CPPUNIT_ASSERT(removed == ptr);
         } // localObj is destroyed here
-        // After scope, list should not return pointer to destroyed object
+        // After scope, the list remains empty because the object was removed first.
         CPPUNIT_ASSERT(list.getFirst() == nullptr);
     }
 
@@ -797,26 +811,35 @@ public:
         for (auto& obj : objects) list.add(&obj);
         // Simulate exception in middle of removals
         int removedCount = 0;
-        try {
-            for (size_t i = 0; i < objects.size(); ++i) {
+        try
+        {
+            for (std::size_t i = 0; i < objects.size(); ++i) {
                 if (i == 5) throw std::runtime_error("Simulated error");
                 ObjectInstance* removed = list.removeFirst();
                 CPPUNIT_ASSERT(removed == &objects[i]);
                 ++removedCount;
             }
-        } catch (...) {}
+        }
+        catch (const std::runtime_error&)
+        {
+            CPPUNIT_ASSERT_EQUAL(5, removedCount);
+        }
         // After exception, remaining objects should be in order
         int idx = removedCount;
+        int remainingCount = 0;
         for (const ObjectInstance* cur = list.getFirst(); cur; cur = list.getNext(cur)) {
             CPPUNIT_ASSERT(cur == &objects[idx++]);
+            ++remainingCount;
         }
+        CPPUNIT_ASSERT_EQUAL(5, remainingCount);
+        CPPUNIT_ASSERT_EQUAL(10, idx);
     }
 
     void testInvalidInputsBroader()
     {
         ObjectInstanceList list1, list2;
         ObjectInstance obj1, obj2;
-        // Remove object never added
+        // Request next object never added
         CPPUNIT_ASSERT_THROW(list1.getNext(&obj2), std::logic_error);
         // getNext for object from different list
         list1.add(&obj1);
@@ -845,6 +868,10 @@ public:
         // Interleaved add/remove
         listA.add(&obj2);
         listB.add(&obj3);
+        CPPUNIT_ASSERT_THROW(listB.add(&obj2), std::logic_error);
+        CPPUNIT_ASSERT(listA.getFirst() == &obj1);
+        CPPUNIT_ASSERT(listA.getNext(&obj1) == &obj2);
+        CPPUNIT_ASSERT(listB.getFirst() == &obj3);
         removed = listA.removeFirst();
         CPPUNIT_ASSERT(removed == &obj1);
         removed = listA.removeFirst();

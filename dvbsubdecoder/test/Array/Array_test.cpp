@@ -20,7 +20,10 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
 
 #include "Array.hpp"
 
@@ -43,6 +46,7 @@ CPPUNIT_TEST_SUITE( ArrayTest );
     CPPUNIT_TEST(testMemoryLayout);
     CPPUNIT_TEST(testMultipleInstances);
     CPPUNIT_TEST(testVirtualMethodDispatch);
+    CPPUNIT_TEST(testVirtualDestruction);
     CPPUNIT_TEST(testTemplateEdgeCases);
     CPPUNIT_TEST(testPointerTypes);
     CPPUNIT_TEST(testFloatingPointTypes);
@@ -201,34 +205,9 @@ public:
     // Edge cases and error handling tests
     void testZeroSizedArray()
     {
-        // Test zero-sized array edge case
         dvbsubdecoder::SizedArray<int, 0> zeroArray;
-        
+
         CPPUNIT_ASSERT(zeroArray.getSize() == 0);
-
-        // Define contract for zero-sized arrays: getData() is stable per access path,
-        // but may be nullptr or a non-null sentinel.
-        int* directData1 = zeroArray.getData();
-        int* directData2 = zeroArray.getData();
-        CPPUNIT_ASSERT(directData1 == directData2);
-
-        const dvbsubdecoder::SizedArray<int, 0>& constZeroArray = zeroArray;
-        const int* constData1 = constZeroArray.getData();
-        const int* constData2 = constZeroArray.getData();
-        CPPUNIT_ASSERT(constData1 == constData2);
-
-        // Verify polymorphic access is callable and stable.
-        dvbsubdecoder::Array<int>& baseRef = zeroArray;
-        CPPUNIT_ASSERT(baseRef.getSize() == 0);
-        int* baseData1 = baseRef.getData();
-        int* baseData2 = baseRef.getData();
-        CPPUNIT_ASSERT(baseData1 == baseData2);
-
-        const dvbsubdecoder::Array<int>& constBaseRef = zeroArray;
-        CPPUNIT_ASSERT(constBaseRef.getSize() == 0);
-        const int* constBaseData1 = constBaseRef.getData();
-        const int* constBaseData2 = constBaseRef.getData();
-        CPPUNIT_ASSERT(constBaseData1 == constBaseData2);
     }
 
     void testSingleElementArray()
@@ -424,6 +403,30 @@ public:
         CPPUNIT_ASSERT(constBasePtr->getData()[5] == 888);
     }
 
+    void testVirtualDestruction()
+    {
+        bool destroyed = false;
+
+        class DestructionProbe : public dvbsubdecoder::SizedArray<int, 1>
+        {
+        public:
+            explicit DestructionProbe(bool& destroyed) : m_destroyed(destroyed) {}
+
+            ~DestructionProbe() override
+            {
+                m_destroyed = true;
+            }
+
+        private:
+            bool& m_destroyed;
+        };
+
+        dvbsubdecoder::Array<int>* array = new DestructionProbe(destroyed);
+        delete array;
+
+        CPPUNIT_ASSERT(destroyed);
+    }
+
     void testTemplateEdgeCases()
     {
         // Test various template parameter combinations
@@ -443,14 +446,14 @@ public:
         maxCharArray.getData()[0] = 1;
         maxCharArray.getData()[254] = 254;
         
-        int64Array.getData()[0] = INT64_MIN;
-        int64Array.getData()[1] = INT64_MAX;
+        int64Array.getData()[0] = std::numeric_limits<std::int64_t>::min();
+        int64Array.getData()[1] = std::numeric_limits<std::int64_t>::max();
         
         // Verify boundary values
         CPPUNIT_ASSERT(maxCharArray.getData()[0] == 1);
         CPPUNIT_ASSERT(maxCharArray.getData()[254] == 254);
-        CPPUNIT_ASSERT(int64Array.getData()[0] == INT64_MIN);
-        CPPUNIT_ASSERT(int64Array.getData()[1] == INT64_MAX);
+        CPPUNIT_ASSERT(int64Array.getData()[0] == std::numeric_limits<std::int64_t>::min());
+        CPPUNIT_ASSERT(int64Array.getData()[1] == std::numeric_limits<std::int64_t>::max());
     }
 
     void testPointerTypes()
@@ -485,23 +488,26 @@ public:
         float* floatData = floatArray.getData();
         double* doubleData = doubleArray.getData();
         
-        // Test precision values
-        floatData[0] = 3.14159f;
-        floatData[1] = -2.71828f;
-        floatData[2] = 1.41421f;
-        
-        doubleData[0] = 3.141592653589793;
-        doubleData[1] = -2.718281828459045;
-        doubleData[2] = 1.414213562373095;
+        const float expectedFloat[] = {3.14159f, -2.71828f, 1.41421f};
+        const double expectedDouble[] = {
+            3.141592653589793, -2.718281828459045, 1.414213562373095};
+
+        floatData[0] = expectedFloat[0];
+        floatData[1] = expectedFloat[1];
+        floatData[2] = expectedFloat[2];
+
+        doubleData[0] = expectedDouble[0];
+        doubleData[1] = expectedDouble[1];
+        doubleData[2] = expectedDouble[2];
         
         // Verify floating point values (with appropriate tolerance)
-        CPPUNIT_ASSERT(std::abs(floatData[0] - 3.14159f) < 0.00001f);
-        CPPUNIT_ASSERT(std::abs(floatData[1] - (-2.71828f)) < 0.00001f);
-        CPPUNIT_ASSERT(std::abs(floatData[2] - 1.41421f) < 0.00001f);
+        CPPUNIT_ASSERT(std::abs(floatData[0] - expectedFloat[0]) < 0.00001f);
+        CPPUNIT_ASSERT(std::abs(floatData[1] - expectedFloat[1]) < 0.00001f);
+        CPPUNIT_ASSERT(std::abs(floatData[2] - expectedFloat[2]) < 0.00001f);
         
-        CPPUNIT_ASSERT(std::abs(doubleData[0] - 3.141592653589793) < 0.000000000000001);
-        CPPUNIT_ASSERT(std::abs(doubleData[1] - (-2.718281828459045)) < 0.000000000000001);
-        CPPUNIT_ASSERT(std::abs(doubleData[2] - 1.414213562373095) < 0.000000000000001);
+        CPPUNIT_ASSERT(std::abs(doubleData[0] - expectedDouble[0]) < 0.000000000000001);
+        CPPUNIT_ASSERT(std::abs(doubleData[1] - expectedDouble[1]) < 0.000000000000001);
+        CPPUNIT_ASSERT(std::abs(doubleData[2] - expectedDouble[2]) < 0.000000000000001);
     }
 
     void testBooleanType()

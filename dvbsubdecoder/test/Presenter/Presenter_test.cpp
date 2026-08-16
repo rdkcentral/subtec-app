@@ -18,12 +18,16 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
-#include <limits>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 
 #include "Presenter.hpp"
 #include "Database.hpp"
 #include "PixmapAllocator.hpp"
 #include "Types.hpp"
+#include "Config.hpp"
+#include "Consts.hpp"
 #include "../Decoder/DecoderClientMock.hpp"
 
 using dvbsubdecoder::Presenter;
@@ -32,6 +36,7 @@ using dvbsubdecoder::PixmapAllocator;
 using dvbsubdecoder::Rectangle;
 using dvbsubdecoder::Specification;
 using dvbsubdecoder::StcTime;
+using dvbsubdecoder::MAX_SUPPORTED_REGIONS;
 
 class PresenterTest : public CppUnit::TestFixture
 {
@@ -69,12 +74,12 @@ public:
         m_decoderClient = std::make_unique<DecoderClientMock>();
         m_pixmapAllocator = std::make_unique<PixmapAllocator>(Specification::VERSION_1_3_1, *m_decoderClient);
         m_database = std::make_unique<Database>(Specification::VERSION_1_3_1, *m_pixmapAllocator);
+        m_database->epochReset();
         m_presenter = std::make_unique<Presenter>(*m_decoderClient, *m_database);
-        // Ensure allocator starts from a clean state once per test instead of resetting per region.
-        m_pixmapAllocator->reset();
 
         // Set up basic display bounds
         setupBasicDisplayBounds();
+        m_decoderClient->clearCallbackHistory();
     }
 
     void tearDown()
@@ -93,12 +98,18 @@ public:
         DecoderClientMock client;
         PixmapAllocator allocator(Specification::VERSION_1_3_1, client);
         Database database(Specification::VERSION_1_3_1, allocator);
+        client.clearCallbackHistory();
 
         Presenter presenter(client, database);
 
         // Should be able to call public methods without crashing
         presenter.invalidate();
         presenter.draw();
+
+        const auto& history = client.getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(2), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxSetDisplayBounds);
+        CPPUNIT_ASSERT(history[1].method == MethodData::Method::gfxFinish);
     }
 
     void testBasicDraw()
@@ -107,46 +118,59 @@ public:
 
         m_presenter->draw();
 
-        // Should call gfxFinish at minimum
-        auto history = m_decoderClient->getCallbackHistory();
-        CPPUNIT_ASSERT(!history.empty());
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(2), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxSetDisplayBounds);
+        CPPUNIT_ASSERT(history[1].method == MethodData::Method::gfxFinish);
+        CPPUNIT_ASSERT(history[1].gfxFinishArgs.rect == Rectangle({0, 0, 720, 576}));
     }
 
     void testBasicInvalidate()
     {
-        // Invalidate should not crash and should affect next draw
+        // Invalidate should not crash and should affect next draw.
         m_presenter->invalidate();
 
         m_decoderClient->clearCallbackHistory();
         m_presenter->draw();
 
-        auto history = m_decoderClient->getCallbackHistory();
-        CPPUNIT_ASSERT(!history.empty());
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(2), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxSetDisplayBounds);
+        CPPUNIT_ASSERT(history[1].method == MethodData::Method::gfxFinish);
     }
 
     void testMultipleDrawCallsWithoutChanges()
     {
-        // First draw
+        setupTestPage();
         m_presenter->draw();
         m_decoderClient->clearCallbackHistory();
 
         // Second draw without changes - should be optimized
         m_presenter->draw();
 
-        auto history = m_decoderClient->getCallbackHistory();
-        // Should still call gfxFinish but minimize other operations
-        CPPUNIT_ASSERT(!history.empty());
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxFinish);
+        CPPUNIT_ASSERT(history[0].gfxFinishArgs.rect == Rectangle({0, 0, 0, 0}));
     }
 
     void testMultipleInvalidateCalls()
     {
-        // Multiple invalidates should be safe
+        setupTestPage();
+        m_presenter->draw();
+        m_decoderClient->clearCallbackHistory();
+
         m_presenter->invalidate();
         m_presenter->invalidate();
         m_presenter->invalidate();
 
-        // Should still work normally
         m_presenter->draw();
+
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(3), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxSetDisplayBounds);
+        CPPUNIT_ASSERT(history[1].method == MethodData::Method::gfxDraw);
+        CPPUNIT_ASSERT(history[2].method == MethodData::Method::gfxFinish);
     }
 
     void testDrawAfterInvalidateSequence()
@@ -161,8 +185,11 @@ public:
         m_presenter->invalidate();
         m_presenter->draw();
 
-        auto history = m_decoderClient->getCallbackHistory();
-        CPPUNIT_ASSERT(!history.empty());
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(3), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxSetDisplayBounds);
+        CPPUNIT_ASSERT(history[1].method == MethodData::Method::gfxDraw);
+        CPPUNIT_ASSERT(history[2].method == MethodData::Method::gfxFinish);
     }
 
     // Edge and Boundary Cases
@@ -179,11 +206,15 @@ public:
 
     void testIntegerLimitCoordinates()
     {
-        // Setup page with extreme coordinate values
+        // Setup page with the largest coordinate accepted by the page API.
         setupPageWithExtremeCoordinates();
 
-        // Should handle without overflow
         m_presenter->draw();
+
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(3), history.size());
+        CPPUNIT_ASSERT(history[2].method == MethodData::Method::gfxFinish);
+        CPPUNIT_ASSERT(history[2].gfxFinishArgs.rect == Rectangle({0, 0, 65535, 65535}));
     }
 
     void testEmptyRenderingState()
@@ -191,8 +222,9 @@ public:
         // Database with no regions - should handle empty state
         m_presenter->draw();
 
-        auto history = m_decoderClient->getCallbackHistory();
-        CPPUNIT_ASSERT(!history.empty()); // Should at least call gfxFinish
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(2), history.size());
+        CPPUNIT_ASSERT(history[1].gfxFinishArgs.rect == Rectangle({0, 0, 720, 576}));
     }
 
     void testMaximumRegionCount()
@@ -200,8 +232,11 @@ public:
         // Setup page with many regions
         setupPageWithManyRegions();
 
-        // Should handle large number of regions
         m_presenter->draw();
+
+        CPPUNIT_ASSERT_EQUAL(MAX_SUPPORTED_REGIONS, m_database->getRegionCount());
+        CPPUNIT_ASSERT_EQUAL(MAX_SUPPORTED_REGIONS, m_database->getPage().getRegionCount());
+        CPPUNIT_ASSERT_EQUAL(MAX_SUPPORTED_REGIONS, countCalls(MethodData::Method::gfxDraw));
     }
 
     void testDisplayBoundsSmallerThanWindow()
@@ -209,8 +244,11 @@ public:
         // Setup invalid bounds relationship
         setupInvalidBoundsRelationship();
 
-        // Should handle gracefully
         m_presenter->draw();
+
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT(history[0].gfxSetDisplayBoundsArgs.displayBounds == Rectangle({0, 0, 400, 300}));
+        CPPUNIT_ASSERT(history[1].gfxFinishArgs.rect == Rectangle({0, 0, 400, 300}));
     }
 
     void testWindowBeyondDisplayBounds()
@@ -218,8 +256,11 @@ public:
         // Setup window extending beyond display
         setupWindowBeyondDisplay();
 
-        // Should clip or handle appropriately
         m_presenter->draw();
+
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT(history[0].gfxSetDisplayBoundsArgs.windowBounds == Rectangle({100, 100, 820, 676}));
+        CPPUNIT_ASSERT(history[1].gfxFinishArgs.rect == Rectangle({0, 0, 720, 576}));
     }
 
     // Invalid and Unusual Inputs
@@ -228,8 +269,9 @@ public:
         // Setup page with references to non-existent regions
         setupPageWithInvalidRegionReferences();
 
-        // Should skip null regions without crashing
         m_presenter->draw();
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), countCalls(MethodData::Method::gfxDraw));
     }
 
     void testInvalidRegionDimensionsRejected()
@@ -241,6 +283,10 @@ public:
         CPPUNIT_ASSERT(rejectedRegion == nullptr);
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), m_database->getRegionCount());
         m_presenter->draw();
+
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(2), history.size());
+        CPPUNIT_ASSERT(history[1].method == MethodData::Method::gfxFinish);
     }
 
     // State Management Tests
@@ -252,29 +298,27 @@ public:
         m_decoderClient->clearCallbackHistory();
         m_presenter->draw(); // Second draw with identical state
 
-        // Should optimize redundant operations
-        auto history = m_decoderClient->getCallbackHistory();
-        CPPUNIT_ASSERT(!history.empty());
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxFinish);
+        CPPUNIT_ASSERT(history[0].gfxFinishArgs.rect == Rectangle({0, 0, 0, 0}));
     }
 
     void testBoundsChangeNotifications()
     {
-        // Change display/window bounds
+        m_presenter->draw();
+        m_decoderClient->clearCallbackHistory();
+
         changeBounds();
 
         m_decoderClient->clearCallbackHistory();
         m_presenter->draw();
 
-        // Should notify bounds changes
-        auto history = m_decoderClient->getCallbackHistory();
-        bool foundBoundsCall = false;
-        for (const auto& call : history) {
-            if (call.method == MethodData::Method::gfxSetDisplayBounds) {
-                foundBoundsCall = true;
-                break;
-            }
-        }
-        CPPUNIT_ASSERT(foundBoundsCall);
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(2), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxSetDisplayBounds);
+        CPPUNIT_ASSERT(history[0].gfxSetDisplayBoundsArgs.displayBounds == Rectangle({0, 0, 800, 600}));
+        CPPUNIT_ASSERT(history[1].gfxFinishArgs.rect == Rectangle({0, 0, 800, 600}));
     }
 
     void testModifiedRectangleCalculation()
@@ -283,16 +327,9 @@ public:
         setupTestPage();
         m_presenter->draw();
 
-        // Verify that gfxFinish is called with some rectangle
-        auto history = m_decoderClient->getCallbackHistory();
-        bool foundFinish = false;
-        for (const auto& call : history) {
-            if (call.method == MethodData::Method::gfxFinish) {
-                foundFinish = true;
-                break;
-            }
-        }
-        CPPUNIT_ASSERT(foundFinish);
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT(history[history.size() - 1].method == MethodData::Method::gfxFinish);
+        CPPUNIT_ASSERT(history[history.size() - 1].gfxFinishArgs.rect == Rectangle({0, 0, 720, 576}));
     }
 
     void testEmptyModifiedRectangle()
@@ -303,16 +340,10 @@ public:
         m_decoderClient->clearCallbackHistory();
         m_presenter->draw(); // Second draw, nothing changed
 
-        // Should still call gfxFinish with empty rectangle
-        auto history = m_decoderClient->getCallbackHistory();
-        bool foundFinish = false;
-        for (const auto& call : history) {
-            if (call.method == MethodData::Method::gfxFinish) {
-                foundFinish = true;
-                break;
-            }
-        }
-        CPPUNIT_ASSERT(foundFinish);
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxFinish);
+        CPPUNIT_ASSERT(history[0].gfxFinishArgs.rect == Rectangle({0, 0, 0, 0}));
     }
 
     // Complex Rendering Scenarios
@@ -321,17 +352,23 @@ public:
         // Setup few large regions
         setupFewLargeRegions();
 
-        // Should handle large regions
         m_presenter->draw();
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), countCalls(MethodData::Method::gfxDraw));
     }
 
     void testRapidStateChanges()
     {
-        // Simulate rapid state changes
+        setupTestPage();
+        m_presenter->draw();
+        m_decoderClient->clearCallbackHistory();
+
         for (int i = 0; i < 10; ++i) {
             m_presenter->invalidate();
             m_presenter->draw();
         }
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(10), countCalls(MethodData::Method::gfxDraw));
     }
 
     void testInterleavedClearAndDraw()
@@ -341,13 +378,15 @@ public:
         m_presenter->draw();
         m_decoderClient->clearCallbackHistory();
 
-        // Second: reset page (no regions) to trigger clear path
+        // Second: reset page (no regions) to trigger clear path.
         m_database->getPage().reset();
-        m_presenter->invalidate();
         m_presenter->draw();
 
-        auto history = m_decoderClient->getCallbackHistory();
-        CPPUNIT_ASSERT(!history.empty());
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(2), history.size());
+        CPPUNIT_ASSERT(history[0].method == MethodData::Method::gfxClear);
+        CPPUNIT_ASSERT(history[0].gfxClearArgs.rect == Rectangle({100, 100, 300, 250}));
+        CPPUNIT_ASSERT(history[1].gfxFinishArgs.rect == Rectangle({100, 100, 300, 250}));
     }
 
     void testRegionOverlapHandling()
@@ -355,16 +394,22 @@ public:
         // Setup overlapping regions directly
         setupPageWithOverlappingRegions();
 
-        // Should handle overlap correctly
         m_presenter->draw();
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(3), countCalls(MethodData::Method::gfxDraw));
     }
 
     void testCoordinateTransformation()
     {
         setupTestPage();
 
-        // Should transform coordinates correctly
+        auto& display = m_database->getCurrentDisplay();
+        display.set(0, Rectangle({0, 0, 720, 576}), Rectangle({50, 60, 720, 576}));
+
         m_presenter->draw();
+
+        const auto& history = m_decoderClient->getCallbackHistory();
+        CPPUNIT_ASSERT(history[1].gfxDrawArgs.dstRect == Rectangle({150, 160, 350, 310}));
     }
 
     void testIsRectangleInsideBoundaryConditions()
@@ -372,8 +417,9 @@ public:
         // Setup rectangles at exact boundaries
         setupBoundaryRectangles();
 
-        // Should handle boundary conditions
         m_presenter->draw();
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), countCalls(MethodData::Method::gfxDraw));
     }
 
     void testComposedRegionCorrectness()
@@ -386,7 +432,9 @@ public:
         // Ensure region index is valid
         CPPUNIT_ASSERT(page.getRegionCount() > 0);
         const auto& region = page.getRegion(0);
-        // Check expected region dimensions using struct members
+        CPPUNIT_ASSERT(m_database->getRegionById(1) != nullptr);
+        CPPUNIT_ASSERT_EQUAL(200, m_database->getRegionById(1)->getWidth());
+        CPPUNIT_ASSERT_EQUAL(150, m_database->getRegionById(1)->getHeight());
         CPPUNIT_ASSERT_EQUAL(100, region.m_positionX);
         CPPUNIT_ASSERT_EQUAL(100, region.m_positionY);
     }
@@ -409,15 +457,16 @@ private:
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5); // timeout 5s
         page.addRegion(1, 100, 100);
-        page.finishParsing();
         createTestRegion(1, 200, 150);
+        page.finishParsing();
+        m_decoderClient->clearCallbackHistory();
     }
 
     dvbsubdecoder::Region* createTestRegion(uint16_t id, int width, int height)
     {
-        // Region depth / compatibility / clut id use 0 for tests.
-        // Invalid sizes are intentionally forwarded to the API so rejection paths are exercised.
-        auto region = m_database->addRegionAndClut(static_cast<std::uint8_t>(id), width, height, 0, 0, 0);
+        auto region = m_database->addRegionAndClut(static_cast<std::uint8_t>(id), width, height,
+            dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+            dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, 0);
         if (region) {
             region->setVersion(1);
         }
@@ -429,8 +478,9 @@ private:
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
         page.addRegion(1, 100, 100);
+        auto* region = createTestRegion(1, 0, 0);
         page.finishParsing();
-        return createTestRegion(1, 0, 0); // rejected by Database::addRegionAndClut
+        return region;
     }
 
     void setupPageWithExtremeCoordinates()
@@ -438,20 +488,23 @@ private:
         // Clamp to uint16 range as per API.
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
-        page.addRegion(1, 60000 % 65535, 60000 % 65535);
-        page.finishParsing();
+        page.addRegion(1, 60000, 60000);
         createTestRegion(1, 100, 100);
+        page.finishParsing();
+        m_database->getCurrentDisplay().set(0, Rectangle({0, 0, 65535, 65535}), Rectangle({0, 0, 65535, 65535}));
+        m_decoderClient->clearCallbackHistory();
     }
 
     void setupPageWithManyRegions()
     {
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
-        for (uint16_t i = 1; i <= 20; ++i) { // keep reasonable for test runtime
+        for (uint16_t i = 1; i <= MAX_SUPPORTED_REGIONS; ++i) {
             page.addRegion(static_cast<std::uint8_t>(i), (i % 10) * 50, (i / 10) * 50);
             createTestRegion(i, 40, 40);
         }
         page.finishParsing();
+        m_decoderClient->clearCallbackHistory();
     }
 
     void setupPageWithOverlappingRegions()
@@ -463,6 +516,7 @@ private:
             createTestRegion(i, 100, 100);
         }
         page.finishParsing();
+        m_decoderClient->clearCallbackHistory();
     }
 
     void setupInvalidBoundsRelationship()
@@ -485,7 +539,7 @@ private:
     {
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
-        // Do not add any regions but finish parsing to simulate page with no matching region objects.
+        page.addRegion(99, 100, 100);
         page.finishParsing();
     }
 
@@ -494,8 +548,9 @@ private:
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
         page.addRegion(1, 200, 200);
+        auto* region = createTestRegion(1, -50, -50);
         page.finishParsing();
-        return createTestRegion(1, -50, -50); // rejected by Database::addRegionAndClut
+        return region;
     }
 
     void changeBounds() {
@@ -509,16 +564,29 @@ private:
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
         page.addRegion(1, 0, 0);
-        page.finishParsing();
         createTestRegion(1, 500, 400);
+        page.finishParsing();
+        m_decoderClient->clearCallbackHistory();
     }
 
     void setupBoundaryRectangles() {
         auto& page = m_database->getPage();
         page.startParsing(0, StcTime(), 5);
-        page.addRegion(1, 10, 10);
+        page.addRegion(1, 0, 0);
+        page.addRegion(2, 719, 575);
+        createTestRegion(1, 720, 576);
+        createTestRegion(2, 2, 2);
         page.finishParsing();
-        createTestRegion(1, 1, 1);
+        m_decoderClient->clearCallbackHistory();
+    }
+
+    std::size_t countCalls(MethodData::Method method) const
+    {
+        std::size_t count = 0;
+        for (const auto& call : m_decoderClient->getCallbackHistory()) {
+            if (call.method == method) ++count;
+        }
+        return count;
     }
 };
 

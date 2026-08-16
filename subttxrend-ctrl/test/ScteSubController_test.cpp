@@ -18,12 +18,13 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <algorithm>
+#include <cstdint>
 #include "ScteSubController.hpp"
 #include "StcProvider.hpp"
 #include <subttxrend/protocol/PacketSubtitleSelection.hpp>
 #include <subttxrend/protocol/PacketData.hpp>
 #include <subttxrend/gfx/Window.hpp>
-#include <subttxrend/gfx/Engine.hpp>
 #include <subttxrend/gfx/Types.hpp>
 #include <memory>
 #include <vector>
@@ -36,7 +37,7 @@ using namespace subttxrend::gfx;
 class MockWindow : public Window
 {
 public:
-    MockWindow() : m_visible(false), m_visibleTrueCount(0), m_visibleFalseCount(0), m_updateCount(0), m_fillRectangleCount(0) {}
+    MockWindow() : m_visible(false), m_visibleTrueCount(0), m_visibleFalseCount(0), m_updateCount(0), m_fillRectangleCount(0), m_drawPixmapCount(0) {}
     virtual ~MockWindow() {}
 
     void addKeyEventListener(KeyEventListener* listener) override {}
@@ -49,18 +50,20 @@ public:
     DrawContext& getDrawContext() override {
         class MockDrawContext : public DrawContext {
         public:
-            explicit MockDrawContext(int& fillRectangleCount) : m_fillRectangleCount(fillRectangleCount) {}
+            MockDrawContext(int& fillRectangleCount, int& drawPixmapCount)
+                : m_fillRectangleCount(fillRectangleCount), m_drawPixmapCount(drawPixmapCount) {}
             void fillRectangle(ColorArgb color, const Rectangle& rectangle) override { ++m_fillRectangleCount; }
             void drawUnderline(ColorArgb color, const Rectangle& rectangle) override {}
-            void drawPixmap(const ClutBitmap& bitmap, const Rectangle& srcRect, const Rectangle& dstRect) override {}
+            void drawPixmap(const ClutBitmap& bitmap, const Rectangle& srcRect, const Rectangle& dstRect) override { ++m_drawPixmapCount; }
             void drawBitmap(const Bitmap& bitmap, const Rectangle& dstRect) override {}
             void drawGlyph(const FontStripPtr& fontStrip, std::int32_t glyphIndex, const Rectangle& rect, ColorArgb fgColor, ColorArgb bgColor) override {}
             void drawString(PrerenderedFont& font, const Rectangle &destinationRect, const std::vector<GlyphData>& glyphs, const ColorArgb fgColor, const ColorArgb bgColor, int outlineSize = 0, int verticalOffset = 0) override {}
         private:
             int& m_fillRectangleCount;
+            int& m_drawPixmapCount;
         };
         if (!m_mockContext) {
-            m_mockContext = std::make_unique<MockDrawContext>(m_fillRectangleCount);
+            m_mockContext = std::make_unique<MockDrawContext>(m_fillRectangleCount, m_drawPixmapCount);
         }
         return *m_mockContext;
     }
@@ -91,6 +94,8 @@ public:
     int getVisibleTrueCount() const { return m_visibleTrueCount; }
     int getVisibleFalseCount() const { return m_visibleFalseCount; }
     int getFillRectangleCount() const { return m_fillRectangleCount; }
+    int getUpdateCount() const { return m_updateCount; }
+    int getDrawPixmapCount() const { return m_drawPixmapCount; }
 
 private:
     bool m_visible;
@@ -98,6 +103,7 @@ private:
     int m_visibleFalseCount;
     int m_updateCount;
     int m_fillRectangleCount;
+    int m_drawPixmapCount;
     Size m_size{1920, 1080};
     std::unique_ptr<DrawContext> m_mockContext;
 };
@@ -128,47 +134,6 @@ public:
         return packet;
     }
 
-    static std::unique_ptr<PacketSubtitleSelection> buildDvb(uint32_t channelId)
-    {
-        std::vector<uint8_t> data = {
-            0x05, 0x00, 0x00, 0x00, // type = SUBTITLE_SELECTION (5)
-            0x01, 0x00, 0x00, 0x00, // counter = 1
-            0x10, 0x00, 0x00, 0x00, // size = 16 bytes
-            static_cast<uint8_t>(channelId), static_cast<uint8_t>(channelId >> 8),
-            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24), // channel ID
-            static_cast<uint8_t>(PacketSubtitleSelection::SUBTITLES_TYPE_DVB), 0x00, 0x00, 0x00, // subtitle type = DVB
-            0x00, 0x00, 0x00, 0x00, // auxId1
-            0x00, 0x00, 0x00, 0x00  // auxId2
-        };
-
-        auto buffer = std::make_unique<std::vector<char>>(data.begin(), data.end());
-        auto packet = std::make_unique<PacketSubtitleSelection>();
-        if (!packet->parse(std::move(buffer))) {
-            return nullptr;
-        }
-        return packet;
-    }
-
-    static std::unique_ptr<PacketSubtitleSelection> buildTeletext(uint32_t channelId)
-    {
-        std::vector<uint8_t> data = {
-            0x05, 0x00, 0x00, 0x00, // type = SUBTITLE_SELECTION (5)
-            0x01, 0x00, 0x00, 0x00, // counter = 1
-            0x10, 0x00, 0x00, 0x00, // size = 16 bytes
-            static_cast<uint8_t>(channelId), static_cast<uint8_t>(channelId >> 8),
-            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24), // channel ID
-            static_cast<uint8_t>(PacketSubtitleSelection::SUBTITLES_TYPE_TELETEXT), 0x00, 0x00, 0x00, // subtitle type = Teletext
-            0x00, 0x00, 0x00, 0x00, // auxId1
-            0x00, 0x00, 0x00, 0x00  // auxId2
-        };
-
-        auto buffer = std::make_unique<std::vector<char>>(data.begin(), data.end());
-        auto packet = std::make_unique<PacketSubtitleSelection>();
-        if (!packet->parse(std::move(buffer))) {
-            return nullptr;
-        }
-        return packet;
-    }
 };
 
 // Helper to create PacketData for testing
@@ -224,6 +189,30 @@ public:
         return packet;
     }
 
+    static std::unique_ptr<PacketData> buildTeletextData(uint32_t channelId, const std::vector<uint8_t>& teletextData)
+    {
+        uint32_t size = 8 + teletextData.size();
+
+        std::vector<uint8_t> data = {
+            0x01, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00,
+            static_cast<uint8_t>(size), static_cast<uint8_t>(size >> 8),
+            static_cast<uint8_t>(size >> 16), static_cast<uint8_t>(size >> 24),
+            static_cast<uint8_t>(channelId), static_cast<uint8_t>(channelId >> 8),
+            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24),
+            static_cast<uint8_t>(PacketSubtitleSelection::SUBTITLES_TYPE_TELETEXT), 0x00, 0x00, 0x00
+        };
+
+        data.insert(data.end(), teletextData.begin(), teletextData.end());
+
+        auto buffer = std::make_unique<std::vector<char>>(data.begin(), data.end());
+        auto packet = std::make_unique<PacketData>(Packet::Type::PES_DATA);
+        if (!packet->parse(std::move(buffer))) {
+            return nullptr;
+        }
+        return packet;
+    }
+
     static std::unique_ptr<PacketData> buildMinimalScteData(uint32_t channelId)
     {
         // Create minimal valid SCTE data (at least 1 byte to avoid null buffer)
@@ -234,11 +223,27 @@ public:
     // Create SCTE section data with valid structure
     static std::vector<uint8_t> createScteSection(uint16_t sectionSize = 20)
     {
-        std::vector<uint8_t> section;
-        // Minimal valid SCTE section structure
-        for (uint16_t i = 0; i < sectionSize; ++i) {
-            section.push_back(static_cast<uint8_t>(i & 0xFF));
-        }
+        sectionSize = std::max<uint16_t>(sectionSize, 32);
+        std::vector<uint8_t> section(sectionSize, 0x00);
+        const uint16_t sectionLength = sectionSize - 3;
+        section[0] = 0xC6;
+        section[1] = static_cast<uint8_t>((sectionLength >> 8) & 0x0F);
+        section[2] = static_cast<uint8_t>(sectionLength & 0xFF);
+        section[3] = 0x00;
+        section[4] = 'e';
+        section[5] = 'n';
+        section[6] = 'g';
+        section[12] = 0x10;
+        section[15] = 12;
+
+        const std::vector<uint8_t> simpleBitmap = {
+            0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00,
+            0x00, 0x10, 0x01,
+            0x00, 0x01,
+            0x80
+        };
+        std::copy(simpleBitmap.begin(), simpleBitmap.end(), section.begin() + 16);
         return section;
     }
 };
@@ -254,7 +259,7 @@ class ScteSubControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testProcessMultipleTimes);
     CPPUNIT_TEST(testProcessAfterDeactivate);
     CPPUNIT_TEST(testAddDataWithValidScteData);
-    CPPUNIT_TEST(testAddDataWithEmptyData);
+    CPPUNIT_TEST(testAddDataWithMinimalData);
     CPPUNIT_TEST(testAddDataWithLargeData);
     CPPUNIT_TEST(testAddDataMultipleTimes);
     CPPUNIT_TEST(testAddDataWhenDeactivated);
@@ -427,15 +432,18 @@ protected:
         auto dataPacket = PacketDataBuilder::buildScteData(100, scteData);
         CPPUNIT_ASSERT_MESSAGE("Failed to build SCTE data packet", dataPacket != nullptr);
 
+        const int updateCountBeforeData = m_window->getUpdateCount();
+        const int drawPixmapCountBeforeData = m_window->getDrawPixmapCount();
         controller.addData(*dataPacket);
+        controller.process();
 
-        // Verify controller remains functional after adding data
-        auto testPacket = PacketDataBuilder::buildMinimalScteData(100);
-        CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after addData",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Valid SCTE data should be rendered",
+                       m_window->getDrawPixmapCount() > drawPixmapCountBeforeData);
+        CPPUNIT_ASSERT_MESSAGE("Rendering valid SCTE data should update the window",
+                       m_window->getUpdateCount() > updateCountBeforeData);
     }
 
-    void testAddDataWithEmptyData()
+    void testAddDataWithMinimalData()
     {
         auto packet = PacketSubtitleSelectionBuilder::buildScte(100);
         ScteSubController controller(*packet, m_window, *m_stcProvider);
@@ -447,10 +455,8 @@ protected:
 
         controller.addData(*dataPacket);
 
-        // Verify controller handles minimal data gracefully
-        auto testPacket = PacketDataBuilder::buildMinimalScteData(100);
-        CPPUNIT_ASSERT_MESSAGE("Controller should handle minimal data gracefully",
-                               controller.wantsData(*testPacket));
+        CPPUNIT_ASSERT_MESSAGE("Minimal invalid SCTE data should not draw a subtitle",
+                       m_window->getDrawPixmapCount() == 0);
     }
 
     void testAddDataWithLargeData()
@@ -688,24 +694,11 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::buildScte(100);
         ScteSubController controller(*packet, m_window, *m_stcProvider);
 
-        // Create Teletext data packet (type 1)
-        uint32_t channelId = 100;
-        uint32_t size = 8;
-        std::vector<uint8_t> data = {
-            0x01, 0x00, 0x00, 0x00, // type = PES_DATA (1)
-            0x01, 0x00, 0x00, 0x00, // counter = 1
-            static_cast<uint8_t>(size), static_cast<uint8_t>(size >> 8),
-            static_cast<uint8_t>(size >> 16), static_cast<uint8_t>(size >> 24), // size
-            static_cast<uint8_t>(channelId), static_cast<uint8_t>(channelId >> 8),
-            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24), // channel ID
-            static_cast<uint8_t>(PacketSubtitleSelection::SUBTITLES_TYPE_TELETEXT), 0x00, 0x00, 0x00 // channel type = Teletext
-        };
-        auto buffer = std::make_unique<std::vector<char>>(data.begin(), data.end());
-        auto teletextPacket = std::make_unique<PacketData>(Packet::Type::PES_DATA);
-        CPPUNIT_ASSERT_MESSAGE("Failed to parse Teletext packet", teletextPacket->parse(std::move(buffer)));
+        auto teletextData = PacketDataBuilder::buildTeletextData(100, {});
+        CPPUNIT_ASSERT_MESSAGE("Failed to build Teletext packet", teletextData != nullptr);
 
         CPPUNIT_ASSERT_MESSAGE("Controller should NOT want Teletext data packets",
-                               !controller.wantsData(*teletextPacket));
+                               !controller.wantsData(*teletextData));
     }
 
     void testWantsDataCalledMultipleTimes()

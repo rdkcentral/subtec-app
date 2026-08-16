@@ -23,6 +23,10 @@
 #include "Pixmap.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <iterator>
+#include <stdexcept>
+#include <vector>
 
 using dvbsubdecoder::Pixmap;
 
@@ -31,8 +35,10 @@ class PixmapTest : public CppUnit::TestFixture
 CPPUNIT_TEST_SUITE( PixmapTest );
     CPPUNIT_TEST(testInitReset);
     CPPUNIT_TEST(testBadInit);
+    CPPUNIT_TEST(testInitFailurePreservesState);
     CPPUNIT_TEST(testGetLine);
     CPPUNIT_TEST(testClear);
+    CPPUNIT_TEST(testClearBounds);
     CPPUNIT_TEST(testZeroDimensions);
     CPPUNIT_TEST(testBoundaryDimensions);
     CPPUNIT_TEST(testGetLineBoundaryValues);
@@ -46,7 +52,7 @@ CPPUNIT_TEST_SUITE( PixmapTest );
     CPPUNIT_TEST(testMinimalDimensions);
     CPPUNIT_TEST(testClearAfterReset);
     CPPUNIT_TEST(testGetLineZeroHeight);
-    CPPUNIT_TEST(testOutOfBoundsPixelAccess);
+    CPPUNIT_TEST(testLineBounds);
     CPPUNIT_TEST(testLargePixmap);
     CPPUNIT_TEST(testSmallPixmap);
     CPPUNIT_TEST(testPixmapContentAfterClear);
@@ -101,19 +107,47 @@ public:
         std::uint8_t buffer[width * height] =
         { 0 };
 
-        CPPUNIT_ASSERT_THROW(testPixmap.init(-1, -1, nullptr), std::logic_error);
+        CPPUNIT_ASSERT_THROW(testPixmap.init(-1, -1, nullptr),
+            std::invalid_argument);
         CPPUNIT_ASSERT_THROW(testPixmap.init(width, -1, nullptr),
-                std::logic_error);
+            std::invalid_argument);
         CPPUNIT_ASSERT_THROW(testPixmap.init(-1, height, nullptr),
-                std::logic_error);
+            std::invalid_argument);
         CPPUNIT_ASSERT_THROW(testPixmap.init(width, height, nullptr),
-                std::logic_error);
-        CPPUNIT_ASSERT_THROW(testPixmap.init(-1, -1, buffer), std::logic_error);
+            std::invalid_argument);
+        CPPUNIT_ASSERT_THROW(testPixmap.init(-1, -1, buffer),
+            std::invalid_argument);
         CPPUNIT_ASSERT_THROW(testPixmap.init(width, -1, buffer),
-                std::logic_error);
+            std::invalid_argument);
         CPPUNIT_ASSERT_THROW(testPixmap.init(-1, height, buffer),
-                std::logic_error);
+            std::invalid_argument);
         CPPUNIT_ASSERT_NO_THROW(testPixmap.init(width, height, buffer));
+    }
+
+    void testInitFailurePreservesState()
+    {
+        Pixmap testPixmap;
+        std::uint8_t buffer[4] = { 0 };
+
+        testPixmap.init(2, 2, buffer);
+
+        CPPUNIT_ASSERT_THROW(testPixmap.init(-1, 2, buffer),
+            std::invalid_argument);
+        CPPUNIT_ASSERT_EQUAL(2, testPixmap.getWidth());
+        CPPUNIT_ASSERT_EQUAL(2, testPixmap.getHeight());
+        CPPUNIT_ASSERT(testPixmap.getBuffer() == buffer);
+
+        CPPUNIT_ASSERT_THROW(testPixmap.init(2, -1, buffer),
+            std::invalid_argument);
+        CPPUNIT_ASSERT_EQUAL(2, testPixmap.getWidth());
+        CPPUNIT_ASSERT_EQUAL(2, testPixmap.getHeight());
+        CPPUNIT_ASSERT(testPixmap.getBuffer() == buffer);
+
+        CPPUNIT_ASSERT_THROW(testPixmap.init(2, 2, nullptr),
+            std::invalid_argument);
+        CPPUNIT_ASSERT_EQUAL(2, testPixmap.getWidth());
+        CPPUNIT_ASSERT_EQUAL(2, testPixmap.getHeight());
+        CPPUNIT_ASSERT(testPixmap.getBuffer() == buffer);
     }
 
     void testGetLine()
@@ -134,8 +168,8 @@ public:
         CPPUNIT_ASSERT_NO_THROW(testPixmap.getLine(0));
 
         // test throw after init on invalid line
-        CPPUNIT_ASSERT_THROW(testPixmap.getLine(-1), std::logic_error);
-        CPPUNIT_ASSERT_THROW(testPixmap.getLine(height), std::logic_error);
+        CPPUNIT_ASSERT_THROW(testPixmap.getLine(-1), std::invalid_argument);
+        CPPUNIT_ASSERT_THROW(testPixmap.getLine(height), std::invalid_argument);
 
         // test works
         CPPUNIT_ASSERT(testPixmap.getLine(0) == buffer);
@@ -192,6 +226,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(0, testPixmap.getWidth());
         CPPUNIT_ASSERT_EQUAL(10, testPixmap.getHeight());
         CPPUNIT_ASSERT(testPixmap.getBuffer() == buffer);
+        CPPUNIT_ASSERT_NO_THROW(testPixmap.clear(42));
 
         testPixmap.reset();
 
@@ -208,6 +243,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(0, testPixmap.getWidth());
         CPPUNIT_ASSERT_EQUAL(0, testPixmap.getHeight());
         CPPUNIT_ASSERT(testPixmap.getBuffer() == buffer);
+        CPPUNIT_ASSERT_NO_THROW(testPixmap.clear(42));
     }
 
     void testBoundaryDimensions()
@@ -522,16 +558,32 @@ public:
         CPPUNIT_ASSERT_NO_THROW(testPixmap.clear(100));
     }
 
-    void testOutOfBoundsPixelAccess()
+    void testLineBounds()
     {
         const std::int32_t width = 10;
         const std::int32_t height = 5;
         std::uint8_t buffer[width * height] = { 0 };
         Pixmap testPixmap;
         testPixmap.init(width, height, buffer);
-        // Access pixel out of bounds
         CPPUNIT_ASSERT_THROW(testPixmap.getLine(-1), std::invalid_argument);
         CPPUNIT_ASSERT_THROW(testPixmap.getLine(height), std::invalid_argument);
+    }
+
+    void testClearBounds()
+    {
+        Pixmap testPixmap;
+        std::uint8_t buffer[6] = { 0x11, 0, 0, 0, 0, 0x22 };
+
+        testPixmap.init(4, 1, buffer + 1);
+        testPixmap.clear(0xAA);
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x11), buffer[0]);
+        for (int index = 1; index <= 4; ++index)
+        {
+            CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0xAA),
+                    buffer[index]);
+        }
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint8_t>(0x22), buffer[5]);
     }
 
     void testLargePixmap()

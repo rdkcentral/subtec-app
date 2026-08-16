@@ -44,6 +44,7 @@ using subttxrend::gfx::DrawDirection;
 using subttxrend::gfx::ClutBitmap;
 using subttxrend::gfx::Bitmap;
 using subttxrend::gfx::Pixmap;
+using subttxrend::gfx::PixelArgb8888;
 
 // ============================================================================
 // Mock Classes
@@ -133,11 +134,68 @@ private:
     int m_unlockCount;
 };
 
+class OrderedKeyEventListener : public KeyEventListener
+{
+public:
+    OrderedKeyEventListener(int id, std::vector<int>& events)
+        : m_id(id)
+        , m_events(events)
+    {
+    }
+
+    void onKeyEvent(const KeyEvent&) override
+    {
+        m_events.push_back(m_id);
+    }
+
+private:
+    int m_id;
+    std::vector<int>& m_events;
+};
+
+static PixelArgb8888 get_pixel(const Pixmap& pixmap, int x, int y)
+{
+    CPPUNIT_ASSERT(x >= 0);
+    CPPUNIT_ASSERT(y >= 0);
+    CPPUNIT_ASSERT(x < pixmap.getWidth());
+    CPPUNIT_ASSERT(y < pixmap.getHeight());
+
+    auto line = pixmap.getLine(y);
+    CPPUNIT_ASSERT(line);
+    return *(line + x);
+}
+
+static void assert_pixel_equals(const Pixmap& pixmap,
+                                int x,
+                                int y,
+                                PixelArgb8888 expected,
+                                const char* context)
+{
+    PixelArgb8888 actual = get_pixel(pixmap, x, y);
+
+    CPPUNIT_ASSERT_EQUAL_MESSAGE(context, int(expected.m_a), int(actual.m_a));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE(context, int(expected.m_r), int(actual.m_r));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE(context, int(expected.m_g), int(actual.m_g));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE(context, int(expected.m_b), int(actual.m_b));
+}
+
+static void fill_bitmap(Bitmap& bitmap, PixelArgb8888 color)
+{
+    PixelArgb8888* pixels = reinterpret_cast<PixelArgb8888*>(bitmap.m_buffer.data());
+    const std::size_t pixelCount = bitmap.m_buffer.size() / sizeof(PixelArgb8888);
+
+    for (std::size_t i = 0; i < pixelCount; ++i)
+    {
+        pixels[i] = color;
+    }
+}
+
 // Helper for replacing vacuous CPPUNIT_ASSERT(true) checks.
 static void assert_window_ok(WindowImpl& window, const char* context)
 {
     try
     {
+        window.update();
         Pixmap& p = window.getPixmap();
         CPPUNIT_ASSERT(p.getWidth() >= 0);
         CPPUNIT_ASSERT(p.getHeight() >= 0);
@@ -299,7 +357,7 @@ CPPUNIT_TEST_SUITE( WindowImplTest );
     CPPUNIT_TEST(testHandleRapidListenerChanges);
     CPPUNIT_TEST(testHandleMultipleHookChanges);
     CPPUNIT_TEST(testHandleMixedDrawingOperations);
-    CPPUNIT_TEST(testHandleDrawingWithoutSetSize);
+    CPPUNIT_TEST(testHandleDrawingAfterSetSize);
     CPPUNIT_TEST(testHandleOperationsBeforeInitialization);
     CPPUNIT_TEST(testHandleFullLifecycleScenario);
 CPPUNIT_TEST_SUITE_END();
@@ -693,13 +751,17 @@ public:
     void testSetSizeResizesBothSurfaces()
     {
         WindowImpl window;
+        DrawContext& context = window.getDrawContext();
 
         window.setSize(Size{640, 480});
+        context.fillRectangle(ColorArgb(255, 12, 34, 56), Rectangle{5, 5, 10, 10});
+        window.update();
 
-        // Verify both surfaces are resized by checking bounds
         Rectangle bounds = window.getBounds();
         CPPUNIT_ASSERT_EQUAL(640, bounds.m_w);
         CPPUNIT_ASSERT_EQUAL(480, bounds.m_h);
+        assert_pixel_equals(window.getPixmap(), 5, 5, PixelArgb8888(255, 12, 34, 56),
+            "setSize should resize drawing and ready surfaces");
     }
 
     void testSetSizeResizesBackgroundSurfaces()
@@ -708,23 +770,14 @@ public:
 
         window.setSize(Size{640, 480});
 
-        // Background surfaces should be resized (verified by no crash on clear)
-        try
-        {
-            window.clear();
-            Pixmap& bg = window.getBgPixmap();
-            CPPUNIT_ASSERT_MESSAGE("Background pixmap accessible after resize", &bg != nullptr);
-            CPPUNIT_ASSERT(bg.getWidth() >= 0);
-            CPPUNIT_ASSERT(bg.getHeight() >= 0);
-        }
-        catch (const std::exception& ex)
-        {
-            CPPUNIT_FAIL(std::string("Unexpected exception during clear/getBgPixmap: ") + ex.what());
-        }
-        catch (...)
-        {
-            CPPUNIT_FAIL("Unknown exception during clear/getBgPixmap");
-        }
+        Pixmap& bg = window.getBgPixmap();
+#if BACKEND_TYPE == BACKEND_TYPE_EGL
+        CPPUNIT_ASSERT_EQUAL(640, bg.getWidth());
+        CPPUNIT_ASSERT_EQUAL(480, bg.getHeight());
+#else
+        CPPUNIT_ASSERT_EQUAL(0, bg.getWidth());
+        CPPUNIT_ASSERT_EQUAL(0, bg.getHeight());
+#endif
     }
 
     void testSetSizeUpdatesInternalSize()
@@ -916,40 +969,33 @@ public:
     {
         WindowImpl window;
         window.setSize(Size{100, 100});
+        DrawContext& context = window.getDrawContext();
 
-        // Get initial bounds
-        Rectangle beforeBounds = window.getBounds();
+        context.fillRectangle(ColorArgb(255, 90, 80, 70), Rectangle{8, 8, 10, 10});
 
         window.update();
 
-        // After update, surfaces are swapped but bounds should still be valid
-        Rectangle afterBounds = window.getBounds();
-        CPPUNIT_ASSERT_EQUAL(beforeBounds.m_w, afterBounds.m_w);
-        CPPUNIT_ASSERT_EQUAL(beforeBounds.m_h, afterBounds.m_h);
+        assert_pixel_equals(window.getPixmap(), 8, 8, PixelArgb8888(255, 90, 80, 70),
+            "update should expose drawing surface as ready surface");
     }
 
     void testUpdateSwapsBackgroundSurfaces()
     {
         WindowImpl window;
         window.setSize(Size{100, 100});
+        DrawContext& context = window.getDrawContext();
 
-        // Update should swap background surfaces without crashing
-        try
-        {
-            window.update();
-            window.clear();
-            Pixmap& bg = window.getBgPixmap();
-            CPPUNIT_ASSERT(bg.getWidth() >= 0);
-            CPPUNIT_ASSERT(bg.getHeight() >= 0);
-        }
-        catch (const std::exception& ex)
-        {
-            CPPUNIT_FAIL(std::string("Unexpected exception during update/clear/bg access: ") + ex.what());
-        }
-        catch (...)
-        {
-            CPPUNIT_FAIL("Unknown exception during update/clear/bg access");
-        }
+        context.fillRectangle(ColorArgb(255, 1, 2, 3), Rectangle{4, 4, 8, 8});
+        window.update();
+
+        Pixmap& bg = window.getBgPixmap();
+#if BACKEND_TYPE == BACKEND_TYPE_EGL
+        assert_pixel_equals(bg, 4, 4, PixelArgb8888(255, 1, 2, 3),
+            "update should swap background surfaces on EGL backend");
+#else
+        CPPUNIT_ASSERT_EQUAL(0, bg.getWidth());
+        CPPUNIT_ASSERT_EQUAL(0, bg.getHeight());
+#endif
     }
 
     void testUpdateWhenVisibleCallsRequestRedraw()
@@ -1172,8 +1218,13 @@ public:
 
         Pixmap& pixmap = window.getBgPixmap();
 
-        // Verify pixmap has valid dimensions (can be 0 for background)
-        CPPUNIT_ASSERT(pixmap.getWidth() >= 0 && pixmap.getHeight() >= 0);
+    #if BACKEND_TYPE == BACKEND_TYPE_EGL
+        CPPUNIT_ASSERT_EQUAL(100, pixmap.getWidth());
+        CPPUNIT_ASSERT_EQUAL(100, pixmap.getHeight());
+    #else
+        CPPUNIT_ASSERT_EQUAL(0, pixmap.getWidth());
+        CPPUNIT_ASSERT_EQUAL(0, pixmap.getHeight());
+    #endif
     }
 
     void testGetBgPixmapReturnsReadySurface()
@@ -1183,9 +1234,13 @@ public:
 
         Pixmap& bgPixmap = window.getBgPixmap();
 
-        // Background pixmap dimensions depend on backend type
-        CPPUNIT_ASSERT(bgPixmap.getWidth() >= 0);
-        CPPUNIT_ASSERT(bgPixmap.getHeight() >= 0);
+    #if BACKEND_TYPE == BACKEND_TYPE_EGL
+        CPPUNIT_ASSERT_EQUAL(640, bgPixmap.getWidth());
+        CPPUNIT_ASSERT_EQUAL(480, bgPixmap.getHeight());
+    #else
+        CPPUNIT_ASSERT_EQUAL(0, bgPixmap.getWidth());
+        CPPUNIT_ASSERT_EQUAL(0, bgPixmap.getHeight());
+    #endif
     }
 
     void testGetPixmapAfterUpdate()
@@ -1309,8 +1364,9 @@ public:
     void testProcessKeyEventCalledInOrder()
     {
         WindowImpl window;
-        MockKeyEventListener listener1;
-        MockKeyEventListener listener2;
+        std::vector<int> events;
+        OrderedKeyEventListener listener1(1, events);
+        OrderedKeyEventListener listener2(2, events);
 
         window.addKeyEventListener(&listener1);
         window.addKeyEventListener(&listener2);
@@ -1318,10 +1374,9 @@ public:
         KeyEvent event(KeyEvent::Type::PRESSED, 0x41);
         window.processKeyEvent(event);
 
-        // Both should be called with the same event
-        CPPUNIT_ASSERT_EQUAL(1, listener1.getEventCount());
-        CPPUNIT_ASSERT_EQUAL(1, listener2.getEventCount());
-        CPPUNIT_ASSERT_EQUAL(listener1.getLastSymbol(), listener2.getLastSymbol());
+        CPPUNIT_ASSERT_EQUAL(std::size_t(2), events.size());
+        CPPUNIT_ASSERT_EQUAL(1, events[0]);
+        CPPUNIT_ASSERT_EQUAL(2, events[1]);
     }
 
     void testProcessKeyEventAfterRemovingListener()
@@ -1446,17 +1501,18 @@ public:
     void testGetDrawContextReturnsValidContext()
     {
         WindowImpl window;
+        window.setSize(Size{100, 100});
 
         DrawContext& context = window.getDrawContext();
 
-        // Verify we can use the context
         ColorArgb color(255, 255, 0, 0);
         Rectangle rect{10, 10, 50, 50};
 
-        window.setSize(Size{100, 100});
         context.fillRectangle(color, rect);
+        window.update();
 
-        assert_window_ok(window, "getDrawContext fillRectangle");
+        assert_pixel_equals(window.getPixmap(), 10, 10, PixelArgb8888(255, 255, 0, 0),
+            "getDrawContext should forward drawing into window surface");
     }
 
     void testFillRectangleWithValidColor()
@@ -1469,7 +1525,9 @@ public:
         Rectangle rect{10, 10, 50, 50};
 
         context.fillRectangle(color, rect);
-        assert_window_ok(window, "fillRectangle valid color");
+        window.update();
+        assert_pixel_equals(window.getPixmap(), 10, 10, PixelArgb8888(color),
+            "fillRectangle should write the requested color");
     }
 
     void testFillRectangleWithTransparentColor()
@@ -1482,7 +1540,9 @@ public:
         Rectangle rect{10, 10, 50, 50};
 
         context.fillRectangle(color, rect);
-        assert_window_ok(window, "fillRectangle transparent");
+        window.update();
+        assert_pixel_equals(window.getPixmap(), 10, 10, PixelArgb8888(color),
+            "fillRectangle should preserve transparent writes");
     }
 
     void testFillRectangleWithOpaqueColor()
@@ -1504,11 +1564,15 @@ public:
         window.setSize(Size{200, 200});
 
         DrawContext& context = window.getDrawContext();
+        ColorArgb baseColor(255, 10, 20, 30);
         ColorArgb color(255, 255, 0, 0);
         Rectangle rect{10, 10, 0, 0};
 
+        context.fillRectangle(baseColor, Rectangle{0, 0, 20, 20});
         context.fillRectangle(color, rect);
-        assert_window_ok(window, "fillRectangle zero size");
+        window.update();
+        assert_pixel_equals(window.getPixmap(), 10, 10, PixelArgb8888(baseColor),
+            "fillRectangle should ignore zero-sized rectangles");
     }
 
     void testFillRectangleWithNegativeCoordinates()
@@ -1517,11 +1581,15 @@ public:
         window.setSize(Size{200, 200});
 
         DrawContext& context = window.getDrawContext();
+        ColorArgb baseColor(255, 10, 20, 30);
         ColorArgb color(255, 255, 0, 0);
         Rectangle rect{-10, -10, 50, 50};
 
+        context.fillRectangle(baseColor, Rectangle{0, 0, 20, 20});
         context.fillRectangle(color, rect);
-        assert_window_ok(window, "fillRectangle negative coords");
+        window.update();
+        assert_pixel_equals(window.getPixmap(), 5, 5, PixelArgb8888(baseColor),
+            "fillRectangle should ignore negative coordinates");
     }
 
     void testFillRectangleWithLargeRectangle()
@@ -1582,7 +1650,9 @@ public:
         Rectangle rect{10, 50, 100, 2}; // Thin underline
 
         context.drawUnderline(color, rect);
-        assert_window_ok(window, "drawUnderline valid color");
+        window.update();
+        assert_pixel_equals(window.getPixmap(), 10, 50, PixelArgb8888(color),
+            "drawUnderline should color the requested line");
     }
 
     void testDrawUnderlineWithTransparentColor()
@@ -1766,7 +1836,9 @@ public:
         Rectangle dstRect{10, 10, 10, 10};
 
         context.drawPixmap(bitmap, srcRect, dstRect);
-        assert_window_ok(window, "drawPixmap valid bitmap");
+        window.update();
+        assert_pixel_equals(window.getPixmap(), 10, 10, PixelArgb8888(0xFF000000),
+            "drawPixmap should copy CLUT pixels into the ready surface");
     }
 
     void testDrawPixmapWithZeroSizeSource()
@@ -1889,10 +1961,13 @@ public:
         DrawContext& context = window.getDrawContext();
 
         Bitmap bitmap(10, 10, 40); // 10x10, 4 bytes per pixel
+        fill_bitmap(bitmap, PixelArgb8888(255, 11, 22, 33));
         Rectangle dstRect{10, 10, 10, 10};
 
         context.drawBitmap(bitmap, dstRect);
-        assert_window_ok(window, "drawBitmap valid");
+        window.update();
+        assert_pixel_equals(window.getPixmap(), 10, 10, PixelArgb8888(255, 11, 22, 33),
+            "drawBitmap should copy ARGB pixels into the ready surface");
     }
 
     void testDrawBitmapWithSmallBitmap()
@@ -1978,15 +2053,18 @@ public:
 
         DrawContext& context = window.getDrawContext();
 
-        // Create a font strip
-        FontStripPtr fontStrip = std::make_shared<FontStripImpl>(Size{16, 16}, 256);
+        auto fontStrip = std::make_shared<FontStripImpl>(Size{16, 16}, 256);
+        std::vector<std::uint8_t> glyphData(16 * 16, 255);
+        CPPUNIT_ASSERT(fontStrip->loadGlyph(0, glyphData.data(), glyphData.size()));
 
         ColorArgb fgColor(255, 0, 0, 0);
-        ColorArgb bgColor(255, 255, 255, 255);
+        ColorArgb bgColor(0, 0, 0, 0);
         Rectangle rect{10, 10, 16, 16};
 
         context.drawGlyph(fontStrip, 0, rect, fgColor, bgColor);
-        assert_window_ok(window, "drawGlyph valid fontstrip");
+        window.update();
+        assert_pixel_equals(window.getPixmap(), 10, 10, PixelArgb8888(fgColor),
+            "drawGlyph should colorize loaded glyph pixels");
     }
 
     void testDrawGlyphWithNullFontStripThrows()
@@ -2261,7 +2339,7 @@ public:
         DrawContext& context1 = window.getDrawContext();
         DrawContext& context2 = window.getDrawContext();
 
-        // Both should reference the same context
+        CPPUNIT_ASSERT_EQUAL(&context1, &context2);
         context1.fillRectangle(ColorArgb(255, 255, 0, 0), Rectangle{10, 10, 50, 50});
         context2.fillRectangle(ColorArgb(255, 0, 255, 0), Rectangle{70, 10, 50, 50});
 
@@ -2565,6 +2643,12 @@ public:
         CPPUNIT_ASSERT_EQUAL(1, listeners[1].getEventCount());
         CPPUNIT_ASSERT_EQUAL(0, listeners[2].getEventCount());
         CPPUNIT_ASSERT_EQUAL(1, listeners[3].getEventCount());
+        CPPUNIT_ASSERT_EQUAL(0, listeners[4].getEventCount());
+        CPPUNIT_ASSERT_EQUAL(1, listeners[5].getEventCount());
+        CPPUNIT_ASSERT_EQUAL(0, listeners[6].getEventCount());
+        CPPUNIT_ASSERT_EQUAL(1, listeners[7].getEventCount());
+        CPPUNIT_ASSERT_EQUAL(0, listeners[8].getEventCount());
+        CPPUNIT_ASSERT_EQUAL(1, listeners[9].getEventCount());
     }
 
     void testHandleMultipleHookChanges()
@@ -2606,24 +2690,23 @@ public:
         context.drawPixmap(clutBitmap, Rectangle{0, 0, 10, 10}, Rectangle{10, 80, 10, 10});
 
         Bitmap bitmap(15, 15, 60);
+        fill_bitmap(bitmap, PixelArgb8888(255, 30, 40, 50));
         context.drawBitmap(bitmap, Rectangle{10, 100, 15, 15});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "mixed drawing operations");
     }
 
-    void testHandleDrawingWithoutSetSize()
+    void testHandleDrawingAfterSetSize()
     {
         WindowImpl window;
 
-        // Set a minimal size first to ensure surfaces are initialized
         window.setSize(Size{100, 100});
 
         DrawContext& context = window.getDrawContext();
 
-        // Now drawing should work
         context.fillRectangle(ColorArgb(255, 255, 0, 0), Rectangle{10, 10, 50, 50});
 
-        CPPUNIT_ASSERT(true);
+        assert_window_ok(window, "drawing after setSize");
     }
 
     void testHandleOperationsBeforeInitialization()
@@ -2641,6 +2724,13 @@ public:
 
         Size preferred = window.getPreferredSize();
         CPPUNIT_ASSERT_EQUAL(1280, preferred.m_w);
+
+        window.update();
+        window.clear();
+
+        Rectangle boundsAfterOps = window.getBounds();
+        CPPUNIT_ASSERT_EQUAL(bounds.m_w, boundsAfterOps.m_w);
+        CPPUNIT_ASSERT_EQUAL(bounds.m_h, boundsAfterOps.m_h);
     }
 
     void testHandleFullLifecycleScenario()

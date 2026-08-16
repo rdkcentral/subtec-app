@@ -20,6 +20,7 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 #include "ColorArgb.hpp"
 
@@ -69,8 +70,8 @@ class ColorArgbTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testAquaEqualsCyan);
     CPPUNIT_TEST(testAllConstantsOpaqueExceptTransparent);
     CPPUNIT_TEST(testAllConstantsUnique);
-    CPPUNIT_TEST(testConstantsAreConst);
-    CPPUNIT_TEST(testConstantsInitializedAtStart);
+    CPPUNIT_TEST(testConstantsAccessible);
+    CPPUNIT_TEST(testConstantAvailable);
     CPPUNIT_TEST(testRgbPrimaryColors);
     CPPUNIT_TEST(testYellowIsRedPlusGreen);
     CPPUNIT_TEST(testCyanIsGreenPlusBlue);
@@ -607,6 +608,7 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::RED.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::PURPLE.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::FUCHSIA.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::MAGENTA.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::GREEN.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::LIME.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::OLIVE.m_a);
@@ -614,31 +616,61 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::NAVY.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::BLUE.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::TEAL.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::AQUA.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::CYAN.m_a);
     }
 
     void testAllConstantsUnique()
     {
-        // Each constant should have unique ARGB values except MAGENTA/FUCHSIA and AQUA/CYAN
-        CPPUNIT_ASSERT(ColorArgb::WHITE != ColorArgb::BLACK);
-        CPPUNIT_ASSERT(ColorArgb::WHITE != ColorArgb::RED);
-        CPPUNIT_ASSERT(ColorArgb::BLACK != ColorArgb::RED);
-        CPPUNIT_ASSERT(ColorArgb::RED != ColorArgb::GREEN);
-        CPPUNIT_ASSERT(ColorArgb::RED != ColorArgb::BLUE);
-        CPPUNIT_ASSERT(ColorArgb::GREEN != ColorArgb::BLUE);
-        CPPUNIT_ASSERT(ColorArgb::SILVER != ColorArgb::GRAY);
-        CPPUNIT_ASSERT(ColorArgb::MAROON != ColorArgb::RED);
-        CPPUNIT_ASSERT(ColorArgb::GREEN != ColorArgb::LIME);
-        CPPUNIT_ASSERT(ColorArgb::NAVY != ColorArgb::BLUE);
-        CPPUNIT_ASSERT(ColorArgb::PURPLE != ColorArgb::FUCHSIA);
+        struct NamedColor
+        {
+            const char* name;
+            const ColorArgb& color;
+        };
 
-        // Verify aliases are equal
-        CPPUNIT_ASSERT(ColorArgb::MAGENTA == ColorArgb::FUCHSIA);
-        CPPUNIT_ASSERT(ColorArgb::AQUA == ColorArgb::CYAN);
+        const NamedColor colors[] = {
+            {"TRANSPARENT", ColorArgb::TRANSPARENT},
+            {"WHITE", ColorArgb::WHITE},
+            {"BLACK", ColorArgb::BLACK},
+            {"SILVER", ColorArgb::SILVER},
+            {"GRAY", ColorArgb::GRAY},
+            {"MAROON", ColorArgb::MAROON},
+            {"RED", ColorArgb::RED},
+            {"PURPLE", ColorArgb::PURPLE},
+            {"FUCHSIA", ColorArgb::FUCHSIA},
+            {"MAGENTA", ColorArgb::MAGENTA},
+            {"GREEN", ColorArgb::GREEN},
+            {"LIME", ColorArgb::LIME},
+            {"OLIVE", ColorArgb::OLIVE},
+            {"YELLOW", ColorArgb::YELLOW},
+            {"NAVY", ColorArgb::NAVY},
+            {"BLUE", ColorArgb::BLUE},
+            {"TEAL", ColorArgb::TEAL},
+            {"AQUA", ColorArgb::AQUA},
+            {"CYAN", ColorArgb::CYAN}
+        };
+
+        for (size_t left = 0; left < sizeof(colors) / sizeof(colors[0]); ++left) {
+            for (size_t right = left + 1; right < sizeof(colors) / sizeof(colors[0]); ++right) {
+                const bool isMagentaAlias =
+                    ((std::string(colors[left].name) == "FUCHSIA" && std::string(colors[right].name) == "MAGENTA") ||
+                     (std::string(colors[left].name) == "MAGENTA" && std::string(colors[right].name) == "FUCHSIA"));
+                const bool isCyanAlias =
+                    ((std::string(colors[left].name) == "AQUA" && std::string(colors[right].name) == "CYAN") ||
+                     (std::string(colors[left].name) == "CYAN" && std::string(colors[right].name) == "AQUA"));
+
+                if (isMagentaAlias || isCyanAlias) {
+                    CPPUNIT_ASSERT(colors[left].color == colors[right].color);
+                } else {
+                    CPPUNIT_ASSERT(colors[left].color != colors[right].color);
+                }
+            }
+        }
     }
 
-    void testConstantsAreConst()
+    void testConstantsAccessible()
     {
-        // Verify constants are accessible and const
+        // Verify constants are accessible and expose expected component values
         const ColorArgb& red = ColorArgb::RED;
         const ColorArgb& green = ColorArgb::GREEN;
         const ColorArgb& blue = ColorArgb::BLUE;
@@ -648,9 +680,9 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), blue.m_b);
     }
 
-    void testConstantsInitializedAtStart()
+    void testConstantAvailable()
     {
-        // Constants should be accessible immediately
+        // Constant should be directly available and have the expected value
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::RED.m_r);
     }
 
@@ -748,10 +780,25 @@ public:
         // TRANSPARENT is the only color with alpha=0, all others have alpha=0xFF
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0x00), ColorArgb::TRANSPARENT.m_a);
 
-        // Verify a few others have 0xFF
+        // Verify all named non-transparent colors have alpha=0xFF
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::BLACK.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::WHITE.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::SILVER.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::GRAY.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::MAROON.m_a);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::RED.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::PURPLE.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::FUCHSIA.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::MAGENTA.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::GREEN.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::LIME.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::OLIVE.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::YELLOW.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::NAVY.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::BLUE.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::TEAL.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::AQUA.m_a);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0xFF), ColorArgb::CYAN.m_a);
     }
 
     void testGetColorByNameTransparent()
@@ -1287,9 +1334,7 @@ public:
 
         oss.str("");
         oss << ColorArgb::CYAN;
-        // CYAN and AQUA are aliases, either name is acceptable
-        std::string cyanOutput = oss.str();
-        CPPUNIT_ASSERT(cyanOutput == "CYAN" || cyanOutput == "AQUA");
+        CPPUNIT_ASSERT_EQUAL(std::string("AQUA"), oss.str());
     }
 
     void testOstreamOutputCustomColor()
@@ -1389,10 +1434,7 @@ public:
         ColorArgb color(0xAA, 0xBB, 0xCC, 0xDD);
         oss << color;
 
-        // Hex format should match internal toString function pattern
-        std::string output = oss.str();
-        CPPUNIT_ASSERT(output.find("0x") != std::string::npos);
-        CPPUNIT_ASSERT(output.find(",") != std::string::npos);
+        CPPUNIT_ASSERT_EQUAL(std::string("(0xaa, 0xbb, 0xcc, 0xdd)"), oss.str());
     }
 
     void testMemberReadAccess()
@@ -1436,16 +1478,14 @@ public:
     {
         ColorArgb color;
 
-        // Each member is exactly 8 bits (0-255)
-        color.m_a = 255;
-        color.m_r = 255;
-        color.m_g = 255;
-        color.m_b = 255;
-
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(255), color.m_a);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(255), color.m_r);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(255), color.m_g);
-        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(255), color.m_b);
+        CPPUNIT_ASSERT((std::is_same<decltype(color.m_a), uint8_t>::value));
+        CPPUNIT_ASSERT((std::is_same<decltype(color.m_r), uint8_t>::value));
+        CPPUNIT_ASSERT((std::is_same<decltype(color.m_g), uint8_t>::value));
+        CPPUNIT_ASSERT((std::is_same<decltype(color.m_b), uint8_t>::value));
+        CPPUNIT_ASSERT_EQUAL(sizeof(uint8_t), sizeof(color.m_a));
+        CPPUNIT_ASSERT_EQUAL(sizeof(uint8_t), sizeof(color.m_r));
+        CPPUNIT_ASSERT_EQUAL(sizeof(uint8_t), sizeof(color.m_g));
+        CPPUNIT_ASSERT_EQUAL(sizeof(uint8_t), sizeof(color.m_b));
     }
 
     void testMemberRangeMinimum()
@@ -1650,9 +1690,7 @@ public:
         // Output modified color - it matches MAGENTA/FUCHSIA constant so outputs name
         oss.str("");
         oss << color1;
-        // Color matches a named constant (MAGENTA or FUCHSIA), either name acceptable
-        std::string modifiedOutput = oss.str();
-        CPPUNIT_ASSERT(modifiedOutput == "MAGENTA" || modifiedOutput == "FUCHSIA");
+        CPPUNIT_ASSERT_EQUAL(std::string("FUCHSIA"), oss.str());
 
         // Compare with MAGENTA
         CPPUNIT_ASSERT(color1 == ColorArgb::MAGENTA);

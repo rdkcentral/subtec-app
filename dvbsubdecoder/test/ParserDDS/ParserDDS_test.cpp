@@ -20,6 +20,10 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
 #include "ParserDDS.hpp"
 #include "PesPacketReader.hpp"
 #include "Database.hpp"
@@ -28,17 +32,13 @@
 
 #include "DecoderClientMock.hpp"
 #include "BitStreamWriter.hpp"
-#include "Misc.hpp"
 
 using dvbsubdecoder::Database;
-using dvbsubdecoder::Page;
 using dvbsubdecoder::ParserDDS;
 using dvbsubdecoder::PesPacketReader;
 using dvbsubdecoder::ParserException;
 using dvbsubdecoder::PixmapAllocator;
 using dvbsubdecoder::Specification;
-using dvbsubdecoder::StcTime;
-using dvbsubdecoder::StcTimeType;
 
 class ParserDDSTest : public CppUnit::TestFixture
 {
@@ -83,10 +83,10 @@ public:
         writer.write((0xC << 4) | (1 << 3), 8); // version and flags
         writer.write(700 - 1, 16); // width
         writer.write(400 - 1, 16); // height
-        writer.write(100, 16); // window x1
-        writer.write(500 - 1, 16); // window y1
-        writer.write(80, 16); // window x2
-        writer.write(300 - 1, 16); // window y2
+        writer.write(100, 16); // window minimum x
+        writer.write(500 - 1, 16); // window maximum x
+        writer.write(80, 16); // window minimum y
+        writer.write(300 - 1, 16); // window maximum y
 
         PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
         ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
@@ -179,7 +179,7 @@ public:
 
         // corrupted buffer (random data)
         {
-            std::vector<uint8_t> corruptData = {0xFF, 0x00, 0xAA};
+            std::vector<std::uint8_t> corruptData = {0xFF, 0x00, 0xAA};
             PesPacketReader reader(corruptData.data(), corruptData.size(), nullptr, 0);
             CPPUNIT_ASSERT_THROW(
                 parser.parseDisplayDefinitionSegment(*m_database, reader),
@@ -347,6 +347,48 @@ public:
         CPPUNIT_ASSERT(display.getVersion() == 0xA);
         CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 1919);
         CPPUNIT_ASSERT(display.getDisplayBounds().m_y2 == 1079);
+
+        {
+            BitStreamWriter exactLimitWriter;
+            exactLimitWriter.write(0x9 << 4, 8);
+            exactLimitWriter.write(1919, 16);
+            exactLimitWriter.write(1079, 16);
+
+            PesPacketReader exactLimitReader(exactLimitWriter.data(),
+                exactLimitWriter.size(), nullptr, 0);
+            ParserDDS().parseDisplayDefinitionSegment(*m_database,
+                exactLimitReader);
+
+            const auto& exactLimitDisplay = m_database->getParsedDisplay();
+            CPPUNIT_ASSERT(exactLimitDisplay.getDisplayBounds().m_x2 == 1920);
+            CPPUNIT_ASSERT(exactLimitDisplay.getDisplayBounds().m_y2 == 1080);
+        }
+
+        {
+            BitStreamWriter overWidthWriter;
+            overWidthWriter.write(0x8 << 4, 8);
+            overWidthWriter.write(1920, 16);
+            overWidthWriter.write(1079, 16);
+
+            PesPacketReader overWidthReader(overWidthWriter.data(),
+                overWidthWriter.size(), nullptr, 0);
+            CPPUNIT_ASSERT_THROW(
+                ParserDDS().parseDisplayDefinitionSegment(*m_database,
+                    overWidthReader), ParserException);
+        }
+
+        {
+            BitStreamWriter overHeightWriter;
+            overHeightWriter.write(0x7 << 4, 8);
+            overHeightWriter.write(1919, 16);
+            overHeightWriter.write(1080, 16);
+
+            PesPacketReader overHeightReader(overHeightWriter.data(),
+                overHeightWriter.size(), nullptr, 0);
+            CPPUNIT_ASSERT_THROW(
+                ParserDDS().parseDisplayDefinitionSegment(*m_database,
+                    overHeightReader), ParserException);
+        }
     }
 
     void testMinSizeValues()
@@ -573,10 +615,10 @@ public:
         writer.write((0xC << 4) | (1 << 3), 8); // version and flags
         writer.write(700 - 1, 16); // width
         writer.write(400 - 1, 16); // height
-        writer.write(100, 16); // window x1
-        writer.write(500 - 1, 16); // window y1
-        writer.write(80, 16); // window x2
-        writer.write(300 - 1, 16); // window y2
+        writer.write(100, 16); // window minimum x
+        writer.write(500 - 1, 16); // window maximum x
+        writer.write(80, 16); // window minimum y
+        writer.write(300 - 1, 16); // window maximum y
 
         PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
         ParserDDS().parseDisplayDefinitionSegment(*m_database, reader);
@@ -586,8 +628,23 @@ public:
         CPPUNIT_ASSERT(display.getDisplayBounds().m_x2 == 700);
         CPPUNIT_ASSERT(display.getWindowBounds().m_x1 == 100);
 
+        BitStreamWriter invalidWriter;
+        invalidWriter.write((0xD << 4) | (1 << 3), 8);
+        invalidWriter.write(700 - 1, 16);
+        invalidWriter.write(400 - 1, 16);
+        invalidWriter.write(100, 16);
+        invalidWriter.write(99, 16);
+        invalidWriter.write(80, 16);
+        invalidWriter.write(300 - 1, 16);
+
+        PesPacketReader invalidReader(invalidWriter.data(),
+            invalidWriter.size(), nullptr, 0);
+        CPPUNIT_ASSERT_THROW(
+            ParserDDS().parseDisplayDefinitionSegment(*m_database,
+                invalidReader), ParserException);
+
         // Negative parse should not update DB
-        std::vector<uint8_t> corruptData = {0xFF, 0x00, 0xAA};
+        std::vector<std::uint8_t> corruptData = {0xFF, 0x00, 0xAA};
         PesPacketReader badReader(corruptData.data(), corruptData.size(), nullptr, 0);
         try {
             ParserDDS().parseDisplayDefinitionSegment(*m_database, badReader);

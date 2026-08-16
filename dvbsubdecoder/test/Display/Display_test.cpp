@@ -19,6 +19,7 @@
 
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <cstdint>
 
 #include "Misc.hpp"
 
@@ -44,6 +45,7 @@ CPPUNIT_TEST_SUITE( DisplayTest );
     CPPUNIT_TEST(testVersionPersistence);
     CPPUNIT_TEST(testDisplayConstants);
     CPPUNIT_TEST(testConstReferenceStability);
+    CPPUNIT_TEST(testInputCopy);
     CPPUNIT_TEST(testIdempotency);
     CPPUNIT_TEST(testExtremeValues);
     CPPUNIT_TEST(testInvalidRectangleContract);
@@ -448,6 +450,8 @@ public:
         
         CPPUNIT_ASSERT(displayRef2 == testDisplay);
         CPPUNIT_ASSERT(windowRef2 == testWindow);
+        CPPUNIT_ASSERT(&displayRef1 == &displayRef2);
+        CPPUNIT_ASSERT(&windowRef1 == &windowRef2);
         CPPUNIT_ASSERT(displayRef1 == displayRef2);
         CPPUNIT_ASSERT(windowRef1 == windowRef2);
         
@@ -458,6 +462,23 @@ public:
         
         CPPUNIT_ASSERT(displayRef1 == newDisplay);
         CPPUNIT_ASSERT(windowRef1 == newWindow);
+    }
+
+    void testInputCopy()
+    {
+        Display display;
+        Rectangle displayRect = { 1, 2, 3, 4 };
+        Rectangle windowRect = { 5, 6, 7, 8 };
+
+        display.set(1, displayRect, windowRect);
+
+        displayRect = { 10, 20, 30, 40 };
+        windowRect = { 50, 60, 70, 80 };
+
+        Rectangle expectedDisplay = { 1, 2, 3, 4 };
+        Rectangle expectedWindow = { 5, 6, 7, 8 };
+        CPPUNIT_ASSERT(display.getDisplayBounds() == expectedDisplay);
+        CPPUNIT_ASSERT(display.getWindowBounds() == expectedWindow);
     }
 
     void testIdempotency()

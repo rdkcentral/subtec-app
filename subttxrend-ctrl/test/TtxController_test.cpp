@@ -27,6 +27,7 @@
 #include <subttxrend/gfx/Engine.hpp>
 #include <subttxrend/gfx/FontStrip.hpp>
 #include <subttxrend/common/ConfigProvider.hpp>
+#include <limits>
 #include <memory>
 #include <vector>
 #include <exception>
@@ -40,8 +41,7 @@ using namespace subttxrend::common;
 class MockFontStrip : public FontStrip
 {
 public:
-    MockFontStrip(const Size& glyphSize, std::size_t glyphCount)
-        : m_glyphSize(glyphSize), m_glyphCount(glyphCount) {}
+    MockFontStrip(const Size&, std::size_t) {}
 
     virtual ~MockFontStrip() {}
 
@@ -56,10 +56,6 @@ public:
         // Pretend to load glyph successfully
         return true;
     }
-
-private:
-    Size m_glyphSize;
-    std::size_t m_glyphCount;
 };
 
 // Mock Window for testing
@@ -140,9 +136,6 @@ public:
     MockConfigProvider() {}
 
     const char* getValue(const std::string& key) const override { return ""; }
-    std::string getString(const std::string& key) const { return ""; }
-    std::int32_t getInt(const std::string& key) const { return 0; }
-    bool getBool(const std::string& key) const { return false; }
 };
 
 // Helper to create PacketTeletextSelection for testing
@@ -153,14 +146,17 @@ public:
     {
         // Build packet data buffer with proper format (LITTLE-ENDIAN)
         // Header: type(4) + counter(4) + size(4) = 12 bytes
-        // Data: channelId(4) = 4 bytes
-        // Note: magazine and page are ignored as they're not part of the packet format
+        // Data: channelId(4) + magazine(4) + page(4) = 12 bytes
         std::vector<uint8_t> data = {
             0x06, 0x00, 0x00, 0x00, // type = TELETEXT_SELECTION (6)
             0x01, 0x00, 0x00, 0x00, // counter = 1
-            0x04, 0x00, 0x00, 0x00, // size = 4 bytes
+            0x0C, 0x00, 0x00, 0x00, // size = 12 bytes
             static_cast<uint8_t>(channelId), static_cast<uint8_t>(channelId >> 8),
-            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24)
+            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24),
+            static_cast<uint8_t>(magazine), static_cast<uint8_t>(magazine >> 8),
+            static_cast<uint8_t>(magazine >> 16), static_cast<uint8_t>(magazine >> 24),
+            static_cast<uint8_t>(page), static_cast<uint8_t>(page >> 8),
+            static_cast<uint8_t>(page >> 16), static_cast<uint8_t>(page >> 24)
         };
 
         auto buffer = std::make_unique<std::vector<char>>(data.begin(), data.end());
@@ -209,7 +205,7 @@ class PacketDataBuilder
 public:
     static std::unique_ptr<PacketData> build(uint32_t channelId, const std::vector<uint8_t>& userData)
     {
-        uint32_t size = 4 + userData.size(); // channelId + user data
+        uint32_t size = 8 + userData.size(); // channelId + channelType + user data
 
         std::vector<uint8_t> data = {
             0x01, 0x00, 0x00, 0x00, // type = PES_DATA (1)
@@ -217,7 +213,8 @@ public:
             static_cast<uint8_t>(size), static_cast<uint8_t>(size >> 8),
             static_cast<uint8_t>(size >> 16), static_cast<uint8_t>(size >> 24),
             static_cast<uint8_t>(channelId), static_cast<uint8_t>(channelId >> 8),
-            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24)
+            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24),
+            static_cast<uint8_t>(PacketSubtitleSelection::SUBTITLES_TYPE_TELETEXT), 0x00, 0x00, 0x00
         };
 
         data.insert(data.end(), userData.begin(), userData.end());
@@ -233,9 +230,10 @@ public:
     // Helper to create PES packet data
     static std::vector<uint8_t> createPesPacket(uint16_t dataSize)
     {
+        const uint16_t pesPacketLength = dataSize + 3;
         std::vector<uint8_t> pesData = {
             0x00, 0x00, 0x01, 0xBD, // PES start code + stream ID
-            static_cast<uint8_t>(dataSize >> 8), static_cast<uint8_t>(dataSize & 0xFF), // PES packet length
+            static_cast<uint8_t>(pesPacketLength >> 8), static_cast<uint8_t>(pesPacketLength & 0xFF), // PES packet length
             0x80, 0x00, 0x00 // PES header data
         };
 
@@ -271,7 +269,7 @@ class TtxControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testUnmuteTeletextWhenSelected);
     CPPUNIT_TEST(testMuteSubtitleWhenSelected);
     CPPUNIT_TEST(testUnmuteSubtitleWhenSelected);
-    CPPUNIT_TEST(testMuteWhenNothingSelected);
+    CPPUNIT_TEST(testMuteKeepsSelection);
     CPPUNIT_TEST(testSetMutedTeletextDirectly);
     CPPUNIT_TEST(testSetMutedSubtitlesDirectly);
     CPPUNIT_TEST(testAddDataWithCorrectChannelId);
@@ -281,12 +279,13 @@ class TtxControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testAddDataWhenNotStarted);
     CPPUNIT_TEST(testProcessWithTeletextSelected);
     CPPUNIT_TEST(testProcessWithSubtitleSelected);
-    CPPUNIT_TEST(testProcessWithNothingSelected);
+    CPPUNIT_TEST(testProcessKeepsSelection);
     CPPUNIT_TEST(testGetTeletextChannel);
     CPPUNIT_TEST(testGetSubtitleChannel);
     CPPUNIT_TEST(testWantsDataPacketOverload);
-    CPPUNIT_TEST(testResetAfterTeletextSelection);
-    CPPUNIT_TEST(testResetAfterSubtitleSelection);
+    CPPUNIT_TEST(testWantsDataRejectsOtherChannel);
+    CPPUNIT_TEST(testReselectTeletext);
+    CPPUNIT_TEST(testReselectSubtitle);
 
     CPPUNIT_TEST_SUITE_END();
 
@@ -481,9 +480,12 @@ protected:
         auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleFalseCountBeforeDeactivate = m_mockWindow->getVisibleFalseCount();
         controller.activate();
         controller.deactivate();
 
+        CPPUNIT_ASSERT_MESSAGE("Deactivate should hide the teletext window", !m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleFalseCount() > visibleFalseCountBeforeDeactivate);
         // Verify selection still present and channel unchanged after deactivate
         Channel ttxChannel = controller.getTeletextChannel();
         CPPUNIT_ASSERT(ttxChannel.isActive());
@@ -495,9 +497,12 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(200, 1, 2);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleFalseCountBeforeDeactivate = m_mockWindow->getVisibleFalseCount();
         controller.activate();
         controller.deactivate();
 
+        CPPUNIT_ASSERT_MESSAGE("Deactivate should hide the subtitle window", !m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleFalseCount() > visibleFalseCountBeforeDeactivate);
         Channel subChannel = controller.getSubtitleChannel();
         CPPUNIT_ASSERT(subChannel.isActive());
         CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(200), subChannel.getChannelId());
@@ -523,8 +528,11 @@ protected:
         auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleFalseCountBeforeMute = m_mockWindow->getVisibleFalseCount();
         controller.mute(true);
 
+        CPPUNIT_ASSERT_MESSAGE("Muting teletext should hide the window", !m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleFalseCount() > visibleFalseCountBeforeMute);
         Channel ttxChannel = controller.getTeletextChannel();
         CPPUNIT_ASSERT(ttxChannel.isActive());
     }
@@ -535,8 +543,11 @@ protected:
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
         controller.mute(true);
+        const int visibleTrueCountBeforeUnmute = m_mockWindow->getVisibleTrueCount();
         controller.mute(false);
 
+        CPPUNIT_ASSERT_MESSAGE("Unmuting teletext should show the window", m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleTrueCount() > visibleTrueCountBeforeUnmute);
         Channel ttxChannel = controller.getTeletextChannel();
         CPPUNIT_ASSERT(ttxChannel.isActive());
     }
@@ -546,8 +557,11 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(200, 1, 2);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleFalseCountBeforeMute = m_mockWindow->getVisibleFalseCount();
         controller.mute(true);
 
+        CPPUNIT_ASSERT_MESSAGE("Muting subtitles should hide the window", !m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleFalseCount() > visibleFalseCountBeforeMute);
         Channel subChannel = controller.getSubtitleChannel();
         CPPUNIT_ASSERT(subChannel.isActive());
     }
@@ -558,26 +572,26 @@ protected:
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
         controller.mute(true);
+        const int visibleTrueCountBeforeUnmute = m_mockWindow->getVisibleTrueCount();
         controller.mute(false);
 
+        CPPUNIT_ASSERT_MESSAGE("Unmuting subtitles should show the window", m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleTrueCount() > visibleTrueCountBeforeUnmute);
         Channel subChannel = controller.getSubtitleChannel();
         CPPUNIT_ASSERT(subChannel.isActive());
     }
 
-    void testMuteWhenNothingSelected()
+    void testMuteKeepsSelection()
     {
         auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
-        // Reset to clear selection
-        // Note: We can't directly test "nothing selected" after construction
-        // because constructor always selects something via packet
-
-        // Test mute still works
+        const int visibleFalseCountBeforeMute = m_mockWindow->getVisibleFalseCount();
         controller.mute(true);
 
-        Channel ttxChannel = controller.getTeletextChannel();
-        CPPUNIT_ASSERT(ttxChannel.isActive());
+        CPPUNIT_ASSERT_MESSAGE("Muting should hide the selected window", !m_mockWindow->isVisible());
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleFalseCount() > visibleFalseCountBeforeMute);
+        CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
     void testSetMutedTeletextDirectly()
@@ -585,9 +599,14 @@ protected:
         auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleFalseCountBeforeMute = m_mockWindow->getVisibleFalseCount();
         controller.setMutedTeletext(true);
+        const int visibleTrueCountBeforeUnmute = m_mockWindow->getVisibleTrueCount();
         controller.setMutedTeletext(false);
 
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleFalseCount() > visibleFalseCountBeforeMute);
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleTrueCount() > visibleTrueCountBeforeUnmute);
+        CPPUNIT_ASSERT(m_mockWindow->isVisible());
         Channel ttxChannel = controller.getTeletextChannel();
         CPPUNIT_ASSERT(ttxChannel.isActive());
     }
@@ -597,9 +616,14 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(200, 1, 2);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleFalseCountBeforeMute = m_mockWindow->getVisibleFalseCount();
         controller.setMutedSubtitles(true);
+        const int visibleTrueCountBeforeUnmute = m_mockWindow->getVisibleTrueCount();
         controller.setMutedSubtitles(false);
 
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleFalseCount() > visibleFalseCountBeforeMute);
+        CPPUNIT_ASSERT(m_mockWindow->getVisibleTrueCount() > visibleTrueCountBeforeUnmute);
+        CPPUNIT_ASSERT(m_mockWindow->isVisible());
         Channel subChannel = controller.getSubtitleChannel();
         CPPUNIT_ASSERT(subChannel.isActive());
     }
@@ -613,9 +637,13 @@ protected:
         auto dataPacket = PacketDataBuilder::build(100, pesData);
         CPPUNIT_ASSERT(dataPacket != nullptr);
 
+        const int visibleTrueCountBeforeAddData = m_mockWindow->getVisibleTrueCount();
+        const int visibleFalseCountBeforeAddData = m_mockWindow->getVisibleFalseCount();
         controller.addData(*dataPacket);
 
         CPPUNIT_ASSERT_MESSAGE("Adding matching data should not hide the teletext window", m_mockWindow->isVisible());
+        CPPUNIT_ASSERT_EQUAL(visibleTrueCountBeforeAddData, m_mockWindow->getVisibleTrueCount());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeAddData, m_mockWindow->getVisibleFalseCount());
     }
 
     void testAddDataWithIncorrectChannelId()
@@ -627,8 +655,13 @@ protected:
         auto dataPacket = PacketDataBuilder::build(999, pesData); // Wrong channel ID
         CPPUNIT_ASSERT(dataPacket != nullptr);
 
+        const int visibleTrueCountBeforeAddData = m_mockWindow->getVisibleTrueCount();
+        const int visibleFalseCountBeforeAddData = m_mockWindow->getVisibleFalseCount();
         controller.addData(*dataPacket);
 
+        CPPUNIT_ASSERT_MESSAGE("Incorrect-channel data should not change visibility", m_mockWindow->isVisible());
+        CPPUNIT_ASSERT_EQUAL(visibleTrueCountBeforeAddData, m_mockWindow->getVisibleTrueCount());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeAddData, m_mockWindow->getVisibleFalseCount());
         // Original selection should remain unaffected
         CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
@@ -647,9 +680,13 @@ protected:
         auto dataPacket = PacketDataBuilder::build(100, dataWithoutPes);
         CPPUNIT_ASSERT(dataPacket != nullptr);
 
+        const int visibleTrueCountBeforeAddData = m_mockWindow->getVisibleTrueCount();
+        const int visibleFalseCountBeforeAddData = m_mockWindow->getVisibleFalseCount();
         controller.addData(*dataPacket);
 
         // Should handle data with no valid PES packets gracefully and keep selection
+        CPPUNIT_ASSERT_EQUAL(visibleTrueCountBeforeAddData, m_mockWindow->getVisibleTrueCount());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeAddData, m_mockWindow->getVisibleFalseCount());
         CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
@@ -669,9 +706,13 @@ protected:
         auto dataPacket = PacketDataBuilder::build(100, combinedData);
         CPPUNIT_ASSERT(dataPacket != nullptr);
 
+        const int visibleTrueCountBeforeAddData = m_mockWindow->getVisibleTrueCount();
+        const int visibleFalseCountBeforeAddData = m_mockWindow->getVisibleFalseCount();
         controller.addData(*dataPacket);
 
         // Should process multiple PES packets and retain selection
+        CPPUNIT_ASSERT_EQUAL(visibleTrueCountBeforeAddData, m_mockWindow->getVisibleTrueCount());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeAddData, m_mockWindow->getVisibleFalseCount());
         CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
@@ -682,6 +723,8 @@ protected:
 
         // Deactivate to stop
         controller.deactivate();
+        const int visibleTrueCountBeforeAddData = m_mockWindow->getVisibleTrueCount();
+        const int visibleFalseCountBeforeAddData = m_mockWindow->getVisibleFalseCount();
 
         auto pesData = PacketDataBuilder::createPesPacket(50);
         auto dataPacket = PacketDataBuilder::build(100, pesData);
@@ -690,6 +733,9 @@ protected:
         controller.addData(*dataPacket);
 
         // Still should not crash and selection remains
+        CPPUNIT_ASSERT_MESSAGE("Stopped controller should stay hidden", !m_mockWindow->isVisible());
+        CPPUNIT_ASSERT_EQUAL(visibleTrueCountBeforeAddData, m_mockWindow->getVisibleTrueCount());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeAddData, m_mockWindow->getVisibleFalseCount());
         CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
@@ -698,9 +744,13 @@ protected:
         auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleTrueCountBeforeProcess = m_mockWindow->getVisibleTrueCount();
+        const int visibleFalseCountBeforeProcess = m_mockWindow->getVisibleFalseCount();
         controller.process();
 
         CPPUNIT_ASSERT_MESSAGE("Processing should leave the teletext window visible", m_mockWindow->isVisible());
+        CPPUNIT_ASSERT_EQUAL(visibleTrueCountBeforeProcess, m_mockWindow->getVisibleTrueCount());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeProcess, m_mockWindow->getVisibleFalseCount());
     }
 
     void testProcessWithSubtitleSelected()
@@ -708,20 +758,27 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(200, 1, 2);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
+        const int visibleTrueCountBeforeProcess = m_mockWindow->getVisibleTrueCount();
+        const int visibleFalseCountBeforeProcess = m_mockWindow->getVisibleFalseCount();
         controller.process();
 
+        CPPUNIT_ASSERT_MESSAGE("Processing should leave the subtitle window visible", m_mockWindow->isVisible());
+        CPPUNIT_ASSERT_EQUAL(visibleTrueCountBeforeProcess, m_mockWindow->getVisibleTrueCount());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeProcess, m_mockWindow->getVisibleFalseCount());
         CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
-    void testProcessWithNothingSelected()
+    void testProcessKeepsSelection()
     {
         auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
-        // After construction, something is always selected
-        // Test process still works
+        const int visibleTrueCountBeforeProcess = m_mockWindow->getVisibleTrueCount();
+        const int visibleFalseCountBeforeProcess = m_mockWindow->getVisibleFalseCount();
         controller.process();
 
+        CPPUNIT_ASSERT_EQUAL(visibleTrueCountBeforeProcess, m_mockWindow->getVisibleTrueCount());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeProcess, m_mockWindow->getVisibleFalseCount());
         CPPUNIT_ASSERT(controller.wantsData(*packet));
     }
 
@@ -760,33 +817,49 @@ protected:
         CPPUNIT_ASSERT_EQUAL(true, wants);
     }
 
-    void testResetAfterTeletextSelection()
+    void testWantsDataRejectsOtherChannel()
     {
         auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
-        // After using teletext, verify we can still use other methods
+        auto otherPacket = PacketTeletextSelectionBuilder::build(999, 2, 200);
+        CPPUNIT_ASSERT(otherPacket != nullptr);
+
+        CPPUNIT_ASSERT_EQUAL(false, controller.wantsData(*otherPacket));
+    }
+
+    void testReselectTeletext()
+    {
+        auto packet = PacketTeletextSelectionBuilder::build(100, 1, 100);
+        TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
+
         controller.selectTeletext(150, 2, 200);
         controller.process();
 
-        // Ensure selection updated
+        auto updatedPacket = PacketTeletextSelectionBuilder::build(150, 2, 200);
+        CPPUNIT_ASSERT(updatedPacket != nullptr);
+
         Channel ttxChannel = controller.getTeletextChannel();
         CPPUNIT_ASSERT(ttxChannel.isActive());
         CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(150), ttxChannel.getChannelId());
+        CPPUNIT_ASSERT(controller.wantsData(*updatedPacket));
     }
 
-    void testResetAfterSubtitleSelection()
+    void testReselectSubtitle()
     {
         auto packet = PacketSubtitleSelectionBuilder::build(200, 1, 2);
         TtxController controller(*packet, *m_mockConfig, m_mockWindow, m_mockEngine, *m_stcProvider);
 
-        // After using subtitle, verify we can still use other methods
         controller.selectSubtitle(250, 3, 4);
         controller.process();
+
+        auto updatedPacket = PacketSubtitleSelectionBuilder::build(250, 3, 4);
+        CPPUNIT_ASSERT(updatedPacket != nullptr);
 
         Channel subChannel = controller.getSubtitleChannel();
         CPPUNIT_ASSERT(subChannel.isActive());
         CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(250), subChannel.getChannelId());
+        CPPUNIT_ASSERT(controller.wantsData(*updatedPacket));
     }
 
 private:

@@ -24,13 +24,11 @@
 
 #include "PesBuffer.hpp"
 #include "DynamicAllocator.hpp"
-#include "Consts.hpp"
 
 using dvbsubdecoder::PesBuffer;
 using dvbsubdecoder::PesPacketHeader;
 using dvbsubdecoder::PesPacketReader;
 using dvbsubdecoder::DynamicAllocator;
-using dvbsubdecoder::StcTime;
 using dvbsubdecoder::StcTimeType;
 
 class PesBufferTest : public CppUnit::TestFixture
@@ -65,6 +63,9 @@ CPPUNIT_TEST_SUITE( PesBufferTest );
     CPPUNIT_TEST(testTruncatedPesPacket);
     CPPUNIT_TEST(testCorruptPesPacket);
     CPPUNIT_TEST(testBufferReset);
+    CPPUNIT_TEST(testBufferContentOrder);
+    CPPUNIT_TEST(testPtsDtsFlags);
+    CPPUNIT_TEST(testHeaderOverrun);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -292,6 +293,7 @@ public:
         }
         
         CPPUNIT_ASSERT(packetsAdded > 0);
+        CPPUNIT_ASSERT(packetsAdded == static_cast<int>(bufferSize / packetSize));
         
         // Should not be able to add one more
         CPPUNIT_ASSERT(!buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
@@ -330,7 +332,13 @@ public:
         
         CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
         CPPUNIT_ASSERT(header.m_hasPts);
-        // Verify the PTS extraction works for maximum value
+        CPPUNIT_ASSERT(header.m_pts.m_time == (maxPts >> 1));
+
+        PesPacketHeader lowHeader;
+        PesPacketReader lowReader;
+        CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::LOW_32, lowHeader, lowReader));
+        CPPUNIT_ASSERT(lowHeader.m_hasPts);
+        CPPUNIT_ASSERT(lowHeader.m_pts.m_time == (maxPts & 0xFFFFFFFF));
     }
 
     void testInsufficientPacketData()
@@ -511,37 +519,33 @@ public:
         DynamicAllocator allocator;
         PesBuffer buffer(allocator);
 
-        // Fill buffer partially, consume some packets, then add more
-        // to test circular buffer behavior
-        std::uint16_t packetSize = 500;
+        std::uint16_t packetSize = 1000;
         buildPacket(packetSize - 6);
-        
-        // Add several packets
-        int initialPackets = 10;
+
+        const int initialPackets = 131;
         for (int i = 0; i < initialPackets; ++i)
         {
-            if (!buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()))
-                break;
+            CPPUNIT_ASSERT(buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
         }
-        
-        // Consume half
-        for (int i = 0; i < initialPackets / 2; ++i)
+
+        for (int i = 0; i < initialPackets - 1; ++i)
         {
             PesPacketHeader header;
             PesPacketReader dataReader;
-            
-            if (buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader))
-            {
-                buffer.markPacketConsumed(header);
-            }
+            CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
+            buffer.markPacketConsumed(header);
         }
-        
-        // Add more packets to test wrap-around
-        int additionalPackets = 5;
-        for (int i = 0; i < additionalPackets; ++i)
-        {
-            buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size());
-        }
+
+        m_pesPacket[9] = 0xA5;
+        CPPUNIT_ASSERT(buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
+
+        PesPacketHeader header;
+        PesPacketReader dataReader;
+        CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
+        buffer.markPacketConsumed(header);
+
+        CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
+        CPPUNIT_ASSERT(dataReader.readUint8() == 0xA5);
     }
 
     void testLargePayloadPacket()
@@ -553,17 +557,12 @@ public:
         std::uint16_t largePayload = 32000;
         buildPacket(largePayload);
         
-        bool result = buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size());
-        // Result depends on available buffer space
-        
-        if (result)
-        {
-            PesPacketHeader header;
-            PesPacketReader dataReader;
-            
-            CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
-            CPPUNIT_ASSERT(header.m_pesPacketLength == largePayload);
-        }
+        CPPUNIT_ASSERT(buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
+
+        PesPacketHeader header;
+        PesPacketReader dataReader;
+        CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
+        CPPUNIT_ASSERT(header.m_pesPacketLength == largePayload);
     }
 
     void testHeaderLengthBoundaries()
@@ -604,6 +603,9 @@ public:
         
         result = buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size());
         CPPUNIT_ASSERT(result);
+        CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
+        CPPUNIT_ASSERT(header.m_pesPacketLength == newLength);
+        buffer.markPacketConsumed(header);
     }
 
     void testTimeTypeSwitching()
@@ -718,6 +720,42 @@ public:
         CPPUNIT_ASSERT(!header.m_hasPts); // Should not extract PTS for invalid flags
     }
 
+    void testPtsDtsFlags()
+    {
+        DynamicAllocator allocator;
+        PesBuffer buffer(allocator);
+
+        setPacketPts(12345);
+        m_pesPacket[7] = 3 << 6;
+
+        CPPUNIT_ASSERT(buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
+
+        PesPacketHeader header;
+        PesPacketReader dataReader;
+        CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
+        CPPUNIT_ASSERT(header.m_hasPts);
+        CPPUNIT_ASSERT(header.m_pts.m_time == (12345U >> 1));
+    }
+
+    void testHeaderOverrun()
+    {
+        DynamicAllocator allocator;
+        PesBuffer buffer(allocator);
+
+        buildPacket(20);
+        setPacketPts(12345);
+        m_pesPacket[8] = 18;
+        CPPUNIT_ASSERT(buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
+
+        buildPacket(20);
+        CPPUNIT_ASSERT(buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
+
+        PesPacketHeader header;
+        PesPacketReader dataReader;
+        CPPUNIT_ASSERT(!buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
+        CPPUNIT_ASSERT(!buffer.getNextPacket(StcTimeType::HIGH_32, header, dataReader));
+    }
+
     void testBufferReset()
     {
         DynamicAllocator allocator;
@@ -739,7 +777,7 @@ public:
         for (int i = 0; i < NUM_PACKETS; ++i)
         {
             buildPacket(PES_PACKET_LENGTH);
-            if (m_pesPacket.size() > 10) m_pesPacket[10] = i;
+            m_pesPacket[19] = i;
             CPPUNIT_ASSERT(buffer.addPesPacket(m_pesPacket.data(), m_pesPacket.size()));
         }
         for (int i = 0; i < NUM_PACKETS; ++i)
@@ -748,9 +786,10 @@ public:
             PesPacketReader dataReader;
             CPPUNIT_ASSERT(buffer.getNextPacket(StcTimeType::LOW_32, header, dataReader));
             CPPUNIT_ASSERT(header.m_pesPacketLength == PES_PACKET_LENGTH);
-            // Only check the 10th byte, do not over-read
+            // Only check the 10th payload byte, do not over-read
+            const size_t payloadLength = header.m_pesPacketLength - 3;
             size_t bytesRead = 0;
-            while (bytesRead < header.m_pesPacketLength)
+            while (bytesRead < payloadLength)
             {
                 uint8_t val = dataReader.readUint8();
                 if (bytesRead == 10)

@@ -20,7 +20,6 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include "PesFinder.hpp"
 #include <vector>
-#include <cstring>
 
 using namespace subttxrend::ctrl;
 
@@ -34,6 +33,7 @@ class PesFinderTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testFindMultipleConsecutivePesPackets);
     CPPUNIT_TEST(testFindPesWithMinimumLength);
     CPPUNIT_TEST(testFindPesWithMaximumLength);
+    CPPUNIT_TEST(testLengthByteBoundary);
     CPPUNIT_TEST(testFindPesExactlyFittingBuffer);
     CPPUNIT_TEST(testEmptyBuffer);
     CPPUNIT_TEST(testBufferWithLessThan6Bytes);
@@ -212,6 +212,21 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0xFFFF), pesSize);
     }
 
+    void testLengthByteBoundary()
+    {
+        std::vector<std::uint8_t> pes = createValidPes(0x0100);
+        PesFinder finder(pes.data(), pes.size());
+
+        const std::uint8_t* pesStart = nullptr;
+        std::uint16_t pesSize = 0;
+
+        bool result = finder.findNextPes(pesStart, pesSize);
+
+        CPPUNIT_ASSERT_EQUAL(true, result);
+        CPPUNIT_ASSERT_EQUAL(static_cast<const std::uint8_t*>(pes.data()), pesStart);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint16_t>(0x0106), pesSize);
+    }
+
     void testFindPesExactlyFittingBuffer()
     {
         std::vector<std::uint8_t> pes = createValidPes(20);
@@ -232,8 +247,8 @@ protected:
 
     void testEmptyBuffer()
     {
-        std::vector<std::uint8_t> buffer;
-        PesFinder finder(buffer.data(), buffer.size());
+        std::uint8_t buffer = 0;
+        PesFinder finder(&buffer, 0);
 
         const std::uint8_t* pesStart = nullptr;
         std::uint16_t pesSize = 0;

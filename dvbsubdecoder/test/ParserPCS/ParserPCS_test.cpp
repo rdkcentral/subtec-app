@@ -78,6 +78,8 @@ CPPUNIT_TEST_SUITE( ParserPCSTest );
     CPPUNIT_TEST(testCorruptPCSPacket);
     CPPUNIT_TEST(testTruncatedPCSPacket);
     CPPUNIT_TEST(testMalformedPCSPacket);
+    CPPUNIT_TEST(testTimedOutStates);
+    CPPUNIT_TEST(testSplitReaderChunks);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -261,6 +263,9 @@ public:
         CPPUNIT_ASSERT_THROW(
                 parser.parsePageCompositionSegment(*m_database, reader),
                 PesPacketReader::Exception);
+
+        CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::INCOMPLETE);
+        CPPUNIT_ASSERT(m_database->getPage().getRegionCount() == 0);
     }
 
     void testStartSetNeeded()
@@ -653,6 +658,9 @@ public:
         CPPUNIT_ASSERT_THROW(
                 parser.parsePageCompositionSegment(*m_database, reader),
                 PesPacketReader::Exception);
+
+        CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::INCOMPLETE);
+        CPPUNIT_ASSERT(m_database->getPage().getRegionCount() == 0);
     }
 
     void testMaxRegionCountExceeded()
@@ -1160,13 +1168,76 @@ public:
     {
         BitStreamWriter bitStreamWriter;
         bitStreamWriter.write(0x30, 8); // timeout
-        bitStreamWriter.write(0xF, 4); // invalid page version (out of range)
+        bitStreamWriter.write(0xF, 4); // maximum valid page version
         bitStreamWriter.write(0x3, 2); // invalid page state (reserved)
         bitStreamWriter.write(0xFF, 2); // reserved
 
         PesPacketReader reader(bitStreamWriter.data(), bitStreamWriter.size(), nullptr, 0);
         ParserPCS parser;
         CPPUNIT_ASSERT_THROW(parser.parsePageCompositionSegment(*m_database, reader), ParserException);
+    }
+
+    void testTimedOutStates()
+    {
+        ParserPCS parser;
+
+        BitStreamWriter modeChange;
+        modeChange.write(0x30, 8);
+        modeChange.write(0x01, 4);
+        modeChange.write(dvbsubdecoder::PageStateBits::MODE_CHANGE, 2);
+        modeChange.write(0, 2);
+
+        PesPacketReader modeChangeReader(modeChange.data(), modeChange.size(),
+            nullptr, 0);
+        parser.parsePageCompositionSegment(*m_database, modeChangeReader);
+        m_database->getPage().finishParsing();
+        m_database->getPage().setTimedOut();
+
+        BitStreamWriter normalCase;
+        normalCase.write(0x40, 8);
+        normalCase.write(0x02, 4);
+        normalCase.write(dvbsubdecoder::PageStateBits::NORMAL_CASE, 2);
+        normalCase.write(0, 2);
+
+        PesPacketReader normalCaseReader(normalCase.data(), normalCase.size(),
+            nullptr, 0);
+        parser.parsePageCompositionSegment(*m_database, normalCaseReader);
+        CPPUNIT_ASSERT(m_database->getPage().getVersion() == 2);
+        CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::INCOMPLETE);
+
+        m_database->getPage().finishParsing();
+        m_database->getPage().setTimedOut();
+
+        BitStreamWriter acquisitionPoint;
+        acquisitionPoint.write(0x50, 8);
+        acquisitionPoint.write(0x03, 4);
+        acquisitionPoint.write(dvbsubdecoder::PageStateBits::ACQUISITION_POINT, 2);
+        acquisitionPoint.write(0, 2);
+
+        PesPacketReader acquisitionPointReader(acquisitionPoint.data(),
+            acquisitionPoint.size(), nullptr, 0);
+        parser.parsePageCompositionSegment(*m_database, acquisitionPointReader);
+        CPPUNIT_ASSERT(m_database->getPage().getVersion() == 3);
+        CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::INCOMPLETE);
+    }
+
+    void testSplitReaderChunks()
+    {
+        const std::uint8_t firstChunk[] = {0x30, 0x58, 0x01};
+        const std::uint8_t secondChunk[] = {0x00, 0x01, 0x2C, 0x00, 0x00};
+
+        PesPacketReader reader(firstChunk, sizeof(firstChunk), secondChunk,
+            sizeof(secondChunk));
+        ParserPCS parser;
+        parser.parsePageCompositionSegment(*m_database, reader);
+
+        const auto& page = m_database->getPage();
+        CPPUNIT_ASSERT(page.getVersion() == 5);
+        CPPUNIT_ASSERT(page.getState() == Page::State::INCOMPLETE);
+        CPPUNIT_ASSERT(page.getRegionCount() == 1);
+        CPPUNIT_ASSERT(page.getRegion(0).m_regionId == 1);
+        CPPUNIT_ASSERT(page.getRegion(0).m_positionX == 300);
+        CPPUNIT_ASSERT(page.getRegion(0).m_positionY == 0);
     }
 
     void testSequentialParsingReliability()

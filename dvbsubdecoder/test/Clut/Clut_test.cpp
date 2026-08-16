@@ -38,15 +38,15 @@ CPPUNIT_TEST_SUITE( ClutTest );
     CPPUNIT_TEST(testSet4bitBoundaryValues);
     CPPUNIT_TEST(testSet8bitBoundaryValues);
     CPPUNIT_TEST(testARGBValuePreservation);
-    CPPUNIT_TEST(testCLUTArraySizes);
+    CPPUNIT_TEST(testValidIndices);
     CPPUNIT_TEST(testCLUTIndependence);
     CPPUNIT_TEST(testDefaultCLUTContent);
     CPPUNIT_TEST(testResetBehaviorMixedStates);
     CPPUNIT_TEST(testStatePersistence);
     CPPUNIT_TEST(testMultipleResetCalls);
     CPPUNIT_TEST(testMultipleInstanceIndependence);
-    CPPUNIT_TEST(testArrayPointerConsistency);
-    CPPUNIT_TEST(testVersionWrapAround);
+    CPPUNIT_TEST(testArrayAccess);
+    CPPUNIT_TEST(testVersionSequence);
     CPPUNIT_TEST(testSpecificColorValues);
     CPPUNIT_TEST(testBitPatternCorrectness);
 CPPUNIT_TEST_SUITE_END();
@@ -359,14 +359,14 @@ public:
     }
 
     // CLUT Array Size Validation
-    void testCLUTArraySizes()
+    void testValidIndices()
     {
         Clut clut;
         
         // We can't directly test array sizes, but we can test that all valid indices work
         // and verify the expected number of entries by setting and reading them
         
-        // Test 2-bit CLUT has exactly 4 entries
+        // Test all 2-bit indices
         const std::uint32_t* array2bit = clut.getArray2bit();
         for (int i = 0; i < 4; ++i)
         {
@@ -374,7 +374,7 @@ public:
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x12345600 + i), array2bit[i]);
         }
         
-        // Test 4-bit CLUT has exactly 16 entries
+        // Test all 4-bit indices
         const std::uint32_t* array4bit = clut.getArray4bit();
         for (int i = 0; i < 16; ++i)
         {
@@ -382,7 +382,7 @@ public:
             CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0x23456700 + i), array4bit[i]);
         }
         
-        // Test 8-bit CLUT has exactly 256 entries (sample test)
+        // Test representative 8-bit indices
         const std::uint32_t* array8bit = clut.getArray8bit();
         for (int i = 0; i < 256; i += 17) // Test every 17th entry to cover range
         {
@@ -608,7 +608,7 @@ public:
     }
 
     // Array Pointer Consistency
-    void testArrayPointerConsistency()
+    void testArrayAccess()
     {
         Clut clut;
         
@@ -653,7 +653,7 @@ public:
     }
 
     // Version Wrap-Around
-    void testVersionWrapAround()
+    void testVersionSequence()
     {
         Clut clut;
         
@@ -682,20 +682,19 @@ public:
         // Test meaningful ARGB color values
         struct ColorTest {
             std::uint32_t argb;
-            const char* description;
         };
         
         ColorTest colors[] = {
-            {0x00000000, "Fully transparent black"},
-            {0xFF000000, "Fully opaque black"},
-            {0xFFFFFFFF, "Fully opaque white"},
-            {0x00FFFFFF, "Fully transparent white"},
-            {0xFFFF0000, "Opaque red"},
-            {0xFF00FF00, "Opaque green"},
-            {0xFF0000FF, "Opaque blue"},
-            {0x80808080, "Semi-transparent gray"},
-            {0xFF808080, "Opaque gray"},
-            {0x80FF0000, "Semi-transparent red"}
+            {0x00000000},
+            {0xFF000000},
+            {0xFFFFFFFF},
+            {0x00FFFFFF},
+            {0xFFFF0000},
+            {0xFF00FF00},
+            {0xFF0000FF},
+            {0x80808080},
+            {0xFF808080},
+            {0x80FF0000}
         };
         
         for (const auto& color : colors)

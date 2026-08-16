@@ -260,6 +260,7 @@ public:
         // Second startParsing call should reset and update all fields
         page.startParsing(2, StcTime(StcTimeType::HIGH_32, 200), 15);
         CPPUNIT_ASSERT(page.getVersion() == 2);
+        CPPUNIT_ASSERT(page.getPts() == StcTime(StcTimeType::HIGH_32, 200));
         CPPUNIT_ASSERT(page.getTimeout() == 15);
         CPPUNIT_ASSERT(page.getRegionCount() == 0); // Regions should be cleared
         CPPUNIT_ASSERT(page.getState() == Page::State::INCOMPLETE);
@@ -333,6 +334,11 @@ public:
         CPPUNIT_ASSERT(region1.m_regionId == 2);
         CPPUNIT_ASSERT(region1.m_positionX == 150);
         CPPUNIT_ASSERT(region1.m_positionY == 250);
+
+        const auto& region2 = page.getRegion(1);
+        CPPUNIT_ASSERT(region2.m_regionId == 3);
+        CPPUNIT_ASSERT(region2.m_positionX == 300);
+        CPPUNIT_ASSERT(region2.m_positionY == 350);
     }
 
     void testSetTimedOutTransitionsAndRegionClearing()
@@ -355,6 +361,7 @@ public:
         
         // Version, PTS, and timeout should remain unchanged
         CPPUNIT_ASSERT(page.getVersion() == 1);
+        CPPUNIT_ASSERT(page.getPts() == StcTime());
         CPPUNIT_ASSERT(page.getTimeout() == 10);
     }
 
@@ -365,24 +372,17 @@ public:
         
         // Add regions up to capacity
         std::size_t regionsAdded = 0;
-        for (std::size_t i = 0; i < 1000; ++i) // Use large number to ensure we hit limit
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
-            if (page.addRegion(static_cast<std::uint8_t>(i), 
-                              static_cast<std::uint16_t>(i), 
-                              static_cast<std::uint16_t>(i)))
-            {
-                regionsAdded++;
-                CPPUNIT_ASSERT(page.getRegionCount() == regionsAdded);
-            }
-            else
-            {
-                // Capacity reached
-                break;
-            }
+            CPPUNIT_ASSERT(page.addRegion(static_cast<std::uint8_t>(i),
+                                          static_cast<std::uint16_t>(i),
+                                          static_cast<std::uint16_t>(i)));
+            ++regionsAdded;
+            CPPUNIT_ASSERT(page.getRegionCount() == regionsAdded);
         }
         
-        // Verify we added some regions and capacity is now full
-        CPPUNIT_ASSERT(regionsAdded > 0);
+        // Verify the configured capacity is full
+        CPPUNIT_ASSERT(regionsAdded == dvbsubdecoder::MAX_SUPPORTED_REGIONS);
         CPPUNIT_ASSERT(page.getRegionCount() == regionsAdded);
         
         // Next addition should fail
@@ -498,6 +498,8 @@ public:
         page.reset();
         CPPUNIT_ASSERT(page.getState() == Page::State::INVALID);
         CPPUNIT_ASSERT(page.getVersion() == dvbsubdecoder::INVALID_VERSION);
+        CPPUNIT_ASSERT(page.getPts() == StcTime());
+        CPPUNIT_ASSERT(page.getTimeout() == 0);
         
         // Reset from INCOMPLETE state
         page.startParsing(1, StcTime(), 10);
@@ -506,6 +508,8 @@ public:
         page.reset();
         CPPUNIT_ASSERT(page.getState() == Page::State::INVALID);
         CPPUNIT_ASSERT(page.getRegionCount() == 0);
+        CPPUNIT_ASSERT(page.getPts() == StcTime());
+        CPPUNIT_ASSERT(page.getTimeout() == 0);
         
         // Reset from COMPLETE state
         page.startParsing(2, StcTime(), 20);
@@ -513,6 +517,8 @@ public:
         CPPUNIT_ASSERT(page.getState() == Page::State::COMPLETE);
         page.reset();
         CPPUNIT_ASSERT(page.getState() == Page::State::INVALID);
+        CPPUNIT_ASSERT(page.getPts() == StcTime());
+        CPPUNIT_ASSERT(page.getTimeout() == 0);
         
         // Reset from TIMEDOUT state
         page.startParsing(3, StcTime(), 30);
@@ -521,6 +527,8 @@ public:
         CPPUNIT_ASSERT(page.getState() == Page::State::TIMEDOUT);
         page.reset();
         CPPUNIT_ASSERT(page.getState() == Page::State::INVALID);
+        CPPUNIT_ASSERT(page.getPts() == StcTime());
+        CPPUNIT_ASSERT(page.getTimeout() == 0);
     }
 
     void testInvalidStateTransitions()
@@ -614,14 +622,12 @@ public:
         page.startParsing(1, StcTime(), 10);
         
         // Fill to capacity
-        std::size_t capacity = 0;
         for (std::size_t i = 0; i < 1000; ++i)
         {
             if (!page.addRegion(static_cast<std::uint8_t>(i), 
                                static_cast<std::uint16_t>(i), 
                                static_cast<std::uint16_t>(i)))
             {
-                capacity = i;
                 break;
             }
         }
@@ -629,6 +635,7 @@ public:
         // Verify state remains consistent when capacity is reached
         const std::size_t initialCount = page.getRegionCount();
         const Page::State initialState = page.getState();
+        CPPUNIT_ASSERT(initialCount == dvbsubdecoder::MAX_SUPPORTED_REGIONS);
         
         // Attempt to add another region should fail without changing state
         CPPUNIT_ASSERT(!page.addRegion(255, 9999, 9999));
@@ -704,6 +711,8 @@ public:
         // Second parsing attempt (simulating re-parsing)
         page.startParsing(2, StcTime(StcTimeType::HIGH_32, 2000), 60);
         CPPUNIT_ASSERT(page.getVersion() == 2);
+        CPPUNIT_ASSERT(page.getPts() == StcTime(StcTimeType::HIGH_32, 2000));
+        CPPUNIT_ASSERT(page.getTimeout() == 60);
         CPPUNIT_ASSERT(page.getRegionCount() == 0); // Should be cleared
         
         page.addRegion(10, 100, 200);
@@ -715,6 +724,8 @@ public:
         // Third parsing attempt after completion
         page.startParsing(3, StcTime(StcTimeType::LOW_32, 3000), 90);
         CPPUNIT_ASSERT(page.getVersion() == 3);
+        CPPUNIT_ASSERT(page.getPts() == StcTime(StcTimeType::LOW_32, 3000));
+        CPPUNIT_ASSERT(page.getTimeout() == 90);
         CPPUNIT_ASSERT(page.getState() == Page::State::INCOMPLETE);
         CPPUNIT_ASSERT(page.getRegionCount() == 0);
     }

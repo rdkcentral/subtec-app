@@ -20,6 +20,13 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <stdexcept>
+#include <utility>
+#include <vector>
+
 #include <subttxrend/common/Logger.hpp>
 
 #include "ObjectParser.hpp"
@@ -53,6 +60,7 @@ CPPUNIT_TEST_SUITE( PixelWriterTest );
     CPPUNIT_TEST(testMap2to4);
     CPPUNIT_TEST(testMap2to8);
     CPPUNIT_TEST(testMap4to8);
+    CPPUNIT_TEST(testWriterStart);
     CPPUNIT_TEST(testSingleString2);
     CPPUNIT_TEST(testSingleString4);
     CPPUNIT_TEST(testSingleString8);
@@ -60,6 +68,7 @@ CPPUNIT_TEST_SUITE( PixelWriterTest );
     CPPUNIT_TEST(testDoubleString4);
     CPPUNIT_TEST(testDoubleString8);
     CPPUNIT_TEST(testMultiline);
+    CPPUNIT_TEST(testNonModifyingColour);
     CPPUNIT_TEST(testConstructorValidation);
     CPPUNIT_TEST(testEmptyDataStream);
     CPPUNIT_TEST(testInvalidDataType);
@@ -67,7 +76,7 @@ CPPUNIT_TEST_SUITE( PixelWriterTest );
     CPPUNIT_TEST(testIncompletePixelString);
     CPPUNIT_TEST(testCorruptedMapTable);
     CPPUNIT_TEST(testMaxRunLengthBoundaries);
-    CPPUNIT_TEST(testZeroRunLength);
+    CPPUNIT_TEST(testEmptyPixelString);
     CPPUNIT_TEST(testDepthMismatchValidation);
     CPPUNIT_TEST(testMixedDataTypes);
     CPPUNIT_TEST(testConsecutiveEndOfLine);
@@ -76,7 +85,6 @@ CPPUNIT_TEST_SUITE( PixelWriterTest );
     CPPUNIT_TEST(testParseMultipleObjects);
     CPPUNIT_TEST(testOverlongAndCorruptRunLengths);
     CPPUNIT_TEST(testPixmapOverflowOutOfBoundsWrite);
-    CPPUNIT_TEST(testMapTableNegativeOverflow);
     CPPUNIT_TEST(testMapTableBufferUnderflow);
     CPPUNIT_TEST(testNegativeBoundaryDataTypes);
     CPPUNIT_TEST(testPixelWriterConstructorNegative);
@@ -862,7 +870,19 @@ public:
             BitStreamWriter streamWriter;
             streamWriter.write(dataType, 8);
             
-            if (dataType == 0xF0) // End of line - should not throw
+            if (dataType == 0x10 || dataType == 0x11 || dataType == 0x12)
+            {
+                const auto endSize = (dataType == 0x10) ? 6 :
+                    ((dataType == 0x11) ? 8 : 16);
+                streamWriter.write(0, endSize);
+
+                PesPacketReader reader(streamWriter.data(), streamWriter.size(), nullptr, 0);
+                PixelWriter writer(false, dataType == 0x10 ? 2 :
+                    (dataType == 0x11 ? 4 : 8), m_pixmap, 0, 0);
+                ObjectParser parser(reader, writer);
+                CPPUNIT_ASSERT_NO_THROW(parser.parse());
+            }
+            else if (dataType == 0xF0) // End of line - should not throw
             {
                 PesPacketReader reader(streamWriter.data(), streamWriter.size(), nullptr, 0);
                 PixelWriter writer(false, 2, m_pixmap, 0, 0);
@@ -932,6 +952,22 @@ public:
 
             CPPUNIT_ASSERT_THROW(parser.parse(), PesPacketReader::Exception);
         }
+
+        // Test incomplete 8-bit pixel string (missing colour data)
+        {
+            BitStreamWriter incompleteWriter;
+            incompleteWriter.write(0x12, 8); // 8-bit pixel string
+            incompleteWriter.write(0x00, 8); // escape sequence
+            incompleteWriter.write(0x01, 1); // long run
+            incompleteWriter.write(0x03, 7); // run length
+            // Missing the required 8 bits for the colour
+
+            PesPacketReader reader(incompleteWriter.data(), incompleteWriter.size(), nullptr, 0);
+            PixelWriter writer(false, 8, m_pixmap, 0, 0);
+            ObjectParser parser(reader, writer);
+
+            CPPUNIT_ASSERT_THROW(parser.parse(), PesPacketReader::Exception);
+        }
     }
 
     void testCorruptedMapTable()
@@ -944,6 +980,20 @@ public:
 
             PesPacketReader reader(corruptWriter.data(), corruptWriter.size(), nullptr, 0);
             PixelWriter writer(false, 4, m_pixmap, 0, 0);
+            ObjectParser parser(reader, writer);
+
+            CPPUNIT_ASSERT_THROW(parser.parse(), PesPacketReader::Exception);
+        }
+
+        // Test corrupted 2to8 map table (insufficient data)
+        {
+            BitStreamWriter corruptWriter;
+            corruptWriter.write(0x21, 8); // 2to8 map
+            for (int i = 0; i < 3; ++i) // only 3 entries instead of 4
+                corruptWriter.write(i, 8);
+
+            PesPacketReader reader(corruptWriter.data(), corruptWriter.size(), nullptr, 0);
+            PixelWriter writer(false, 8, m_pixmap, 0, 0);
             ObjectParser parser(reader, writer);
 
             CPPUNIT_ASSERT_THROW(parser.parse(), PesPacketReader::Exception);
@@ -1012,13 +1062,13 @@ public:
         }
     }
 
-    void testZeroRunLength()
+    void testEmptyPixelString()
     {
-        // Test zero run length for different bit depths
+        // A zero count produces an empty, valid pixel string.
         {
             PixelStringWriter zeroRunWriter;
             zeroRunWriter.start2bitPixelCodeString();
-            zeroRunWriter.write2bitPixels(1, 0); // Zero run length
+            zeroRunWriter.write2bitPixels(1, 0);
             zeroRunWriter.end2bitPixelCodeString();
 
             m_pixmap.clear(0xFF);
@@ -1087,6 +1137,15 @@ public:
         ObjectParser parser(reader, writer);
 
         CPPUNIT_ASSERT_NO_THROW(parser.parse());
+
+        auto line0 = m_pixmap.getLine(0);
+        CPPUNIT_ASSERT_EQUAL(0x77, static_cast<int>(line0[0]));
+        CPPUNIT_ASSERT_EQUAL(0x77, static_cast<int>(line0[1]));
+
+        auto line2 = m_pixmap.getLine(2);
+        CPPUNIT_ASSERT_EQUAL(100, static_cast<int>(line2[0]));
+        CPPUNIT_ASSERT_EQUAL(100, static_cast<int>(line2[1]));
+        CPPUNIT_ASSERT_EQUAL(100, static_cast<int>(line2[2]));
     }
 
     void testConsecutiveEndOfLine()
@@ -1128,6 +1187,47 @@ public:
             CPPUNIT_ASSERT_EQUAL(100, static_cast<int>(line[i]));
         for (int i = 127; i < 227; ++i)
             CPPUNIT_ASSERT_EQUAL(200, static_cast<int>(line[i]));
+    }
+
+    void testNonModifyingColour()
+    {
+        PixelStringWriter writer;
+        writer.start8bitPixelCodeString();
+        writer.write8bitPixels(1, 3);
+        writer.write8bitPixels(2, 1);
+        writer.end8bitPixelCodeString();
+
+        m_pixmap.clear(0xAA);
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        PixelWriter pixelWriter(true, 8, m_pixmap, 0, 0);
+        ObjectParser parser(reader, pixelWriter);
+
+        CPPUNIT_ASSERT_NO_THROW(parser.parse());
+
+        auto line = m_pixmap.getLine(0);
+        CPPUNIT_ASSERT_EQUAL(0xAA, static_cast<int>(line[0]));
+        CPPUNIT_ASSERT_EQUAL(0xAA, static_cast<int>(line[1]));
+        CPPUNIT_ASSERT_EQUAL(0xAA, static_cast<int>(line[2]));
+        CPPUNIT_ASSERT_EQUAL(2, static_cast<int>(line[3]));
+    }
+
+    void testWriterStart()
+    {
+        PixelStringWriter writer;
+        writer.start8bitPixelCodeString();
+        writer.write8bitPixels(7, 1);
+        writer.end8bitPixelCodeString();
+
+        m_pixmap.clear(0xFF);
+        PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
+        PixelWriter pixelWriter(false, 8, m_pixmap, 2, 1);
+        ObjectParser parser(reader, pixelWriter);
+
+        CPPUNIT_ASSERT_NO_THROW(parser.parse());
+
+        CPPUNIT_ASSERT_EQUAL(0xFF, static_cast<int>(m_pixmap.getLine(0)[2]));
+        CPPUNIT_ASSERT_EQUAL(7, static_cast<int>(m_pixmap.getLine(1)[2]));
+        CPPUNIT_ASSERT_EQUAL(0xFF, static_cast<int>(m_pixmap.getLine(1)[3]));
     }
 
     void testMapTableOverflow()
@@ -1221,36 +1321,22 @@ public:
         PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
         PixelWriter pxWriter(false, 8, m_pixmap, 0, 0);
         ObjectParser parser(reader, pxWriter);
-        try {
-            parser.parse();
-            // If no exception, check buffer integrity (should not overflow)
-            auto line = m_pixmap.getLine(0);
-            for (int i = 0; i < WIDTH; ++i)
-                CPPUNIT_ASSERT(line[i] == 1 || line[i] == 0); // Only valid pixel values
-        } catch (const ParserException&) {
-            // Accept exception as valid
-        }
+        CPPUNIT_ASSERT_NO_THROW(parser.parse());
+        auto line = m_pixmap.getLine(0);
+        for (int i = 0; i < WIDTH; ++i)
+            CPPUNIT_ASSERT_EQUAL(1, static_cast<int>(line[i]));
 
         // Zero/negative run-length (if supported by encoding)
         // Simulate a corrupt stream with a zero run-length (not valid in DVB)
         BitStreamWriter corrupt;
         corrupt.write(0x10, 8); // 2-bit string
-        corrupt.write(0x00, 2); // color
-        corrupt.write(0x00, 2); // run-length 0 (invalid)
-        corrupt.write(0x00, 8); // end of string
+        corrupt.write(0x00, 2); // escape sequence
+        corrupt.write(0x03, 2); // long run marker; required data is missing
         m_pixmap.clear(0);
         PesPacketReader reader2(corrupt.data(), corrupt.size(), nullptr, 0);
         PixelWriter pxWriter2(false, 2, m_pixmap, 0, 0);
         ObjectParser parser2(reader2, pxWriter2);
-        try {
-            parser2.parse();
-            // If no exception, check buffer integrity (should not overflow)
-            auto line = m_pixmap.getLine(0);
-            for (int i = 0; i < WIDTH; ++i)
-                CPPUNIT_ASSERT(line[i] == 0); // No pixels written for invalid run
-        } catch (const std::exception&) {
-            // Accept any exception as valid (PesPacketReader or ParserException)
-        }
+        CPPUNIT_ASSERT_THROW(parser2.parse(), PesPacketReader::Exception);
     }
 
     void testPixmapOverflowOutOfBoundsWrite()
@@ -1265,63 +1351,27 @@ public:
         PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
         PixelWriter pxWriter(false, 8, m_pixmap, 0, 0);
         ObjectParser parser(reader, pxWriter);
-        try {
-            parser.parse();
-            // If no exception, check buffer integrity (should not overflow)
-            auto line = m_pixmap.getLine(0);
-            for (int i = 0; i < WIDTH; ++i)
-                CPPUNIT_ASSERT_EQUAL(5, static_cast<int>(line[i])); // Only up to WIDTH written
-        } catch (const ParserException&) {
-            // Accept exception as valid
-        }
-    }
-
-    void testMapTableNegativeOverflow()
-    {
-        // Use a color index that exceeds the map table size
-        // Build map table bytes manually
-        std::vector<uint8_t> buf;
-        buf.push_back(0x20); // 2to4 map table header (example value)
-        buf.push_back(1);    // map entry 1
-        buf.push_back(2);    // map entry 2
-        buf.push_back(3);    // map entry 3
-        buf.push_back(4);    // map entry 4
-        // Malformed pixel string using BitStreamWriter
-        BitStreamWriter badPixelString;
-        badPixelString.write(0x10, 8); // 2-bit pixel string header
-        badPixelString.write(0xE, 2);  // out-of-range color index (should be < 4)
-        badPixelString.write(0x01, 2); // run length 1
-        badPixelString.write(0x00, 2); // end of string
-        buf.insert(buf.end(), badPixelString.data(), badPixelString.data() + badPixelString.size());
-        m_pixmap.clear(0);
-
-        PesPacketReader reader(buf.data(), buf.size(), nullptr, 0);
-        PixelWriter pxWriter(false, 4, m_pixmap, 0, 0);
-        ObjectParser parser(reader, pxWriter);
-        CPPUNIT_ASSERT_THROW(parser.parse(), ParserException);
+        CPPUNIT_ASSERT_NO_THROW(parser.parse());
+        auto line = m_pixmap.getLine(0);
+        for (int i = 0; i < WIDTH; ++i)
+            CPPUNIT_ASSERT_EQUAL(5, static_cast<int>(line[i]));
+        auto nextLine = m_pixmap.getLine(1);
+        for (int i = 0; i < WIDTH; ++i)
+            CPPUNIT_ASSERT_EQUAL(0xAA, static_cast<int>(nextLine[i]));
     }
 
     void testMapTableBufferUnderflow()
     {
-        // Too few values in map, plus trailing junk
+        // Only two 4-bit entries are present; four are required.
         std::vector<uint8_t> buf;
         buf.push_back(0x20); // 2to4 map table header (example value)
-        buf.push_back(1);    // only one map entry (should be more)
-        buf.push_back(0xFF); // Add junk
+        buf.push_back(0x10); // only two map entries (should be four)
         m_pixmap.clear(0);
 
         PesPacketReader reader(buf.data(), buf.size(), nullptr, 0);
         PixelWriter pxWriter(false, 4, m_pixmap, 0, 0);
         ObjectParser parser(reader, pxWriter);
-        try {
-            parser.parse();
-            // If no exception, check buffer integrity (should not be corrupted)
-            auto line = m_pixmap.getLine(0);
-            for (int i = 0; i < WIDTH; ++i)
-                CPPUNIT_ASSERT(line[i] == 0 || line[i] == 1); // Only valid pixel values
-        } catch (const ParserException&) {
-            // Accept exception as valid
-        }
+        CPPUNIT_ASSERT_THROW(parser.parse(), PesPacketReader::Exception);
     }
 
     void testNegativeBoundaryDataTypes()
@@ -1343,6 +1393,11 @@ public:
         Pixmap badPixmap;
         CPPUNIT_ASSERT_THROW(badPixmap.init(-1, HEIGHT, m_pixmapBuffer.data()), std::invalid_argument);
         CPPUNIT_ASSERT_THROW(badPixmap.init(WIDTH, -1, m_pixmapBuffer.data()), std::invalid_argument);
+
+        CPPUNIT_ASSERT_THROW(PixelWriter(false, 0, m_pixmap, 0, 0), std::invalid_argument);
+        CPPUNIT_ASSERT_THROW(PixelWriter(false, 9, m_pixmap, 0, 0), std::invalid_argument);
+        CPPUNIT_ASSERT_THROW(PixelWriter(false, 8, m_pixmap, -1, 0), std::invalid_argument);
+        CPPUNIT_ASSERT_THROW(PixelWriter(false, 8, m_pixmap, 0, -1), std::invalid_argument);
     }
 
     void testBufferResetAfterTeardown()

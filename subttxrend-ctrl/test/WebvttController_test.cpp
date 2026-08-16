@@ -38,6 +38,10 @@ using namespace subttxrend::gfx;
 using namespace subttxrend::common;
 using namespace subttxrend::webvttengine;
 
+namespace {
+bool g_stopCalled = false;
+}
+
 // Mock WebvttEngine for testing
 class MockWebvttEngine : public WebvttEngine
 {
@@ -80,6 +84,7 @@ public:
     {
         m_stopped = true;
         m_started = false;
+        g_stopCalled = true;
     }
 
     void pause() override
@@ -105,7 +110,8 @@ public:
     void setAttributes(const WebVTTAttributes& attributes) override
     {
         m_attributesSet = true;
-        m_lastAttributes = attributes;
+        m_lastAttributes.reset();
+        m_lastAttributes.update(attributes);
     }
 
     void addData(const std::uint8_t* buffer, std::size_t dataSize, std::int64_t displayOffsetMs) override
@@ -138,7 +144,6 @@ public:
     // Test helpers
     bool isInitialized() const { return m_initialized; }
     bool isStarted() const { return m_started; }
-    bool isStopped() const { return m_stopped; }
     bool isPaused() const { return m_paused; }
     bool isMuted() const { return m_muted; }
     Size getRelatedVideoSize() const { return m_relatedVideoSize; }
@@ -150,9 +155,9 @@ public:
     const std::vector<std::uint8_t>& getLastData() const { return m_lastData; }
     bool wasAttributesSet() const { return m_attributesSet; }
     bool lastAttributeIsSet(WebVTTAttributes::AttributeType attributeType) const { return m_lastAttributes.isSet(attributeType); }
+    uint32_t lastAttributeValue(WebVTTAttributes::AttributeType attributeType) const { return m_lastAttributes.getInteger(attributeType); }
 
     void setWaitTime(std::chrono::milliseconds waitTime) { m_waitTime = waitTime; }
-    void resetCounters() { m_dataCount = 0; m_processCount = 0; }
 
 private:
     bool m_initialized;
@@ -201,9 +206,6 @@ public:
     MockConfigProvider() {}
 
     const char* getValue(const std::string& key) const override { return ""; }
-    std::string getString(const std::string& key) const { return ""; }
-    std::int32_t getInt(const std::string& key) const { return 0; }
-    bool getBool(const std::string& key) const { return false; }
 };
 
 // Helper to create PacketWebvttSelection for testing
@@ -243,6 +245,7 @@ public:
     static std::unique_ptr<PacketData> build(uint32_t channelId, const std::vector<uint8_t>& userData, int64_t displayOffset = 0)
     {
         uint32_t size = 4 + 8 + userData.size(); // channelId + displayOffset + user data
+        const auto encodedDisplayOffset = static_cast<uint64_t>(displayOffset);
 
         std::vector<uint8_t> data = {
             0x10, 0x00, 0x00, 0x00, // type = WEBVTT_DATA (16)
@@ -252,10 +255,10 @@ public:
             static_cast<uint8_t>(channelId), static_cast<uint8_t>(channelId >> 8),
             static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24),
             // displayOffset (8 bytes, little-endian int64_t)
-            static_cast<uint8_t>(displayOffset), static_cast<uint8_t>(displayOffset >> 8),
-            static_cast<uint8_t>(displayOffset >> 16), static_cast<uint8_t>(displayOffset >> 24),
-            static_cast<uint8_t>(displayOffset >> 32), static_cast<uint8_t>(displayOffset >> 40),
-            static_cast<uint8_t>(displayOffset >> 48), static_cast<uint8_t>(displayOffset >> 56)
+            static_cast<uint8_t>(encodedDisplayOffset), static_cast<uint8_t>(encodedDisplayOffset >> 8),
+            static_cast<uint8_t>(encodedDisplayOffset >> 16), static_cast<uint8_t>(encodedDisplayOffset >> 24),
+            static_cast<uint8_t>(encodedDisplayOffset >> 32), static_cast<uint8_t>(encodedDisplayOffset >> 40),
+            static_cast<uint8_t>(encodedDisplayOffset >> 48), static_cast<uint8_t>(encodedDisplayOffset >> 56)
         };
 
         data.insert(data.end(), userData.begin(), userData.end());
@@ -303,9 +306,6 @@ public:
     static std::unique_ptr<PacketSetCCAttributes> build(uint32_t channelId,
                                                         const std::vector<std::pair<PacketSetCCAttributes::CcAttribType, uint32_t>>& attributes)
     {
-        // Fixed size: channelId(4) + ccType(4) + attribType(4) + 14 values(56)
-        uint32_t size = 68;
-
         std::vector<uint8_t> data = {
             0x12, 0x00, 0x00, 0x00, // type = SET_CC_ATTRIBUTES (18)
             0x01, 0x00, 0x00, 0x00, // counter = 1
@@ -394,12 +394,14 @@ class WebvttControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testConstructorWithValidParameters);
     CPPUNIT_TEST(testConstructorInitializesEngine);
     CPPUNIT_TEST(testConstructorSelectsChannel);
+    CPPUNIT_TEST(testDestructorStopsEngine);
+    CPPUNIT_TEST(testActivateDeactivateNoop);
     CPPUNIT_TEST(testConstructorWithZeroDimensions);
     CPPUNIT_TEST(testConstructorWithLargeDimensions);
     CPPUNIT_TEST(testProcessDelegatesToEngine);
     CPPUNIT_TEST(testMultipleProcessCalls);
     CPPUNIT_TEST(testAddDataWithValidPacket);
-    CPPUNIT_TEST(testAddDataWithEmptyData);
+    CPPUNIT_TEST(testAddDataWithMinimalData);
     CPPUNIT_TEST(testAddDataWithLargeData);
     CPPUNIT_TEST(testAddDataWithNegativeOffset);
     CPPUNIT_TEST(testAddDataWithZeroOffset);
@@ -464,6 +466,7 @@ public:
     {
         m_mockEngine = new MockWebvttEngine();
         g_mockEngine = m_mockEngine;
+        g_stopCalled = false;
         m_mockConfig = std::make_unique<MockConfigProvider>();
         m_mockWindow = std::make_shared<MockWindow>();
     }
@@ -477,6 +480,26 @@ public:
     }
 
 protected:
+    void assertAttributeValue(WebVTTAttributes::AttributeType attributeType, uint32_t expectedValue)
+    {
+        CPPUNIT_ASSERT(m_mockEngine->lastAttributeIsSet(attributeType));
+        CPPUNIT_ASSERT_EQUAL(expectedValue, m_mockEngine->lastAttributeValue(attributeType));
+    }
+
+    void assertMappedAttributesUnset()
+    {
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_COLOR));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::BACKGROUND_COLOR));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_OPACITY));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::BACKGROUND_OPACITY));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_STYLE));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_SIZE));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::WINDOW_COLOR));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::WINDOW_OPACITY));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::EDGE_STYLE));
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::EDGE_COLOR));
+    }
+
     void testConstructorWithValidParameters()
     {
         auto packet = PacketWebvttSelectionBuilder::build(1, 1920, 1080);
@@ -487,6 +510,35 @@ protected:
         CPPUNIT_ASSERT(controller != nullptr);
         CPPUNIT_ASSERT(m_mockEngine->isInitialized());
         CPPUNIT_ASSERT(m_mockEngine->isStarted());
+    }
+
+    void testDestructorStopsEngine()
+    {
+        auto packet = PacketWebvttSelectionBuilder::build(1, 1920, 1080);
+        CPPUNIT_ASSERT(packet != nullptr);
+
+        {
+            auto controller = std::make_unique<WebvttController>(*packet, *m_mockConfig, m_mockWindow);
+            CPPUNIT_ASSERT(m_mockEngine->isStarted());
+            CPPUNIT_ASSERT(!g_stopCalled);
+        }
+
+        CPPUNIT_ASSERT(g_stopCalled);
+    }
+
+    void testActivateDeactivateNoop()
+    {
+        auto packet = PacketWebvttSelectionBuilder::build(1, 1920, 1080);
+        CPPUNIT_ASSERT(packet != nullptr);
+
+        auto controller = std::make_unique<WebvttController>(*packet, *m_mockConfig, m_mockWindow);
+
+        controller->activate();
+        controller->deactivate();
+
+        CPPUNIT_ASSERT(m_mockEngine->isStarted());
+        CPPUNIT_ASSERT(!m_mockEngine->isPaused());
+        CPPUNIT_ASSERT(!m_mockEngine->isMuted());
     }
 
     void testConstructorInitializesEngine()
@@ -586,7 +638,7 @@ protected:
         }
     }
 
-    void testAddDataWithEmptyData()
+    void testAddDataWithMinimalData()
     {
         auto selectionPacket = PacketWebvttSelectionBuilder::build(1, 1920, 1080);
         auto controller = std::make_unique<WebvttController>(*selectionPacket, *m_mockConfig, m_mockWindow);
@@ -993,6 +1045,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_COLOR, 0xFF0000);
     }
 
     void testProcessCCAttributesBackgroundColor()
@@ -1010,6 +1063,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::BACKGROUND_COLOR, 0x00FF00);
     }
 
     void testProcessCCAttributesFontSize()
@@ -1027,6 +1081,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_SIZE, 24);
     }
 
     void testProcessCCAttributesFontStyle()
@@ -1044,6 +1099,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_STYLE, 1);
     }
 
     void testProcessCCAttributesEdgeType()
@@ -1061,6 +1117,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::EDGE_STYLE, 2);
     }
 
     void testProcessCCAttributesEdgeColor()
@@ -1078,6 +1135,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::EDGE_COLOR, 0x0000FF);
     }
 
     void testProcessCCAttributesFontOpacity()
@@ -1095,6 +1153,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_OPACITY, 128);
     }
 
     void testProcessCCAttributesBackgroundOpacity()
@@ -1112,6 +1171,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::BACKGROUND_OPACITY, 200);
     }
 
     void testProcessCCAttributesWindowColor()
@@ -1129,6 +1189,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::WINDOW_COLOR, 0xFFFF00);
     }
 
     void testProcessCCAttributesWindowOpacity()
@@ -1146,6 +1207,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::WINDOW_OPACITY, 255);
     }
 
     void testProcessCCAttributesMultiple()
@@ -1167,6 +1229,12 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_COLOR, 0xFF0000);
+        assertAttributeValue(WebVTTAttributes::AttributeType::BACKGROUND_COLOR, 0x00FF00);
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_SIZE, 18);
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_OPACITY, 255);
+        assertAttributeValue(WebVTTAttributes::AttributeType::BACKGROUND_OPACITY, 128);
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::EDGE_STYLE));
     }
 
     void testProcessCCAttributesEmpty()
@@ -1184,6 +1252,7 @@ protected:
 
         // setAttributes should still be called even with empty list
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertMappedAttributesUnset();
     }
 
     void testProcessCCAttributesUnsupported()
@@ -1202,10 +1271,7 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
-        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_STYLE));
-        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_SIZE));
-        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_COLOR));
-        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::BACKGROUND_COLOR));
+        assertMappedAttributesUnset();
     }
 
     void testProcessCCAttributesWithInvalidValues()
@@ -1226,6 +1292,9 @@ protected:
         controller->processSetCCAttributesPacket(*ccPacket);
 
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_COLOR, 0xFFFFFFFF);
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_SIZE, 0);
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_OPACITY, 1000);
     }
 
     void testSelectWithValidParameters()
@@ -1474,6 +1543,7 @@ protected:
         auto ccPacket1 = PacketSetCCAttributesBuilder::build(1, attributes1);
         controller->processSetCCAttributesPacket(*ccPacket1);
         CPPUNIT_ASSERT(m_mockEngine->wasAttributesSet());
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_COLOR, 0xFF0000);
 
         // Add more data
         auto dataPacket2 = PacketDataBuilder::build(1, userData, 2000);
@@ -1490,6 +1560,9 @@ protected:
         };
         auto ccPacket2 = PacketSetCCAttributesBuilder::build(1, attributes2);
         controller->processSetCCAttributesPacket(*ccPacket2);
+        assertAttributeValue(WebVTTAttributes::AttributeType::FONT_SIZE, 20);
+        assertAttributeValue(WebVTTAttributes::AttributeType::BACKGROUND_COLOR, 0x00FF00);
+        CPPUNIT_ASSERT(!m_mockEngine->lastAttributeIsSet(WebVTTAttributes::AttributeType::FONT_COLOR));
 
         // Continue playback
         auto dataPacket3 = PacketDataBuilder::build(1, userData, 3000);

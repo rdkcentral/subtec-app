@@ -20,7 +20,9 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#include "Misc.hpp"
+#include <array>
+#include <stdexcept>
+#include <vector>
 
 #include "Region.hpp"
 #include "Consts.hpp"
@@ -54,10 +56,13 @@ CPPUNIT_TEST_SUITE( RegionTest );
     CPPUNIT_TEST(testResetCompleteValidation);
     CPPUNIT_TEST(testMultipleResetCalls);
     CPPUNIT_TEST(testStateConsistencyAfterFailures);
+    CPPUNIT_TEST(testInitFailureState);
+    CPPUNIT_TEST(testDuplicateObjects);
+    CPPUNIT_TEST(testForeignObject);
     CPPUNIT_TEST(testComplexLifecycle);
     CPPUNIT_TEST(testPixmapIntegration);
     CPPUNIT_TEST(testNegativeDimensionCreation);
-    CPPUNIT_TEST(testPixelContentAfterComposition);
+    CPPUNIT_TEST(testPixelContent);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -132,7 +137,6 @@ public:
 
     void testClutArray()
     {
-        const std::uint8_t VERSION = 3;
         const std::int32_t WIDTH = 20;
         const std::int32_t HEIGHT = 10;
         const std::uint8_t COMPATIBILITY =
@@ -208,6 +212,11 @@ public:
         {
             // noop
         }
+
+        CPPUNIT_ASSERT(region.getFirstObject() == nullptr);
+        region.addObject(&objectPool[0]);
+        CPPUNIT_ASSERT(region.removeFirstObject() == &objectPool[0]);
+        CPPUNIT_ASSERT(region.getFirstObject() == nullptr);
     }
 
     // Constructor and initialization tests
@@ -231,7 +240,7 @@ public:
     void testInitBoundaryDimensions()
     {
         Region region;
-        std::array<std::uint8_t, 100> pixmapMemory;
+        std::array<std::uint8_t, 1000000> pixmapMemory;
         Clut clut;
         clut.setId(1);
         clut.setVersion(1);
@@ -298,7 +307,7 @@ public:
     {
         Region region;
         std::array<std::uint8_t, 100> pixmapMemory1;
-        std::array<std::uint8_t, 200> pixmapMemory2;
+        std::array<std::uint8_t, 300> pixmapMemory2;
         Clut clut1, clut2;
         
         clut1.setId(1);
@@ -369,7 +378,7 @@ public:
         CPPUNIT_ASSERT(region.getVersion() == dvbsubdecoder::INVALID_VERSION);
 
         // Test some intermediate values
-        region.setVersion(15);  // Maximum valid version (4-bit field)
+        region.setVersion(15);  // Intermediate byte value
         CPPUNIT_ASSERT(region.getVersion() == 15);
 
         region.setVersion(128);
@@ -675,11 +684,66 @@ public:
         CPPUNIT_ASSERT_NO_THROW(region.reset());
     }
 
+    void testInitFailureState()
+    {
+        Region region;
+        std::array<std::uint8_t, 100> pixmapMemory;
+        Clut clut;
+        clut.setId(1);
+        clut.setVersion(1);
+
+        region.setId(7);
+        region.setVersion(3);
+        region.setBackgroundIndex(2);
+        region.init(10, 10, pixmapMemory.data(),
+                dvbsubdecoder::RegionDepthBits::DEPTH_2BIT,
+                dvbsubdecoder::RegionDepthBits::DEPTH_4BIT, &clut);
+
+        CPPUNIT_ASSERT_THROW(region.init(-1, 10, pixmapMemory.data(),
+                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT, nullptr),
+                std::invalid_argument);
+
+        CPPUNIT_ASSERT(region.getId() == 7);
+        CPPUNIT_ASSERT(region.getVersion() == 3);
+        CPPUNIT_ASSERT(region.getBackgroundIndex() == 2);
+        CPPUNIT_ASSERT(region.getWidth() == 10);
+        CPPUNIT_ASSERT(region.getHeight() == 10);
+        CPPUNIT_ASSERT(region.getCompatibilityLevel() ==
+                dvbsubdecoder::RegionDepthBits::DEPTH_2BIT);
+        CPPUNIT_ASSERT(region.getDepth() ==
+                dvbsubdecoder::RegionDepthBits::DEPTH_4BIT);
+        CPPUNIT_ASSERT(region.getClut() == &clut);
+        CPPUNIT_ASSERT(region.getPixmap().getBuffer() == pixmapMemory.data());
+    }
+
+    void testDuplicateObjects()
+    {
+        Region region;
+        ObjectInstance object;
+
+        region.addObject(&object);
+        CPPUNIT_ASSERT_THROW(region.addObject(&object), std::logic_error);
+        CPPUNIT_ASSERT(region.removeFirstObject() == &object);
+        CPPUNIT_ASSERT(region.getFirstObject() == nullptr);
+    }
+
+    void testForeignObject()
+    {
+        Region region;
+        Region otherRegion;
+        ObjectInstance object;
+
+        otherRegion.addObject(&object);
+        CPPUNIT_ASSERT_THROW(region.getNextObject(&object), std::logic_error);
+        CPPUNIT_ASSERT(otherRegion.removeFirstObject() == &object);
+    }
+
     // Integration tests
     void testComplexLifecycle()
     {
         Region region;
-        std::array<std::uint8_t, 1000> pixmapMemory;
+        std::array<std::uint8_t, 1200> pixmapMemory;
         std::array<ObjectInstance, 10> objectPool;
         Clut clut1, clut2;
         
@@ -800,7 +864,7 @@ public:
             dvbsubdecoder::RegionDepthBits::DEPTH_2BIT, &clut), std::invalid_argument);
     }
 
-    void testPixelContentAfterComposition()
+    void testPixelContent()
     {
         Region region;
         std::array<std::uint8_t, 100> pixmapMemory;

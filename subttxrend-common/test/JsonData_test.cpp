@@ -19,6 +19,10 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "utils/JsonData.hpp"
 
 using subttxrend::common::JsonData;
@@ -166,10 +170,14 @@ public:
     void testConstructorDeeplyNestedJson()
     {
         std::string nestedJson = "{";
+        std::string deepPath;
         for (int i = 0; i < 50; ++i) {
+            if (i > 0) deepPath += ".";
+            deepPath += "level" + std::to_string(i);
             nestedJson += "\"level" + std::to_string(i) + "\": {";
         }
         nestedJson += "\"deepest\": \"value\"";
+        deepPath += ".deepest";
         for (int i = 0; i < 50; ++i) {
             nestedJson += "}";
         }
@@ -177,6 +185,8 @@ public:
 
         JsonData jsonData(nestedJson);
         CPPUNIT_ASSERT(jsonData.isValid());
+        CPPUNIT_ASSERT(jsonData.check(deepPath));
+        CPPUNIT_ASSERT_EQUAL(std::string("value"), jsonData.get(deepPath));
     }
 
     void testMoveConstructor()
@@ -196,6 +206,7 @@ public:
 
         target = std::move(original);
         CPPUNIT_ASSERT(target.isValid());
+        CPPUNIT_ASSERT(!target.check("other"));
         CPPUNIT_ASSERT_EQUAL(std::string("value"), target.get("key"));
     }
 
@@ -283,9 +294,7 @@ public:
     void testGetNullValue()
     {
         JsonData jsonData(R"({"null_val": null})");
-        // Boost property tree typically converts null to empty string
-        std::string result = jsonData.get("null_val");
-        CPPUNIT_ASSERT(result.empty() || result == "null");
+        CPPUNIT_ASSERT_EQUAL(std::string("null"), jsonData.get("null_val"));
     }
 
     void testGetNestedPath()
@@ -303,8 +312,7 @@ public:
     void testGetSpecialCharacters()
     {
         JsonData jsonData(R"({"special": "Hello\nWorld\t!"})");
-        std::string result = jsonData.get("special");
-        CPPUNIT_ASSERT(!result.empty());
+        CPPUNIT_ASSERT_EQUAL(std::string("Hello\nWorld\t!"), jsonData.get("special"));
     }
 
     void testGetArrayStringArray()
@@ -332,10 +340,7 @@ public:
     {
         JsonData jsonData(R"({"array": ["string", 42, true, null]})");
         std::string result = jsonData.getArray("array", "|");
-        // Order and exact representation may vary, but should contain all elements
-        CPPUNIT_ASSERT(!result.empty());
-        CPPUNIT_ASSERT(result.find("string") != std::string::npos);
-        CPPUNIT_ASSERT(result.find("42") != std::string::npos);
+        CPPUNIT_ASSERT_EQUAL(std::string("string|42|true|null"), result);
     }
 
     void testGetArrayNonExistingPath()
@@ -466,8 +471,7 @@ public:
     {
         JsonData jsonData(R"({"escaped": "He said \"Hello\""})");
         CPPUNIT_ASSERT(jsonData.isValid());
-        std::string result = jsonData.get("escaped");
-        CPPUNIT_ASSERT(result.find("Hello") != std::string::npos);
+        CPPUNIT_ASSERT_EQUAL(std::string("He said \"Hello\""), jsonData.get("escaped"));
     }
 
     void testJsonWithQuotesInValues()
@@ -508,9 +512,7 @@ public:
     void testArrayWithNullElements()
     {
         JsonData jsonData(R"({"array": ["value", null, "another"]})");
-        std::string result = jsonData.getArray("array", ",");
-        CPPUNIT_ASSERT(!result.empty());
-        // Should handle null elements gracefully
+        CPPUNIT_ASSERT_EQUAL(std::string("value,null,another"), jsonData.getArray("array", ","));
     }
 
     void testMultipleOperationsOnSameObject()

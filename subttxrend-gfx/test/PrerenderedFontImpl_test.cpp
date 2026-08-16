@@ -20,10 +20,12 @@
 #include <cppunit/extensions/HelperMacros.h>
 
 #include "../src/PrerenderedFontImpl.hpp"
+#include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <fstream>
-#include <stdexcept>
 #include <memory>
+#include <stdexcept>
 
 using subttxrend::gfx::PrerenderedFontImpl;
 
@@ -137,7 +139,7 @@ CPPUNIT_TEST_SUITE( PrerenderedFontImplTest );
     CPPUNIT_TEST(testEndToEndTokensToGlyphs);
     CPPUNIT_TEST(testEndToEndUnicodeRendering);
     CPPUNIT_TEST(testEndToEndMetricsAndTokens);
-    CPPUNIT_TEST(testEndToEndCachePerformance);
+    CPPUNIT_TEST(testEndToEndCacheReuse);
     CPPUNIT_TEST(testEndToEndRobustness);
     CPPUNIT_TEST(testConstructorHeightScaling);
     CPPUNIT_TEST(testConstructorStrictModeEnforcement);
@@ -157,14 +159,14 @@ CPPUNIT_TEST_SUITE( PrerenderedFontImplTest );
     CPPUNIT_TEST(testGetCharInfoInvalidGlyphIndex);
     CPPUNIT_TEST(testGetCharInfoVeryLargeGlyphIndex);
     CPPUNIT_TEST(testGetCharInfoExcessiveOutlineSize);
-    CPPUNIT_TEST(testGetCharInfoAfterDestruction);
+    CPPUNIT_TEST(testRecreateAfterDestruction);
     CPPUNIT_TEST(testGetCharInfoNullCheck);
     CPPUNIT_TEST(testGetCharInfoGlyphTooWide);
     CPPUNIT_TEST(testGetCharInfoGlyphTooTall);
     CPPUNIT_TEST(testGetCharInfoErrorRecovery);
     CPPUNIT_TEST(testGetCharInfoConsecutiveErrors);
     CPPUNIT_TEST(testGetCharInfoMixedValidInvalid);
-    CPPUNIT_TEST(testTextToTokensLigatures);
+    CPPUNIT_TEST(testTextToTokensLigatureSmoke);
     CPPUNIT_TEST(testTextToTokensKerning);
     CPPUNIT_TEST(testTextToTokensComplexScript);
     CPPUNIT_TEST(testTextToTokensControlCharacters);
@@ -173,10 +175,10 @@ CPPUNIT_TEST_SUITE( PrerenderedFontImplTest );
     CPPUNIT_TEST(testTextToTokensRepeatedText);
     CPPUNIT_TEST(testTextToTokensAllPrintableASCII);
     CPPUNIT_TEST(testTextToTokensExtendedUnicode);
-    CPPUNIT_TEST(testTextToTokensEdgeCaseCharacters);
+    CPPUNIT_TEST(testTextToTokensEdgeCaseSmoke);
     CPPUNIT_TEST(testStressRapidTokenization);
     CPPUNIT_TEST(testStressMaximumGlyphs);
-    CPPUNIT_TEST(testStressConcurrentAccess);
+    CPPUNIT_TEST(testStressSequentialAccess);
     CPPUNIT_TEST(testStressMemoryPressure);
     CPPUNIT_TEST(testStressAtlasFragmentation);
     CPPUNIT_TEST(testStressLargeOutlines);
@@ -815,9 +817,13 @@ public:
         if (!fontFileExists(validFontPath)) return;
         font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
 
-        // Test with common ASCII glyph indices (typically A=36, a=68 in many fonts)
-        const auto* charInfo1 = font->getCharInfo(36, 0);
-        const auto* charInfo2 = font->getCharInfo(68, 0);
+        auto tokens = font->textToTokens("Aa");
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), tokens.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), tokens[0].glyphs.size());
+
+        const auto* charInfo1 = font->getCharInfo(tokens[0].glyphs[0].glyphIndex, 0);
+        const auto* charInfo2 = font->getCharInfo(tokens[0].glyphs[1].glyphIndex, 0);
 
         CPPUNIT_ASSERT(charInfo1 != nullptr);
         CPPUNIT_ASSERT(charInfo2 != nullptr);
@@ -1038,19 +1044,31 @@ public:
     void testGetCharInfoOutlineMultipleSizes()
     {
         if (!fontFileExists(validFontPath)) return;
-        font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
 
-        const auto* outline1 = font->getCharInfo(36, 1);
-        const auto* outline3 = font->getCharInfo(36, 3);
-        const auto* outline5 = font->getCharInfo(36, 5);
+        int previousWidth = -1;
+        int previousHeight = -1;
 
-        CPPUNIT_ASSERT(outline1 != nullptr);
-        CPPUNIT_ASSERT(outline3 != nullptr);
-        CPPUNIT_ASSERT(outline5 != nullptr);
+        for (int outlineSize : {1, 3, 5}) {
+            std::unique_ptr<PrerenderedFontImpl> outlinedFont(
+                new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
+            auto tokens = outlinedFont->textToTokens("A");
 
-        // Different outline sizes should create different entries
-        // Note: They might be cached separately, but we can't guarantee distinct pointers
-        // So just verify they all render successfully
+            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), tokens.size());
+            CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), tokens[0].glyphs.size());
+
+            const auto* outlineInfo = outlinedFont->getCharInfo(tokens[0].glyphs[0].glyphIndex, outlineSize);
+
+            CPPUNIT_ASSERT(outlineInfo != nullptr);
+            CPPUNIT_ASSERT(outlineInfo->surface != nullptr);
+
+            if (previousWidth >= 0) {
+                CPPUNIT_ASSERT(outlineInfo->bitmapWidth >= previousWidth);
+                CPPUNIT_ASSERT(outlineInfo->bitmapHeight >= previousHeight);
+            }
+
+            previousWidth = outlineInfo->bitmapWidth;
+            previousHeight = outlineInfo->bitmapHeight;
+        }
     }
 
     void testGetCharInfoAtlasPageCreation()
@@ -1435,10 +1453,9 @@ public:
         CPPUNIT_ASSERT(tokens.size() >= 1);
         CPPUNIT_ASSERT(tokens[0].glyphs.size() >= 3);
 
-        // Each glyph should have a valid codepoint
-        for (const auto& glyph : tokens[0].glyphs) {
-            CPPUNIT_ASSERT(glyph.codepoint > 0);
-        }
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>('a'), tokens[0].glyphs[0].codepoint);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>('b'), tokens[0].glyphs[1].codepoint);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>('c'), tokens[0].glyphs[2].codepoint);
     }
 
     void testTextToTokensGlyphIndexValid()
@@ -1453,8 +1470,9 @@ public:
         // All glyphs should have valid glyph indices
         for (const auto& token : tokens) {
             for (const auto& glyph : token.glyphs) {
-                // Glyph index should be reasonable
-                CPPUNIT_ASSERT(glyph.glyphIndex < 10000);
+                const auto* charInfo = font->getCharInfo(glyph.glyphIndex, 0);
+                CPPUNIT_ASSERT(charInfo != nullptr);
+                CPPUNIT_ASSERT(charInfo->surface != nullptr);
             }
         }
     }
@@ -1613,15 +1631,28 @@ public:
     void testEndToEndMixedOutlines()
     {
         if (!fontFileExists(validFontPath)) return;
-        font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
 
-        // Render same glyph with different outline sizes
-        uint32_t glyphIdx = 36;
+        std::unique_ptr<PrerenderedFontImpl> normalFont(
+            new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
+        auto normalTokens = normalFont->textToTokens("A");
 
-        const auto* normal = font->getCharInfo(glyphIdx, 0);
-        const auto* outline1 = font->getCharInfo(glyphIdx, 2);
-        const auto* outline2 = font->getCharInfo(glyphIdx, 5);
-        const auto* outline3 = font->getCharInfo(glyphIdx, 8);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), normalTokens.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), normalTokens[0].glyphs.size());
+
+        uint32_t glyphIdx = normalTokens[0].glyphs[0].glyphIndex;
+
+        const auto* normal = normalFont->getCharInfo(glyphIdx, 0);
+
+        std::unique_ptr<PrerenderedFontImpl> outlineFont1(
+            new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
+        std::unique_ptr<PrerenderedFontImpl> outlineFont2(
+            new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
+        std::unique_ptr<PrerenderedFontImpl> outlineFont3(
+            new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
+
+        const auto* outline1 = outlineFont1->getCharInfo(glyphIdx, 2);
+        const auto* outline2 = outlineFont2->getCharInfo(glyphIdx, 5);
+        const auto* outline3 = outlineFont3->getCharInfo(glyphIdx, 8);
 
         CPPUNIT_ASSERT(normal != nullptr);
         CPPUNIT_ASSERT(outline1 != nullptr);
@@ -1724,12 +1755,12 @@ public:
         }
     }
 
-    void testEndToEndCachePerformance()
+    void testEndToEndCacheReuse()
     {
         if (!fontFileExists(validFontPath)) return;
         font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
 
-        // Render glyphs multiple times - should be fast due to caching
+        // Render glyphs multiple times so later lookups should hit the cache
         for (int iteration = 0; iteration < 10; iteration++) {
             for (uint32_t i = 36; i < 126; i++) {
                 const auto* charInfo = font->getCharInfo(i, 0);
@@ -2134,7 +2165,7 @@ public:
         }
     }
 
-    void testGetCharInfoAfterDestruction()
+    void testRecreateAfterDestruction()
     {
         if (!fontFileExists(validFontPath)) return;
 
@@ -2247,22 +2278,17 @@ public:
         CPPUNIT_ASSERT(tokens.size() > 0);
     }
 
-    void testTextToTokensLigatures()
+    void testTextToTokensLigatureSmoke()
     {
         if (!fontFileExists(validFontPath)) return;
         font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
 
-        // Common ligature combinations
-        auto tokens = font->textToTokens("officeffle ffi");
+        auto tokens = font->textToTokens("ffi");
 
-        CPPUNIT_ASSERT(tokens.size() >= 3);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), tokens.size());
 
-        // Verify tokens are valid
-        for (const auto& token : tokens) {
-            if (!token.isWhite) {
-                CPPUNIT_ASSERT(token.glyphs.size() > 0);
-            }
-        }
+        CPPUNIT_ASSERT(tokens[0].glyphs.size() >= 1);
+        CPPUNIT_ASSERT(tokens[0].glyphs.size() <= 3);
     }
 
     void testTextToTokensKerning()
@@ -2270,17 +2296,15 @@ public:
         if (!fontFileExists(validFontPath)) return;
         font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
 
-        // Letter pairs that typically have kerning
-        auto tokens1 = font->textToTokens("WAVE");
-        auto tokens2 = font->textToTokens("W A V E");
+        auto combined = font->textToTokens("AV");
+        auto a = font->textToTokens("A");
+        auto v = font->textToTokens("V");
 
-        CPPUNIT_ASSERT(tokens1.size() >= 1);
-        CPPUNIT_ASSERT(tokens2.size() >= 7); // W, space, A, space, V, space, E
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), combined.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), a.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), v.size());
 
-        // Without spaces should typically be narrower
-        if (tokens1.size() > 0 && !tokens1[0].isWhite) {
-            CPPUNIT_ASSERT(tokens1[0].totalAdvanceX > 0);
-        }
+        CPPUNIT_ASSERT(combined[0].totalAdvanceX <= a[0].totalAdvanceX + v[0].totalAdvanceX + 0.1f);
     }
 
     void testTextToTokensComplexScript()
@@ -2291,8 +2315,17 @@ public:
         // Test with complex script if font supports it
         auto tokens = font->textToTokens("संस्कृत"); // Sanskrit
 
-        // Should create tokens without crashing
-        CPPUNIT_ASSERT(tokens.size() >= 0);
+        CPPUNIT_ASSERT(tokens.size() >= 1);
+
+        bool hasGlyphs = false;
+        for (const auto& token : tokens) {
+            if (!token.glyphs.empty()) {
+                hasGlyphs = true;
+                break;
+            }
+        }
+
+        CPPUNIT_ASSERT(hasGlyphs);
     }
 
     void testTextToTokensControlCharacters()
@@ -2326,8 +2359,10 @@ public:
         std::string text("Hello\0World", 11);
         auto tokens = font->textToTokens(text);
 
-        // Should handle gracefully
-        CPPUNIT_ASSERT(tokens.size() >= 0);
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), tokens.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(5), tokens[0].glyphs.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>('H'), tokens[0].glyphs.front().codepoint);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>('o'), tokens[0].glyphs.back().codepoint);
     }
 
     void testTextToTokensVeryLongWord()
@@ -2397,7 +2432,7 @@ public:
         }
     }
 
-    void testTextToTokensEdgeCaseCharacters()
+    void testTextToTokensEdgeCaseSmoke()
     {
         if (!fontFileExists(validFontPath)) return;
         font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
@@ -2412,8 +2447,11 @@ public:
 
         for (const auto& text : edgeCases) {
             auto tokens = font->textToTokens(text);
-            // Should not crash
-            CPPUNIT_ASSERT(tokens.size() >= 0);
+            CPPUNIT_ASSERT(tokens.size() <= 1);
+
+            if (!tokens.empty()) {
+                CPPUNIT_ASSERT(!tokens[0].forceNewline);
+            }
         }
     }
 
@@ -2444,7 +2482,7 @@ public:
         CPPUNIT_ASSERT(tokens.size() > 0);
     }
 
-    void testStressConcurrentAccess()
+    void testStressSequentialAccess()
     {
         if (!fontFileExists(validFontPath)) return;
         font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
@@ -2533,14 +2571,14 @@ public:
         font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
 
         // Test boundary conditions
-        font->getCharInfo(0, 0);
+        CPPUNIT_ASSERT(font->getCharInfo(0, 0) != nullptr);
         font->getCharInfo(1, 0);
         font->getCharInfo(255, 0);
 
-        font->textToTokens("");
-        font->textToTokens("a");
+        CPPUNIT_ASSERT(font->textToTokens("").empty());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), font->textToTokens("a").size());
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(font->getFontHeight() > 0);
     }
 
     void testStressMixedOperations()
@@ -2548,14 +2586,20 @@ public:
         if (!fontFileExists(validFontPath)) return;
         font.reset(new PrerenderedFontImpl(validFontPath.c_str(), 20, false, false));
 
+        auto glyphTokens = font->textToTokens("A");
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), glyphTokens.size());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), glyphTokens[0].glyphs.size());
+
+        uint32_t glyphIndex = glyphTokens[0].glyphs[0].glyphIndex;
+
         // Mix different operations
         for (int i = 0; i < 30; i++) {
             if (i % 3 == 0) {
                 auto tokens = font->textToTokens("mixed test");
                 CPPUNIT_ASSERT(tokens.size() > 0);
             } else if (i % 3 == 1) {
-                const auto* charInfo = font->getCharInfo(36 + (i % 40), i % 5);
-                CPPUNIT_ASSERT(charInfo != nullptr || true); // Allow nullptr
+                const auto* charInfo = font->getCharInfo(glyphIndex, i % 5);
+                CPPUNIT_ASSERT(charInfo != nullptr);
             } else {
                 int h = font->getFontHeight();
                 CPPUNIT_ASSERT(h > 0);

@@ -28,17 +28,14 @@
 
 #include "DecoderClientMock.hpp"
 #include "BitStreamWriter.hpp"
-#include "Misc.hpp"
 
 using dvbsubdecoder::Database;
-using dvbsubdecoder::Page;
 using dvbsubdecoder::ParserRCS;
 using dvbsubdecoder::PesPacketReader;
 using dvbsubdecoder::ParserException;
 using dvbsubdecoder::PixmapAllocator;
 using dvbsubdecoder::Specification;
 using dvbsubdecoder::StcTime;
-using dvbsubdecoder::StcTimeType;
 
 class ParserRCSTest : public CppUnit::TestFixture
 {
@@ -76,8 +73,12 @@ CPPUNIT_TEST_SUITE( ParserRCSTest );
     CPPUNIT_TEST(testInvalidDepthBranch);
     CPPUNIT_TEST(testBothInvalidParameters);
     CPPUNIT_TEST(testRegionAdditionFailure);
+    CPPUNIT_TEST(testPixmapCapacity);
     CPPUNIT_TEST(testTruncatedCharacterColors);
     CPPUNIT_TEST(testVersionSequenceProgression);
+    CPPUNIT_TEST(testTruncatedRCSPacket);
+    CPPUNIT_TEST(testMalformedRCSPacket);
+    CPPUNIT_TEST(testRegionCorrectnessAfterParse);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -370,6 +371,8 @@ public:
             }
 
             CPPUNIT_ASSERT(region->getPixmap().getBuffer()[0] == 0x3); // bg index
+            CPPUNIT_ASSERT(region->getPixmap().getBuffer()[region->getWidth()
+                    * region->getHeight() - 1] == 0x3);
         }
     }
 
@@ -695,11 +698,17 @@ public:
     void testTruncatedHeader()
     {
         prepareParsing();
-        BitStreamWriter w;
-        w.write(0x0F, 8); // region id only (insufficient header)
-        // Missing remaining bytes -> expect reader exception
-        PesPacketReader r(w.data(), w.size(), nullptr, 0);
-        CPPUNIT_ASSERT_THROW(ParserRCS().parseRegionCompositionSegment(*m_database, r), PesPacketReader::Exception);
+        auto w = buildRegionHeader(0x0F, 1, false, 10, 10,
+                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+                dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+                1, 0, 0, 0);
+        for (std::size_t bytes = 1; bytes < w.size(); ++bytes)
+        {
+            prepareParsing();
+            PesPacketReader r(w.data(), bytes, nullptr, 0);
+            CPPUNIT_ASSERT_THROW(ParserRCS().parseRegionCompositionSegment(
+                    *m_database, r), PesPacketReader::Exception);
+        }
     }
 
     void testTruncatedObjectData()
@@ -935,6 +944,18 @@ public:
         CPPUNIT_ASSERT(m_database->getRegionById(0x1D) == nullptr);
     }
 
+    void testPixmapCapacity()
+    {
+        prepareParsing();
+        auto w = buildRegionHeader(0x1E, 1, false, 0xFFFF, 0xFFFF,
+                        dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+                        dvbsubdecoder::RegionDepthBits::DEPTH_8BIT,
+                        1, 0, 0, 0);
+        PesPacketReader r(w.data(), w.size(), nullptr, 0);
+        ParserRCS().parseRegionCompositionSegment(*m_database, r);
+        CPPUNIT_ASSERT(m_database->getRegionById(0x1E) == nullptr);
+    }
+
     void testTruncatedCharacterColors()
     {
         prepareParsing();
@@ -971,6 +992,7 @@ public:
 
     void testTruncatedRCSPacket()
     {
+        prepareParsing();
         BitStreamWriter writer;
         writer.write(0xDC, 8); // region_id only, truly truncated
         PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
@@ -980,11 +1002,10 @@ public:
 
     void testMalformedRCSPacket()
     {
-        // Provide a packet with invalid header values (e.g., impossible region depth)
-        BitStreamWriter writer;
-        writer.write(0xAB, 8); // region_id
-        writer.write(0xFF, 8); // version/fill_flag (invalid)
-        // Omit width, height, and all other required fields
+        prepareParsing();
+        auto writer = buildRegionHeader(0xAB, 1, false, 10, 10,
+                dvbsubdecoder::RegionDepthBits::DEPTH_2BIT,
+                0, 1, 0, 0, 0);
         PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);
         ParserRCS parser;
         CPPUNIT_ASSERT_THROW(parser.parseRegionCompositionSegment(*m_database, reader), ParserException);
@@ -999,13 +1020,15 @@ public:
         writer.write(0x1 << 4, 8); // version=1, fill_flag=0
         writer.write(320, 16); // width
         writer.write(240, 16); // height
-        writer.write((dvbsubdecoder::RegionDepthBits::DEPTH_4BIT << 5) | (dvbsubdecoder::RegionDepthBits::DEPTH_2BIT << 2), 8); // depth=4bit, compatibility=2bit
+        writer.write((dvbsubdecoder::RegionDepthBits::DEPTH_2BIT << 5) | (dvbsubdecoder::RegionDepthBits::DEPTH_4BIT << 2), 8); // depth=4bit, compatibility=2bit
         writer.write(7, 8); // clut_id
-        writer.write(2, 8); // background 8bit
-        writer.write(0, 8); // other backgrounds, reserved
+        writer.write(0, 8); // background 8bit
+        writer.write(2 << 4, 8); // background 4bit
         writer.write(2001, 16); // object_id
-        writer.write((dvbsubdecoder::RegionObjectTypeBits::BASIC_BITMAP << 6) | (dvbsubdecoder::RegionObjectProviderBits::SUBTITLING_STREAM << 4), 8);
-        writer.write(5, 8);
+        writer.write((dvbsubdecoder::RegionObjectTypeBits::BASIC_BITMAP << 14)
+                | (dvbsubdecoder::RegionObjectProviderBits::SUBTITLING_STREAM
+                        << 12)
+                | 5, 16);
         writer.write(50, 16);
 
         PesPacketReader reader(writer.data(), writer.size(), nullptr, 0);

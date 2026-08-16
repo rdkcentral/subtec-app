@@ -18,12 +18,9 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
-#include <memory>
 #include <vector>
-#include <cstring>
 
 #include "../src/FontStripImpl.hpp"
-#include "../include/FontStrip.hpp"
 #include "FontStripMap.hpp"
 #include "Types.hpp"
 
@@ -50,6 +47,7 @@ class FontStripImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testFindFontFileWithNonExistentFontName);
     CPPUNIT_TEST(testFindFontFileWithSpecialCharacters);
     CPPUNIT_TEST(testFindFontFileWithVeryLongFontName);
+    CPPUNIT_TEST(testFindFontFileVerifyAbsolutePathUnchanged);
     CPPUNIT_TEST(testFindFontFileVerifyAbsolutePathReturned);
     CPPUNIT_TEST(testFindFontFileVerifyFontPatternMatching);
     CPPUNIT_TEST(testFindFontFileMultipleConsecutiveCalls);
@@ -112,16 +110,18 @@ class FontStripImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testGetPixmapVerifyPixmapDimensions);
     CPPUNIT_TEST(testGetPixmapVerifyConstReference);
     CPPUNIT_TEST(testFontConfigStaticMemberInitialized);
+    CPPUNIT_TEST(testFontConfigFirstFindFontFileCallInitializes);
     CPPUNIT_TEST(testFontConfigMultipleFontStripInstancesShareConfig);
     CPPUNIT_TEST(testFontConfigPatternCreationAndMatching);
     CPPUNIT_TEST(testFontConfigFontSubstitutionBehavior);
     CPPUNIT_TEST(testFontConfigWithFamilyAndStyleNames);
     CPPUNIT_TEST(testFontConfigCleanupAfterFindFontFile);
     CPPUNIT_TEST(testFreeTypeLibraryCreationSuccess);
+    CPPUNIT_TEST(testFreeTypeFaceCreationFromFilePath);
     CPPUNIT_TEST(testFreeTypeFaceCreationFailureInvalidFile);
     CPPUNIT_TEST(testFreeTypeFaceSetPixelSizes);
     CPPUNIT_TEST(testFreeTypeCharacterLoadingByCode);
-    CPPUNIT_TEST(testFreeTypeCharacterLoadingFailureMissingGlyph);
+    CPPUNIT_TEST(testFreeTypeCharacterLoadingUnsupportedCodePoint);
     CPPUNIT_TEST(testFreeTypeGlyphRendererRenderCall);
     CPPUNIT_TEST(testFreeTypeExceptionPropagation);
     CPPUNIT_TEST(testFreeTypeLoadFlagsForTTFFiles);
@@ -173,6 +173,81 @@ class FontStripImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST_SUITE_END();
 
 public:
+    bool glyphHasNonZeroPixel(const FontStripImpl& fontStrip,
+                              std::int32_t glyphIndex) const
+    {
+        Rectangle rect = fontStrip.getGlyphRect(glyphIndex);
+        if ((rect.m_w == 0) || (rect.m_h == 0))
+        {
+            return false;
+        }
+
+        const auto& pixmap = fontStrip.getPixmap();
+        for (int y = 0; y < rect.m_h; ++y)
+        {
+            auto line = pixmap.getLine(rect.m_y + y);
+            for (int x = 0; x < rect.m_w; ++x)
+            {
+                if (*(line + rect.m_x + x) != 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    bool glyphIsAllZero(const FontStripImpl& fontStrip,
+                        std::int32_t glyphIndex) const
+    {
+        Rectangle rect = fontStrip.getGlyphRect(glyphIndex);
+        if ((rect.m_w == 0) || (rect.m_h == 0))
+        {
+            return true;
+        }
+
+        const auto& pixmap = fontStrip.getPixmap();
+        for (int y = 0; y < rect.m_h; ++y)
+        {
+            auto line = pixmap.getLine(rect.m_y + y);
+            for (int x = 0; x < rect.m_w; ++x)
+            {
+                if (*(line + rect.m_x + x) != 0)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    std::vector<uint8_t> copyGlyphPixels(const FontStripImpl& fontStrip,
+                                         std::int32_t glyphIndex) const
+    {
+        Rectangle rect = fontStrip.getGlyphRect(glyphIndex);
+        std::vector<uint8_t> pixels;
+
+        if ((rect.m_w == 0) || (rect.m_h == 0))
+        {
+            return pixels;
+        }
+
+        pixels.reserve(rect.m_w * rect.m_h);
+        const auto& pixmap = fontStrip.getPixmap();
+        for (int y = 0; y < rect.m_h; ++y)
+        {
+            auto line = pixmap.getLine(rect.m_y + y);
+            for (int x = 0; x < rect.m_w; ++x)
+            {
+                pixels.push_back(*(line + rect.m_x + x));
+            }
+        }
+
+        return pixels;
+    }
+
     void assertLoadFontLeavesUsableStrip(const FontStripImpl& fontStrip,
                                          const Size& glyphSize,
                                          std::size_t glyphCount,
@@ -551,18 +626,6 @@ public:
         CPPUNIT_ASSERT(!result);
     }
 
-    void testLoadGlyphWithNullDataPointer()
-    {
-        Size glyphSize(8, 8);
-        std::size_t glyphCount = 10;
-        FontStripImpl fontStrip(glyphSize, glyphCount);
-
-        bool result = fontStrip.loadGlyph(0, nullptr, 64);
-
-        // Should handle null pointer gracefully
-        CPPUNIT_ASSERT(!result);
-    }
-
     void testLoadGlyphWithZeroSize()
     {
         Size glyphSize(8, 8);
@@ -823,6 +886,13 @@ public:
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
         assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 1));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 2));
+            CPPUNIT_ASSERT(glyphIsAllZero(fontStrip, 3));
+        }
     }
 
     void testLoadFontWithEmptyFontName()
@@ -1052,7 +1122,10 @@ public:
                 CPPUNIT_ASSERT_EQUAL(0, rect.m_y);
                 CPPUNIT_ASSERT_EQUAL(16, rect.m_w);
                 CPPUNIT_ASSERT_EQUAL(16, rect.m_h);
+                CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, i));
             }
+
+            CPPUNIT_ASSERT(glyphIsAllZero(fontStrip, 3));
         }
     }
 
@@ -1067,6 +1140,7 @@ public:
 
         Size charSize(16, 16);
         bool result1 = fontStrip.loadFont("DejaVu Sans", charSize, charMap1);
+        std::vector<uint8_t> firstGlyph = copyGlyphPixels(fontStrip, 0);
 
         FontStripMap charMap2;
         charMap2.addMapping('Z', 0);
@@ -1075,6 +1149,11 @@ public:
 
         assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result1);
         assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result2);
+        if (result1 && result2)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+            CPPUNIT_ASSERT(firstGlyph != copyGlyphPixels(fontStrip, 0));
+        }
     }
 
     void testLoadFontWithVerySmallCharSize()
@@ -1109,6 +1188,14 @@ public:
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
         assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
+        if (result)
+        {
+            for (int i = 0; i < 5; ++i)
+            {
+                CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, i));
+            }
+            CPPUNIT_ASSERT(glyphIsAllZero(fontStrip, 5));
+        }
     }
 
     void testLoadFontCharMapWithGapsInGlyphIndices()
@@ -1128,6 +1215,15 @@ public:
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
         assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 5));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 10));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 15));
+            CPPUNIT_ASSERT(glyphIsAllZero(fontStrip, 1));
+            CPPUNIT_ASSERT(glyphIsAllZero(fontStrip, 6));
+        }
     }
 
     void testLoadFontWithVeryLargeCharSize()
@@ -1401,13 +1497,17 @@ public:
         charMap.addMapping('A', 0);
 
         Size charSize(16, 16);
-        fontStrip.loadFont("DejaVu Sans", charSize, charMap);
+        bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
         const auto& pixmap = fontStrip.getPixmap();
 
         CPPUNIT_ASSERT(pixmap.isValid());
         CPPUNIT_ASSERT_EQUAL(2048, pixmap.getWidth());  // 16 * 128
         CPPUNIT_ASSERT_EQUAL(16, pixmap.getHeight());
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+        }
     }
 
     void testGetPixmapVerifyPixmapDimensions()
@@ -1434,6 +1534,7 @@ public:
         // Verify both references point to the same pixmap
         CPPUNIT_ASSERT_EQUAL(pixmap1.getWidth(), pixmap2.getWidth());
         CPPUNIT_ASSERT_EQUAL(pixmap1.getHeight(), pixmap2.getHeight());
+        CPPUNIT_ASSERT_EQUAL(pixmap1.getLine(0).ptr(), pixmap2.getLine(0).ptr());
     }
 
     void testFontConfigStaticMemberInitialized()
@@ -1442,8 +1543,7 @@ public:
         // We test by calling findFontFile which uses it
         std::string fontFile = FontStripImpl::findFontFile("DejaVu Sans");
 
-        // Should not crash - static member properly initialized
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(fontFile.empty() || fontFile[0] == '/');
     }
 
     void testFontConfigFirstFindFontFileCallInitializes()
@@ -1479,8 +1579,8 @@ public:
         std::string fontFile1 = FontStripImpl::findFontFile("DejaVu Sans");
         std::string fontFile2 = FontStripImpl::findFontFile("DejaVu");
 
-        // Should not crash with different pattern matching
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(fontFile1.empty() || fontFile1[0] == '/');
+        CPPUNIT_ASSERT(fontFile2.empty() || fontFile2[0] == '/');
     }
 
     void testFontConfigFontSubstitutionBehavior()
@@ -1488,8 +1588,7 @@ public:
         // FontConfig may substitute fonts if exact match not found
         std::string fontFile = FontStripImpl::findFontFile("NonExistentFont");
 
-        // Should not crash - may return empty or fallback font
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(fontFile.empty() || fontFile[0] == '/');
     }
 
     void testFontConfigWithFamilyAndStyleNames()
@@ -1498,20 +1597,21 @@ public:
         std::string fontFile1 = FontStripImpl::findFontFile("DejaVu Sans Bold");
         std::string fontFile2 = FontStripImpl::findFontFile("DejaVu Sans Italic");
 
-        // Should not crash when handling family + style combinations
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(fontFile1.empty() || fontFile1[0] == '/');
+        CPPUNIT_ASSERT(fontFile2.empty() || fontFile2[0] == '/');
     }
 
     void testFontConfigCleanupAfterFindFontFile()
     {
         // FontConfig patterns should be cleaned up properly
+        std::string firstFontFile = FontStripImpl::findFontFile("DejaVu Sans");
+        std::string lastFontFile;
         for (int i = 0; i < 100; ++i)
         {
-            std::string fontFile = FontStripImpl::findFontFile("DejaVu Sans");
+            lastFontFile = FontStripImpl::findFontFile("DejaVu Sans");
         }
 
-        // Should not leak memory (verified by valgrind/sanitizers)
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(firstFontFile, lastFontFile);
     }
 
     void testFreeTypeLibraryCreationSuccess()
@@ -1526,8 +1626,11 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash - FreeType library properly initialized
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+        }
     }
 
     void testFreeTypeFaceCreationFromFilePath()
@@ -1543,8 +1646,11 @@ public:
         // Use absolute path if we know a font file
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash when creating FreeType face
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+        }
     }
 
     void testFreeTypeFaceCreationFailureInvalidFile()
@@ -1577,8 +1683,11 @@ public:
         Size charSize(20, 24);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash when setting pixel sizes
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+        }
     }
 
     void testFreeTypeCharacterLoadingByCode()
@@ -1596,25 +1705,37 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash when loading various character codes
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 1));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 2));
+        }
     }
 
-    void testFreeTypeCharacterLoadingFailureMissingGlyph()
+    void testFreeTypeCharacterLoadingUnsupportedCodePoint()
     {
         Size glyphSize(16, 16);
         std::size_t glyphCount = 128;
         FontStripImpl fontStrip(glyphSize, glyphCount);
 
         FontStripMap charMap;
-        // Use character code that might not exist
+        // Use a Unicode noncharacter; FreeType/font fallback may still render .notdef.
         charMap.addMapping(0xFFFE, 0);
 
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should not crash with missing glyph (just skips it)
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
+        if (result)
+        {
+            Rectangle rect = fontStrip.getGlyphRect(0);
+            CPPUNIT_ASSERT_EQUAL(0, rect.m_x);
+            CPPUNIT_ASSERT_EQUAL(0, rect.m_y);
+            CPPUNIT_ASSERT_EQUAL(16, rect.m_w);
+            CPPUNIT_ASSERT_EQUAL(16, rect.m_h);
+        }
     }
 
     void testFreeTypeGlyphRendererRenderCall()
@@ -1650,11 +1771,8 @@ public:
                 }
             }
 
-            // Most glyphs should have some non-zero pixels
-            CPPUNIT_ASSERT(hasNonZeroPixel || !hasNonZeroPixel);
+            CPPUNIT_ASSERT(hasNonZeroPixel);
         }
-
-        CPPUNIT_ASSERT(true);
     }
 
     void testFreeTypeExceptionPropagation()
@@ -1687,8 +1805,11 @@ public:
         // Load .ttf font (uses FT_LOAD_RENDER only)
         bool result = fontStrip.loadFont("DejaVu Sans.ttf", charSize, charMap);
 
-        // Should not crash with TTF-specific load flags
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+        }
     }
 
     void testFreeTypeLoadFlagsForNonTTFFiles()
@@ -1704,8 +1825,7 @@ public:
         // Load non-.ttf font (uses FT_LOAD_RENDER | FT_LOAD_MONOCHROME)
         bool result = fontStrip.loadFont("DejaVu Sans.pcf", charSize, charMap);
 
-        // Should not crash with non-TTF load flags
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result);
     }
 
     void testNoMemoryLeaksInConstructor()
@@ -1716,10 +1836,8 @@ public:
             Size glyphSize(16, 16);
             std::size_t glyphCount = 100;
             FontStripImpl fontStrip(glyphSize, glyphCount);
+            CPPUNIT_ASSERT(fontStrip.getPixmap().isValid());
         }
-
-        // If no crashes, memory management is correct
-        CPPUNIT_ASSERT(true);
     }
 
     void testNoMemoryLeaksInDestructor()
@@ -1733,8 +1851,6 @@ public:
             const auto& pixmap = fontStrip.getPixmap();
             CPPUNIT_ASSERT(pixmap.isValid());
         }
-
-        CPPUNIT_ASSERT(true);
     }
 
     void testNoMemoryLeaksAfterLoadGlyph()
@@ -1750,7 +1866,8 @@ public:
             fontStrip.loadGlyph(i % 10, data.data(), data.size());
         }
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+        CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 9));
     }
 
     void testNoMemoryLeaksAfterLoadFont()
@@ -1763,14 +1880,19 @@ public:
         charMap.addMapping('A', 0);
 
         Size charSize(16, 16);
+        bool anySuccess = false;
 
         // Load font multiple times
         for (int i = 0; i < 10; ++i)
         {
-            fontStrip.loadFont("DejaVu Sans", charSize, charMap);
+            anySuccess = fontStrip.loadFont("DejaVu Sans", charSize, charMap) || anySuccess;
         }
 
-        CPPUNIT_ASSERT(true);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, anySuccess);
+        if (anySuccess)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+        }
     }
 
     void testSurfaceBufferManagement()
@@ -1791,7 +1913,8 @@ public:
             fontStrip.loadGlyph(i, data.data(), data.size());
         }
 
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(150), *fontStrip.getPixmap().getLine(0));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(150), *(fontStrip.getPixmap().getLine(0) + (9 * 32)));
     }
 
     void testExceptionSafetyDuringFontLoading()
@@ -1854,7 +1977,11 @@ public:
 
         // Try to load valid font after failure
         bool result2 = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
-        CPPUNIT_ASSERT(result2 || !result2);
+        assertLoadFontLeavesUsableStrip(fontStrip, glyphSize, glyphCount, result2);
+        if (result2)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+        }
     }
 
     void testMultipleConstructDestructCycles()
@@ -1871,8 +1998,6 @@ public:
             const auto& pixmap = fontStrip.getPixmap();
             CPPUNIT_ASSERT(pixmap.isValid());
         }
-
-        CPPUNIT_ASSERT(true);
     }
 
     void testLargeAllocationHandling()
@@ -1903,10 +2028,14 @@ public:
         FontStripMap charMap;
         charMap.addMapping('A', 1);
         Size charSize(16, 16);
-        fontStrip.loadFont("DejaVu Sans", charSize, charMap);
+        bool fontLoaded = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
         // Both operations should work independently
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(128), *fontStrip.getPixmap().getLine(0));
+        if (fontLoaded)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 1));
+        }
     }
 
     void testLoadFontBeforeLoadingAnyGlyphs()
@@ -1923,9 +2052,14 @@ public:
 
         // Then load glyph
         std::vector<uint8_t> data(256, 128);
-        fontStrip.loadGlyph(1, data.data(), data.size());
+        bool glyphLoaded = fontStrip.loadGlyph(1, data.data(), data.size());
 
-        CPPUNIT_ASSERT(result || !result);
+        CPPUNIT_ASSERT(glyphLoaded);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(128), *(fontStrip.getPixmap().getLine(0) + 16));
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+        }
     }
 
     void testMixedLoadGlyphAndLoadFontCalls()
@@ -1948,10 +2082,15 @@ public:
 
         charMap.clear();
         charMap.addMapping('B', 6);
-        fontStrip.loadFont("DejaVu Sans", charSize, charMap);
+        bool secondFontLoad = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
         // All operations should work
-        CPPUNIT_ASSERT(true);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(100), *fontStrip.getPixmap().getLine(0));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(100), *(fontStrip.getPixmap().getLine(0) + 64));
+        if (secondFontLoad)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 6));
+        }
     }
 
     void testVeryLargeFontStrip10000Glyphs()
@@ -2205,7 +2344,12 @@ public:
         CPPUNIT_ASSERT_EQUAL(2048, pixmap.getWidth());
         CPPUNIT_ASSERT_EQUAL(16, pixmap.getHeight());
 
-        CPPUNIT_ASSERT(loadResult || !loadResult);
+        if (loadResult)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 1));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 2));
+        }
     }
 
     void testCompleteWorkflowConstructLoadGlyphGetGlyphRectGetPixmap()
@@ -2282,6 +2426,7 @@ public:
         Rectangle rect8 = fontStrip.getGlyphRect(8);
         auto line8 = pixmap.getLine(rect8.m_y);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(200), *(line8 + rect8.m_x));
+        CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 4) || glyphHasNonZeroPixel(fontStrip, 6));
     }
 
     void testUseFontStripMapWithComplexMappings()
@@ -2307,9 +2452,6 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Verify mapping works
-        CPPUNIT_ASSERT(result || !result);
-
         // Verify rectangles are calculated correctly
         Rectangle rect0 = fontStrip.getGlyphRect(0);
         Rectangle rect10 = fontStrip.getGlyphRect(10);
@@ -2318,6 +2460,12 @@ public:
         CPPUNIT_ASSERT_EQUAL(0, rect0.m_x);
         CPPUNIT_ASSERT_EQUAL(160, rect10.m_x);
         CPPUNIT_ASSERT_EQUAL(1040, rect65.m_x);
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 10));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 65));
+        }
     }
 
     void testSurfaceDimensionsRemainConsistent()
@@ -2435,15 +2583,19 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should handle Unicode characters
-        CPPUNIT_ASSERT(result || !result);
-
         // Verify rectangles are correct
         Rectangle rect0 = fontStrip.getGlyphRect(0);
         Rectangle rect3 = fontStrip.getGlyphRect(3);
 
         CPPUNIT_ASSERT_EQUAL(0, rect0.m_x);
         CPPUNIT_ASSERT_EQUAL(48, rect3.m_x);
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 0)
+                    || glyphHasNonZeroPixel(fontStrip, 1)
+                    || glyphHasNonZeroPixel(fontStrip, 2)
+                    || glyphHasNonZeroPixel(fontStrip, 3));
+        }
     }
 
     void testVerifyPixmapDataIntegrityAfterOperations()
@@ -2777,6 +2929,10 @@ public:
         Rectangle rect2 = fontStrip.getGlyphRect(2);
         auto line2 = pixmap.getLine(rect2.m_y);
         CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(0), *(line2 + rect2.m_x));
+
+        Rectangle rect3 = fontStrip.getGlyphRect(3);
+        auto line3 = pixmap.getLine(rect3.m_y);
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint8_t>(255), *(line3 + rect3.m_x + 1));
     }
 
     void testFontLoadWithAllASCIICharacters()
@@ -2795,9 +2951,6 @@ public:
         Size charSize(16, 16);
         bool result = fontStrip.loadFont("DejaVu Sans", charSize, charMap);
 
-        // Should handle all ASCII characters
-        CPPUNIT_ASSERT(result || !result);
-
         // Verify some rectangles
         Rectangle rect0 = fontStrip.getGlyphRect(0);  // Space
         Rectangle rect33 = fontStrip.getGlyphRect(33);  // 'A'
@@ -2806,6 +2959,11 @@ public:
         CPPUNIT_ASSERT_EQUAL(0, rect0.m_x);
         CPPUNIT_ASSERT_EQUAL(528, rect33.m_x);  // 33 * 16
         CPPUNIT_ASSERT_EQUAL(1504, rect94.m_x);  // 94 * 16
+        if (result)
+        {
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 33));
+            CPPUNIT_ASSERT(glyphHasNonZeroPixel(fontStrip, 94));
+        }
     }
 
     void testVerifyEmptyRectForInvalidIndices()

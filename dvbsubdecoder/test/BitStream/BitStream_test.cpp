@@ -20,6 +20,8 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <cstdint>
+#include <iterator>
 #include <vector>
 
 #include "BitStream.hpp"
@@ -55,6 +57,10 @@ CPPUNIT_TEST_SUITE( BitStreamTest );
     CPPUNIT_TEST(testMultipleReads);
     CPPUNIT_TEST(testBitAlignment);
     CPPUNIT_TEST(testLargeDataSet);
+    CPPUNIT_TEST(testLongMixedReads);
+    CPPUNIT_TEST(testChunkBitBoundary);
+    CPPUNIT_TEST(testSubReaderBitBoundary);
+    CPPUNIT_TEST(testPartialExhaustion);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -640,6 +646,59 @@ public:
             bitStream.read<8>();
         }
         CPPUNIT_ASSERT_EQUAL((std::uint8_t)0x63, bitStream.read<8>()); // 99 & 0xFF = 0x63
+    }
+
+    void testLongMixedReads()
+    {
+        std::vector<std::uint8_t> data =
+        { 0xD3, 0x6A, 0xF1, 0x28, 0xB4, 0x5C };
+        PesPacketReader reader(data.data(), data.size(), nullptr, 0U);
+        BitStream bitStream(reader);
+
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)6, bitStream.read<3>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)77, bitStream.read<7>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)21, bitStream.read<5>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)120, bitStream.read<8>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)2, bitStream.read<2>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)20, bitStream.read<6>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)5, bitStream.read<4>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)81, bitStream.read<7>());
+    }
+
+    void testChunkBitBoundary()
+    {
+        std::vector<std::uint8_t> chunk1 = {0xAB};
+        std::vector<std::uint8_t> chunk2 = {0xCD};
+        PesPacketReader reader(chunk1.data(), chunk1.size(), chunk2.data(),
+                chunk2.size());
+        BitStream bitStream(reader);
+
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)5, bitStream.read<3>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)23, bitStream.read<6>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)77, bitStream.read<7>());
+    }
+
+    void testSubReaderBitBoundary()
+    {
+        std::vector<std::uint8_t> data = {0xAB, 0xCD, 0xEF};
+        PesPacketReader mainReader(data.data(), data.size(), nullptr, 0U);
+        PesPacketReader subReader(mainReader, 2);
+        BitStream bitStream(subReader);
+
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)5, bitStream.read<3>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)23, bitStream.read<6>());
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)38, bitStream.read<6>());
+        CPPUNIT_ASSERT_THROW(bitStream.read<2>(), PesPacketReader::Exception);
+    }
+
+    void testPartialExhaustion()
+    {
+        std::vector<std::uint8_t> data = {0xAB};
+        PesPacketReader reader(data.data(), data.size(), nullptr, 0U);
+        BitStream bitStream(reader);
+
+        CPPUNIT_ASSERT_EQUAL((std::uint8_t)5, bitStream.read<3>());
+        CPPUNIT_ASSERT_THROW(bitStream.read<6>(), PesPacketReader::Exception);
     }
 };
 

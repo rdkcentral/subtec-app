@@ -20,6 +20,10 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
 #include "ParserEDS.hpp"
 #include "PesPacketReader.hpp"
 #include "Database.hpp"
@@ -35,7 +39,6 @@ using dvbsubdecoder::PesPacketReader;
 using dvbsubdecoder::PixmapAllocator;
 using dvbsubdecoder::Specification;
 using dvbsubdecoder::StcTime;
-using dvbsubdecoder::StcTimeType;
 
 class ParserEDSTest : public CppUnit::TestFixture
 {
@@ -46,8 +49,8 @@ CPPUNIT_TEST_SUITE( ParserEDSTest );
     CPPUNIT_TEST(testPesPacketReaderNonUsage);
     CPPUNIT_TEST(testNullEmptyDisplayStateTransfer);
     CPPUNIT_TEST(testMultipleIncompleteCompleteCycles);
-    CPPUNIT_TEST(testVersionRolloverHandling);
-    CPPUNIT_TEST(testNegativeCorruptInput);
+    CPPUNIT_TEST(testVersionBoundaries);
+    CPPUNIT_TEST(testCommitPage);
     CPPUNIT_TEST(testPageStateAfterParse);
 CPPUNIT_TEST_SUITE_END();
 
@@ -86,15 +89,22 @@ public:
         parser.parseEndOfDisplaySetSegment(*m_database, reader);
         CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::COMPLETE);
 
+        m_database->getCurrentDisplay().set(6, {1, 2, 3, 4}, {5, 6, 7, 8});
+        m_database->getParsedDisplay().set(7, {11, 12, 13, 14}, {15, 16, 17, 18});
+
         // complete state, do nothing
         parser.parseEndOfDisplaySetSegment(*m_database, reader);
         CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::COMPLETE);
+        CPPUNIT_ASSERT(m_database->getCurrentDisplay().getVersion() == 6);
+        CPPUNIT_ASSERT(m_database->getParsedDisplay().getVersion() == 7);
 
         // timed out state, do nothing
         m_database->getPage().setTimedOut();
         CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::TIMEDOUT);
         parser.parseEndOfDisplaySetSegment(*m_database, reader);
         CPPUNIT_ASSERT(m_database->getPage().getState() == Page::State::TIMEDOUT);
+        CPPUNIT_ASSERT(m_database->getCurrentDisplay().getVersion() == 6);
+        CPPUNIT_ASSERT(m_database->getParsedDisplay().getVersion() == 7);
     }
 
     void testDisplayTransferVerification()
@@ -240,12 +250,12 @@ public:
         }
     }
 
-    void testVersionRolloverHandling()
+    void testVersionBoundaries()
     {
         PesPacketReader reader;
         ParserEDS parser;
 
-        // Test version rollover scenario: 15 -> 0
+        // Test maximum version value.
         {
             auto& parsedDisplay = m_database->getParsedDisplay();
             parsedDisplay.set(15, {0, 0, 1000, 1000}, {100, 100, 900, 900});
@@ -256,7 +266,7 @@ public:
             CPPUNIT_ASSERT(m_database->getCurrentDisplay().getVersion() == 15);
         }
 
-        // Next page with version 0 (rollover)
+        // Test minimum version value.
         {
             auto& parsedDisplay = m_database->getParsedDisplay();
             parsedDisplay.set(0, {0, 0, 1100, 1100}, {110, 110, 990, 990});
@@ -270,18 +280,18 @@ public:
         }
     }
 
-    void testNegativeCorruptInput()
+    void testCommitPage()
     {
+        PesPacketReader reader;
         ParserEDS parser;
-        // Truncated/corrupt input should not crash or change DB state
-        std::vector<uint8_t> corruptData = {0xFF};
-        PesPacketReader reader(corruptData.data(), corruptData.size(), nullptr, 0);
-        // Set up DB state
+
+        m_database->epochReset();
         m_database->getPage().startParsing(0, StcTime(), 0);
-        auto prevState = m_database->getPage().getState();
+        CPPUNIT_ASSERT(m_database->canAddRegion());
+
         parser.parseEndOfDisplaySetSegment(*m_database, reader);
-        // Should remain in COMPLETE or INCOMPLETE, not crash
-        CPPUNIT_ASSERT(m_database->getPage().getState() == prevState || m_database->getPage().getState() == Page::State::COMPLETE);
+
+        CPPUNIT_ASSERT(!m_database->canAddRegion());
     }
 
     void testPageStateAfterParse()

@@ -20,10 +20,8 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include <memory>
 #include <vector>
-#include <cstring>
 
 #include "Base64ToPixmap.hpp"
-#include "Types.hpp"
 
 using subttxrend::gfx::base64toPixmap;
 using subttxrend::gfx::Bitmap;
@@ -64,13 +62,13 @@ class Base64ToPixmapTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testRgbaToBgraConversionWithPremult);
     CPPUNIT_TEST(testAlphaPremultiplicationFullyOpaque);
     CPPUNIT_TEST(testAlphaPremultiplicationFullyTransparent);
-    CPPUNIT_TEST(testAlphaPremultiplicationPartialAlpha);
+    CPPUNIT_TEST(testAlphaPremultiplicationMultiPixel);
     CPPUNIT_TEST(testFormatConversionMultiplePixels);
     CPPUNIT_TEST(testStrideHandlingNonAlignedWidth);
     CPPUNIT_TEST(testFormatConversionEdgePixels);
     CPPUNIT_TEST(testFormatConversionLargeImage);
     CPPUNIT_TEST(testCallbackInvokedWithValidData);
-    CPPUNIT_TEST(testCallbackNotInvokedOnInvalidBase64);
+    CPPUNIT_TEST(testInvalidBase64WithCallback);
     CPPUNIT_TEST(testCallbackReceivesCorrectBufferSize);
     CPPUNIT_TEST(testMemoryAllocationSuccess);
     CPPUNIT_TEST(testMemoryAllocationFailureHandling);
@@ -218,6 +216,26 @@ private:
         return "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAC0lEQVR4nGNgQAcAABIAAXfx+gAAAAAASUVORK5CYII=";
     }
 
+    size_t expectedDecodedSize(const std::string& base64)
+    {
+        const size_t padding = (base64[base64.size() - 1] == '=') + (base64[base64.size() - 2] == '=');
+        return ((base64.size() / 4) * 3) - padding;
+    }
+
+    void assertPixel(const Bitmap& bitmap,
+                     size_t offset,
+                     uint8_t blue,
+                     uint8_t green,
+                     uint8_t red,
+                     uint8_t alpha)
+    {
+        CPPUNIT_ASSERT_MESSAGE("Pixel offset should be within buffer", offset + 3 < bitmap.m_buffer.size());
+        CPPUNIT_ASSERT_MESSAGE("Unexpected blue channel", bitmap.m_buffer[offset] == blue);
+        CPPUNIT_ASSERT_MESSAGE("Unexpected green channel", bitmap.m_buffer[offset + 1] == green);
+        CPPUNIT_ASSERT_MESSAGE("Unexpected red channel", bitmap.m_buffer[offset + 2] == red);
+        CPPUNIT_ASSERT_MESSAGE("Unexpected alpha channel", bitmap.m_buffer[offset + 3] == alpha);
+    }
+
 public:
     void setUp()
     {
@@ -321,6 +339,7 @@ public:
         CPPUNIT_ASSERT_MESSAGE("Bitmap stride should be 4", result->m_stride == 4);
         CPPUNIT_ASSERT_MESSAGE("Buffer size should match stride * height",
                               result->m_buffer.size() == static_cast<size_t>(result->m_stride * result->m_height));
+        assertPixel(*result, 0, 0, 0, 0, 0);
     }
 
     void testValidPngPaletteFormat()
@@ -488,9 +507,12 @@ public:
                               result.get() != nullptr);
         if (result)
         {
-            // Just verify image processed successfully
-            CPPUNIT_ASSERT_MESSAGE("Image should have valid dimensions",
-                                  result->m_width > 0 && result->m_height > 0);
+            CPPUNIT_ASSERT_MESSAGE("Image dimensions should be 2x2",
+                                  result->m_width == 2 && result->m_height == 2);
+            assertPixel(*result, 0, 0, 0, 255, 255);
+            assertPixel(*result, 4, 0, 255, 0, 255);
+            assertPixel(*result, result->m_stride, 255, 0, 0, 255);
+            assertPixel(*result, result->m_stride + 4, 0, 255, 255, 255);
         }
     }
 
@@ -503,9 +525,10 @@ public:
                               result.get() != nullptr);
         if (result)
         {
-            // Background correction logic depends on actual corner pixel values
-            // Just verify processing succeeded
-            CPPUNIT_ASSERT_MESSAGE("Image processed", result->m_buffer.size() > 0);
+            for (size_t offset = 0; offset < result->m_buffer.size(); offset += 4)
+            {
+                assertPixel(*result, offset, 0, 0, 0, 0);
+            }
         }
     }
 
@@ -546,10 +569,7 @@ public:
 
     void testRgbaToBgraConversionWithoutPremult()
     {
-        // Use 2x2 image with different corners to avoid background color detection
-        // 2x2 PNG: red, green, blue, yellow in corners
-        std::string validPng = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAF0lEQVR4nAXBAQEAAACC" \
-                              "IPo/2kBETQoHQ9cG++tnayIAAAAASUVORK5CYII=";
+        std::string validPng = create2x2PngDifferentCorners();
         std::unique_ptr<Bitmap> result = base64toPixmap(validPng, false);
 
         CPPUNIT_ASSERT_MESSAGE("RGBA to BGRA conversion should succeed", result.get() != nullptr);
@@ -558,46 +578,45 @@ public:
             CPPUNIT_ASSERT_MESSAGE("Buffer should have valid size", result->m_buffer.size() >= 4);
             CPPUNIT_ASSERT_MESSAGE("Dimensions should be 2x2",
                                   result->m_width == 2 && result->m_height == 2);
-            CPPUNIT_ASSERT_MESSAGE("Stride should be at least 8 for 2x2 image",
-                                  result->m_stride >= 8);
             CPPUNIT_ASSERT_MESSAGE("Buffer size should match stride * height",
                                   result->m_buffer.size() == static_cast<size_t>(result->m_stride * result->m_height));
-            // Verify alpha channel is preserved in BGRA format (check first pixel)
-            // Note: Format is BGRA, so index 3 is alpha
-            CPPUNIT_ASSERT_MESSAGE("Alpha channel should be preserved for opaque pixels",
-                                  result->m_buffer[3] == 255);
+            assertPixel(*result, 0, 0, 0, 255, 255);
+            assertPixel(*result, 4, 0, 255, 0, 255);
+            assertPixel(*result, result->m_stride, 255, 0, 0, 255);
+            assertPixel(*result, result->m_stride + 4, 0, 255, 255, 255);
         }
     }
 
     void testRgbaToBgraConversionWithPremult()
     {
-        std::string validPng = createMinimalValidPng();
+        std::string validPng = create2x2PngDifferentCorners();
         std::unique_ptr<Bitmap> result = base64toPixmap(validPng, true);
 
         CPPUNIT_ASSERT_MESSAGE("Conversion with premult should succeed", result.get() != nullptr);
         if (result)
         {
             CPPUNIT_ASSERT_MESSAGE("Buffer should be populated", result->m_buffer.size() >= 4);
-            CPPUNIT_ASSERT_MESSAGE("Dimensions should be valid",
-                                  result->m_width > 0 && result->m_height > 0);
-            CPPUNIT_ASSERT_MESSAGE("Stride should be at least width * 4",
-                                  result->m_stride >= static_cast<uint32_t>(result->m_width * 4));
-            CPPUNIT_ASSERT_MESSAGE("Buffer size should match stride * height",
-                                  result->m_buffer.size() == static_cast<size_t>(result->m_stride * result->m_height));
+            CPPUNIT_ASSERT_MESSAGE("Dimensions should be 2x2",
+                                  result->m_width == 2 && result->m_height == 2);
+            assertPixel(*result, 0, 0, 0, 255, 255);
+            assertPixel(*result, 4, 0, 255, 0, 255);
+            assertPixel(*result, result->m_stride, 255, 0, 0, 255);
+            assertPixel(*result, result->m_stride + 4, 0, 255, 255, 255);
         }
     }
 
     void testAlphaPremultiplicationFullyOpaque()
     {
-        std::string opaquePng = createPngWithColor(255, 0, 0, 255);
+        std::string opaquePng = create2x2PngDifferentCorners();
         std::unique_ptr<Bitmap> result = base64toPixmap(opaquePng, true);
 
         CPPUNIT_ASSERT_MESSAGE("Fully opaque pixel with premult should succeed", result.get() != nullptr);
         if (result && result->m_buffer.size() >= 4)
         {
-            // Alpha premultiplication with alpha=255 should keep colors relatively unchanged
-            // Just verify buffer is valid, don't check exact pixel values
-            CPPUNIT_ASSERT_MESSAGE("Buffer populated after premult", result->m_buffer.size() >= 4);
+            assertPixel(*result, 0, 0, 0, 255, 255);
+            assertPixel(*result, 4, 0, 255, 0, 255);
+            assertPixel(*result, result->m_stride, 255, 0, 0, 255);
+            assertPixel(*result, result->m_stride + 4, 0, 255, 255, 255);
         }
     }
 
@@ -618,15 +637,17 @@ public:
         }
     }
 
-    void testAlphaPremultiplicationPartialAlpha()
+    void testAlphaPremultiplicationMultiPixel()
     {
-        std::string semiTransparent = create2x2PngUniformCorners(255, 255, 255, 128);
-
-        // First, process without background correction by using different corners
         std::string validPng = create2x2PngDifferentCorners();
         std::unique_ptr<Bitmap> result = base64toPixmap(validPng, true);
 
         CPPUNIT_ASSERT_MESSAGE("Partial alpha with premult should succeed", result.get() != nullptr);
+        if (result)
+        {
+            assertPixel(*result, 0, 0, 0, 255, 255);
+            assertPixel(*result, 4, 0, 255, 0, 255);
+        }
     }
 
     void testFormatConversionMultiplePixels()
@@ -709,7 +730,7 @@ public:
         CPPUNIT_ASSERT_MESSAGE("Result should be valid", result.get() != nullptr);
     }
 
-    void testCallbackNotInvokedOnInvalidBase64()
+    void testInvalidBase64WithCallback()
     {
         std::string invalidBase64 = createInvalidBase64();
         bool callbackInvoked = false;
@@ -744,18 +765,24 @@ public:
     {
         std::string validPng = createMinimalValidPng();
         size_t receivedSize = 0;
-        const uint8_t* receivedBuffer = nullptr;
+        std::vector<uint8_t> receivedBytes;
+        static const uint8_t PNG_SIGNATURE[8] = {137, 80, 78, 71, 13, 10, 26, 10};
 
-        PngCallback callback = [&receivedSize, &receivedBuffer](const uint8_t* buffer, size_t size) {
+        PngCallback callback = [&receivedSize, &receivedBytes](const uint8_t* buffer, size_t size) {
             receivedSize = size;
-            receivedBuffer = buffer;
+            receivedBytes.assign(buffer, buffer + size);
         };
 
         std::unique_ptr<Bitmap> result = base64toPixmap(validPng, false, callback);
 
-        CPPUNIT_ASSERT_MESSAGE("Callback should receive valid buffer", receivedBuffer != nullptr);
-        CPPUNIT_ASSERT_MESSAGE("Callback size should match decoded PNG data", receivedSize > 8);
-        // PNG signature is 8 bytes, so valid PNG should be at least that
+        CPPUNIT_ASSERT_MESSAGE("Callback should receive valid buffer", !receivedBytes.empty());
+        CPPUNIT_ASSERT_MESSAGE("Callback size should match decoded PNG data",
+                              receivedSize == expectedDecodedSize(validPng));
+        for (size_t idx = 0; idx < 8; ++idx)
+        {
+            CPPUNIT_ASSERT_MESSAGE("Decoded buffer should start with PNG signature",
+                                  receivedBytes[idx] == PNG_SIGNATURE[idx]);
+        }
     }
 
     void testMemoryAllocationSuccess()
@@ -978,24 +1005,26 @@ public:
 
     void testEndToEndValidPngWithoutCallback()
     {
-        std::string validPng = createPngWithColor(255, 0, 0, 255);
+        std::string validPng = create2x2PngDifferentCorners();
         std::unique_ptr<Bitmap> result = base64toPixmap(validPng, false);
 
         CPPUNIT_ASSERT_MESSAGE("End-to-end without callback should succeed", result.get() != nullptr);
 
         if (result)
         {
-            CPPUNIT_ASSERT_MESSAGE("Dimensions valid", result->m_width == 1 && result->m_height == 1);
+            CPPUNIT_ASSERT_MESSAGE("Dimensions valid", result->m_width == 2 && result->m_height == 2);
             CPPUNIT_ASSERT_MESSAGE("Buffer size correct",
                                   result->m_buffer.size() == static_cast<size_t>(result->m_stride * result->m_height));
-            // Verify BGRA conversion
-            CPPUNIT_ASSERT_MESSAGE("Format conversion applied", result->m_buffer.size() >= 4);
+            assertPixel(*result, 0, 0, 0, 255, 255);
+            assertPixel(*result, 4, 0, 255, 0, 255);
+            assertPixel(*result, result->m_stride, 255, 0, 0, 255);
+            assertPixel(*result, result->m_stride + 4, 0, 255, 255, 255);
         }
     }
 
     void testEndToEndWithBackgroundCorrection()
     {
-        std::string uniformCorners = createMinimalValidPng();
+        std::string uniformCorners = create2x2PngUniformCorners(0, 0, 255, 128);
         std::unique_ptr<Bitmap> result = base64toPixmap(uniformCorners, false);
 
         CPPUNIT_ASSERT_MESSAGE("End-to-end with background correction should succeed",
@@ -1003,17 +1032,16 @@ public:
 
         if (result)
         {
-            // Background correction depends on corner pixel analysis
-            // Just verify image was processed
-            CPPUNIT_ASSERT_MESSAGE("Image processed successfully", result->m_buffer.size() > 0);
+            for (size_t offset = 0; offset < result->m_buffer.size(); offset += 4)
+            {
+                assertPixel(*result, offset, 0, 0, 0, 0);
+            }
         }
     }
 
     void testEndToEndWithAlphaPremultiplication()
     {
-        // Use 2x2 image with different corners to avoid background color detection
-        std::string validPng = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAF0lEQVR4nAXBAQEAAACC" \
-                              "IPo/2kBETQoHQ9cG++tnayIAAAAASUVORK5CYII=";
+        std::string validPng = create2x2PngDifferentCorners();
         std::unique_ptr<Bitmap> result = base64toPixmap(validPng, true);
 
         CPPUNIT_ASSERT_MESSAGE("End-to-end with alpha premult should succeed",
@@ -1027,10 +1055,10 @@ public:
                                   result->m_width == 2 && result->m_height == 2);
             CPPUNIT_ASSERT_MESSAGE("Buffer size should match stride * height",
                                   result->m_buffer.size() == static_cast<size_t>(result->m_stride * result->m_height));
-            // Alpha premultiplication should preserve alpha channel in BGRA format
-            // Note: Even with premultiplication, alpha channel itself is not modified
-            CPPUNIT_ASSERT_MESSAGE("Alpha channel should be preserved in BGRA format",
-                                  result->m_buffer[3] == 255);
+            assertPixel(*result, 0, 0, 0, 255, 255);
+            assertPixel(*result, 4, 0, 255, 0, 255);
+            assertPixel(*result, result->m_stride, 255, 0, 0, 255);
+            assertPixel(*result, result->m_stride + 4, 0, 255, 255, 255);
         }
     }
 
@@ -1108,10 +1136,10 @@ public:
                               result.get() != nullptr);
         if (result)
         {
-            // Background correction depends on actual corner analysis
-            // Just verify image was processed successfully
-            CPPUNIT_ASSERT_MESSAGE("Image should have valid buffer",
-                                  result->m_buffer.size() > 0);
+            for (size_t offset = 0; offset < result->m_buffer.size(); offset += 4)
+            {
+                assertPixel(*result, offset, 0, 0, 0, 0);
+            }
         }
     }
 
@@ -1125,9 +1153,10 @@ public:
                               result.get() != nullptr);
         if (result)
         {
-            // Just verify image was processed successfully
-            CPPUNIT_ASSERT_MESSAGE("Image should have valid buffer",
-                                  result->m_buffer.size() > 0);
+            assertPixel(*result, 0, 0, 0, 255, 255);
+            assertPixel(*result, 4, 0, 255, 0, 255);
+            assertPixel(*result, result->m_stride, 255, 0, 0, 255);
+            assertPixel(*result, result->m_stride + 4, 0, 255, 255, 255);
         }
     }
 
@@ -1185,7 +1214,7 @@ public:
         if (result)
         {
             CPPUNIT_ASSERT_MESSAGE("Minimal PNG should have buffer", !result->m_buffer.empty());
-            CPPUNIT_ASSERT_MESSAGE("Format conversion should be applied", result->m_buffer.size() >= 4);
+            assertPixel(*result, 0, 0, 0, 0, 0);
         }
     }
 

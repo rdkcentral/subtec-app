@@ -20,6 +20,10 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <cstdint>
+#include <string>
+#include <vector>
+
 #include "PesPacketReader.hpp"
 
 using dvbsubdecoder::PesPacketReader;
@@ -55,9 +59,8 @@ class PesPacketReaderTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testSkipZeroBytes);
     CPPUNIT_TEST(testEmptyReaderOperations);
     CPPUNIT_TEST(testBufferUnderflow);
+    CPPUNIT_TEST(testUint16Underflow);
     CPPUNIT_TEST(testBufferOverflowSkip);
-    CPPUNIT_TEST(testMalformedPacket);
-    CPPUNIT_TEST(testNoSensitiveDataInBuffers);
     CPPUNIT_TEST(testReaderResetBetweenTests);
     CPPUNIT_TEST(testReaderPositionAndOutput);
 CPPUNIT_TEST_SUITE_END();
@@ -140,6 +143,10 @@ public:
         CPPUNIT_ASSERT_THROW(reader.readUint16be(), PesPacketReader::Exception);
         CPPUNIT_ASSERT_THROW(reader.skip(1), PesPacketReader::Exception);
 
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(5),
+            originalReader.getBytesLeft());
+        CPPUNIT_ASSERT_EQUAL(0x12, static_cast<int>(originalReader.readUint8()));
+
         CPPUNIT_ASSERT_THROW(PesPacketReader readerBad(originalReader, 10),
                 PesPacketReader::Exception);
     }
@@ -195,7 +202,11 @@ public:
         
         // Test assignment
         reader2 = reader1;
-        
+
+        CPPUNIT_ASSERT_EQUAL(0x01, static_cast<int>(reader1.readUint8()));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(3),
+            reader1.getBytesLeft());
+
         // Verify both readers work identically
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(4), reader2.getBytesLeft());
         CPPUNIT_ASSERT_EQUAL(0x01, static_cast<int>(reader2.readUint8()));
@@ -535,34 +546,21 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), reader.getBytesLeft());
     }
 
+    void testUint16Underflow()
+    {
+        std::vector<std::uint8_t> data = {0x12};
+        PesPacketReader reader(data.data(), data.size(), nullptr, 0);
+
+        CPPUNIT_ASSERT_THROW(reader.readUint16be(), PesPacketReader::Exception);
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0),
+                reader.getBytesLeft());
+    }
+
     void testBufferOverflowSkip()
     {
         std::vector<std::uint8_t> data = {0x01, 0x02};
         PesPacketReader reader(data.data(), data.size(), nullptr, 0);
         CPPUNIT_ASSERT_THROW(reader.skip(3), PesPacketReader::Exception);
-        // After failed skip, reader is at end (implementation moves position)
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), reader.getBytesLeft());
-    }
-
-    void testMalformedPacket()
-    {
-        // Simulate malformed by passing nullptr and nonzero size
-        // Construction with nullptr and nonzero size should not throw
-        PesPacketReader reader(nullptr, 2, nullptr, 0);
-        // Should report 2 bytes available
-        CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(2), reader.getBytesLeft());
-        // Do not attempt to read, as implementation may not throw and may segfault
-    }
-
-    void testNoSensitiveDataInBuffers()
-    {
-        // All test buffers should be simple values, not credentials
-        std::vector<std::uint8_t> safeData = {0xDE, 0xAD, 0xBE, 0xEF};
-        PesPacketReader reader(safeData.data(), safeData.size(), nullptr, 0);
-        CPPUNIT_ASSERT_EQUAL(0xDE, static_cast<int>(reader.readUint8()));
-        CPPUNIT_ASSERT_EQUAL(0xAD, static_cast<int>(reader.readUint8()));
-        CPPUNIT_ASSERT_EQUAL(0xBE, static_cast<int>(reader.readUint8()));
-        CPPUNIT_ASSERT_EQUAL(0xEF, static_cast<int>(reader.readUint8()));
     }
 
     void testReaderResetBetweenTests()

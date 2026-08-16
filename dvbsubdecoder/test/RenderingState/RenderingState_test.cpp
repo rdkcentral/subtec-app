@@ -19,9 +19,12 @@
 
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 
 #include "RenderingState.hpp"
+#include "Config.hpp"
 #include "Misc.hpp"
 
 using dvbsubdecoder::RenderingState;
@@ -213,7 +216,6 @@ public:
     void testConstructorDefaults()
     {
         RenderingState state;
-        const Rectangle EMPTY_RECTANGLE = { 0, 0, 0, 0 };
 
         // Verify constructor initializes to safe defaults
         CPPUNIT_ASSERT(state.getDisplayBounds().m_x1 == 0);
@@ -232,7 +234,6 @@ public:
         RenderingState state;
         const Rectangle DISPLAY_BOUNDS = { 100, 200, 1000, 2000 };
         const Rectangle WINDOW_BOUNDS = { 50, 100, 500, 1000 };
-        const Rectangle EMPTY_RECTANGLE = { 0, 0, 0, 0 };
 
         // Set up state with bounds and regions
         state.setBounds(DISPLAY_BOUNDS, WINDOW_BOUNDS);
@@ -426,8 +427,8 @@ public:
     {
         RenderingState state;
 
-        // Add exactly MAX_SUPPORTED_REGIONS (16) regions
-        for (std::size_t i = 0; i < 16; ++i)
+        // Add exactly MAX_SUPPORTED_REGIONS regions
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
             CPPUNIT_ASSERT(state.addRegion(static_cast<std::uint8_t>(i), 
                                          static_cast<std::uint8_t>(i), 
@@ -438,10 +439,10 @@ public:
             CPPUNIT_ASSERT(state.getRegionCount() == i + 1);
         }
 
-        CPPUNIT_ASSERT(state.getRegionCount() == 16);
+        CPPUNIT_ASSERT(state.getRegionCount() == dvbsubdecoder::MAX_SUPPORTED_REGIONS);
 
         // Verify all regions are stored correctly
-        for (std::size_t i = 0; i < 16; ++i)
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
             CPPUNIT_ASSERT(state.getRegionByIndex(i).m_id == i);
             CPPUNIT_ASSERT(state.getRegionByIndex(i).m_version == i);
@@ -451,23 +452,27 @@ public:
     void testAddRegionBeyondCapacity()
     {
         RenderingState state;
+        const Rectangle REGION_RECTANGLE = { 0, 0, 10, 10 };
 
         // Fill to capacity
-        for (std::size_t i = 0; i < 16; ++i)
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
-            CPPUNIT_ASSERT(state.addRegion(static_cast<std::uint8_t>(i), 1, { 0, 0, 10, 10 }));
+            CPPUNIT_ASSERT(state.addRegion(static_cast<std::uint8_t>(i), 1, REGION_RECTANGLE));
         }
 
-        CPPUNIT_ASSERT(state.getRegionCount() == 16);
+        CPPUNIT_ASSERT(state.getRegionCount() == dvbsubdecoder::MAX_SUPPORTED_REGIONS);
 
         // Attempt to add beyond capacity - should fail
         CPPUNIT_ASSERT(!state.addRegion(100, 100, { 100, 100, 200, 200 }));
-        CPPUNIT_ASSERT(state.getRegionCount() == 16);
+        CPPUNIT_ASSERT(state.getRegionCount() == dvbsubdecoder::MAX_SUPPORTED_REGIONS);
 
         // Verify state is unchanged
-        for (std::size_t i = 0; i < 16; ++i)
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
             CPPUNIT_ASSERT(state.getRegionByIndex(i).m_id == i);
+            CPPUNIT_ASSERT(state.getRegionByIndex(i).m_version == 1);
+            CPPUNIT_ASSERT(state.getRegionByIndex(i).m_rectangle == REGION_RECTANGLE);
+            CPPUNIT_ASSERT(state.getRegionByIndex(i).m_dirty);
         }
     }
 
@@ -597,9 +602,10 @@ public:
     void testRemoveAllRegionsMultipleCalls()
     {
         RenderingState state;
+        const Rectangle REGION_RECTANGLE = { 0, 0, 10, 10 };
 
         // Add some regions
-        CPPUNIT_ASSERT(state.addRegion(1, 1, { 0, 0, 10, 10 }));
+        CPPUNIT_ASSERT(state.addRegion(1, 1, REGION_RECTANGLE));
         CPPUNIT_ASSERT(state.addRegion(2, 2, { 10, 10, 20, 20 }));
         CPPUNIT_ASSERT(state.getRegionCount() == 2);
 
@@ -614,8 +620,12 @@ public:
         CPPUNIT_ASSERT(state.getRegionCount() == 0);
 
         // Should be able to add regions after multiple removes
-        CPPUNIT_ASSERT(state.addRegion(10, 20, { 0, 0, 10, 10 }));
+        CPPUNIT_ASSERT(state.addRegion(10, 20, REGION_RECTANGLE));
         CPPUNIT_ASSERT(state.getRegionCount() == 1);
+        CPPUNIT_ASSERT(state.getRegionByIndex(0).m_id == 10);
+        CPPUNIT_ASSERT(state.getRegionByIndex(0).m_version == 20);
+        CPPUNIT_ASSERT(state.getRegionByIndex(0).m_rectangle == REGION_RECTANGLE);
+        CPPUNIT_ASSERT(state.getRegionByIndex(0).m_dirty);
     }
 
     void testDirtyFlagStateVerification()
@@ -770,22 +780,25 @@ public:
     void testStateConsistencyAfterFailures()
     {
         RenderingState state;
+        const Rectangle REGION_RECTANGLE = { 0, 0, 10, 10 };
 
         // Fill to capacity
-        for (std::size_t i = 0; i < 16; ++i)
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
-            CPPUNIT_ASSERT(state.addRegion(static_cast<std::uint8_t>(i), 1, { 0, 0, 10, 10 }));
+            CPPUNIT_ASSERT(state.addRegion(static_cast<std::uint8_t>(i), 1, REGION_RECTANGLE));
         }
 
         // Attempt to add beyond capacity - should fail
         CPPUNIT_ASSERT(!state.addRegion(100, 200, { 100, 200, 300, 400 }));
 
         // Verify state is unchanged after failure
-        CPPUNIT_ASSERT(state.getRegionCount() == 16);
-        for (std::size_t i = 0; i < 16; ++i)
+        CPPUNIT_ASSERT(state.getRegionCount() == dvbsubdecoder::MAX_SUPPORTED_REGIONS);
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
             CPPUNIT_ASSERT(state.getRegionByIndex(i).m_id == i);
             CPPUNIT_ASSERT(state.getRegionByIndex(i).m_version == 1);
+            CPPUNIT_ASSERT(state.getRegionByIndex(i).m_rectangle == REGION_RECTANGLE);
+            CPPUNIT_ASSERT(state.getRegionByIndex(i).m_dirty);
         }
 
         // Test exception doesn't corrupt state
@@ -799,8 +812,8 @@ public:
         }
 
         // State should still be valid
-        CPPUNIT_ASSERT(state.getRegionCount() == 16);
-        CPPUNIT_ASSERT_NO_THROW(state.getRegionByIndex(15));
+        CPPUNIT_ASSERT(state.getRegionCount() == dvbsubdecoder::MAX_SUPPORTED_REGIONS);
+        CPPUNIT_ASSERT_NO_THROW(state.getRegionByIndex(dvbsubdecoder::MAX_SUPPORTED_REGIONS - 1));
     }
 
     void testMaximumCapacityScenarios()
@@ -808,7 +821,7 @@ public:
         RenderingState state;
 
         // Fill exactly to capacity
-        for (std::size_t i = 0; i < 16; ++i)
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
             CPPUNIT_ASSERT(state.addRegion(static_cast<std::uint8_t>(i), 
                                          static_cast<std::uint8_t>(255 - i), 
@@ -821,7 +834,7 @@ public:
         // Test all operations at capacity
         CPPUNIT_ASSERT_NO_THROW(state.markAllRegionsAsDirty());
         
-        for (std::size_t i = 0; i < 16; ++i)
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
             CPPUNIT_ASSERT_NO_THROW(state.unmarkRegionAsDirtyByIndex(i));
             CPPUNIT_ASSERT(state.getRegionByIndex(i).m_dirty == false);
@@ -834,12 +847,13 @@ public:
         CPPUNIT_ASSERT(state.getRegionCount() == 0);
 
         // Should be able to fill again
-        for (std::size_t i = 0; i < 16; ++i)
+        for (std::size_t i = 0; i < dvbsubdecoder::MAX_SUPPORTED_REGIONS; ++i)
         {
             CPPUNIT_ASSERT(state.addRegion(static_cast<std::uint8_t>(i + 50), 1, { 0, 0, 10, 10 }));
+            CPPUNIT_ASSERT(state.getRegionByIndex(i).m_dirty);
         }
 
-        CPPUNIT_ASSERT(state.getRegionCount() == 16);
+        CPPUNIT_ASSERT(state.getRegionCount() == dvbsubdecoder::MAX_SUPPORTED_REGIONS);
     }
 
     void testRectangleStorageAccuracy()
@@ -851,16 +865,15 @@ public:
         struct TestRect
         {
             Rectangle rect;
-            const char* description;
         };
 
         TestRect testRects[] = {
-            { { 0, 0, 0, 0 }, "Zero rectangle" },
-            { { -1000, -2000, -100, -200 }, "All negative" },
-            { { 1000, 2000, 100, 200 }, "Inverted positive" },
-            { { -100, 200, 300, -400 }, "Mixed signs inverted" },
-            { { MIN_INT, MIN_INT, MAX_INT, MAX_INT }, "Extreme values" },
-            { { 12345, 67890, 23456, 78901 }, "Arbitrary values" }
+            { { 0, 0, 0, 0 } },
+            { { -1000, -2000, -100, -200 } },
+            { { 1000, 2000, 100, 200 } },
+            { { -100, 200, 300, -400 } },
+            { { MIN_INT, MIN_INT, MAX_INT, MAX_INT } },
+            { { 12345, 67890, 23456, 78901 } }
         };
 
         for (std::size_t i = 0; i < sizeof(testRects) / sizeof(testRects[0]); ++i)
@@ -903,7 +916,8 @@ public:
     void testConstCorrectnessValidation()
     {
         RenderingState state;
-        CPPUNIT_ASSERT(state.addRegion(10, 20, { 10, 20, 100, 200 }));
+        const Rectangle REGION_RECTANGLE = { 10, 20, 100, 200 };
+        CPPUNIT_ASSERT(state.addRegion(10, 20, REGION_RECTANGLE));
 
         // Test const access
         const RenderingState& constState = state;
@@ -916,6 +930,8 @@ public:
         CPPUNIT_ASSERT(constState.getRegionCount() == 1);
         CPPUNIT_ASSERT(constState.getRegionByIndex(0).m_id == 10);
         CPPUNIT_ASSERT(constState.getRegionByIndex(0).m_version == 20);
+        CPPUNIT_ASSERT(constState.getRegionByIndex(0).m_rectangle == REGION_RECTANGLE);
+        CPPUNIT_ASSERT(constState.getRegionByIndex(0).m_dirty);
     }
 
     void testMalformedInitialization()
@@ -925,8 +941,12 @@ public:
         Rectangle invalidRect = { -99999, -99999, -99999, -99999 };
         state.setBounds(invalidRect, invalidRect); // Should not crash
         // Note: RenderingState accepts any rectangle, including invalid ones.
+        CPPUNIT_ASSERT(state.getDisplayBounds() == invalidRect);
+        CPPUNIT_ASSERT(state.getWindowBounds() == invalidRect);
         // Try to add region with invalid data
         CPPUNIT_ASSERT(state.addRegion(255, 255, invalidRect)); // Should succeed, as implementation accepts any values
+        CPPUNIT_ASSERT(state.getRegionByIndex(0).m_rectangle == invalidRect);
+        CPPUNIT_ASSERT(state.getRegionByIndex(0).m_dirty);
     }
 
     void testCorruptStateTransitions()

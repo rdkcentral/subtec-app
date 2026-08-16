@@ -54,14 +54,15 @@ CPPUNIT_TEST_SUITE( StatusTest );
     CPPUNIT_TEST(testPageIdStateTransitions);
     CPPUNIT_TEST(testStcTimeSequence);
     CPPUNIT_TEST(testMixedOperations);
+    CPPUNIT_TEST(testStateIndependence);
     CPPUNIT_TEST(testPageQueryConsistency);
     CPPUNIT_TEST(testSpecVersionConsistency);
     CPPUNIT_TEST(testStateReset);
     CPPUNIT_TEST(testComplexScenario);
     CPPUNIT_TEST(testAllPageIdCombinations);
     CPPUNIT_TEST(testStcTimeComplexScenarios);
-    CPPUNIT_TEST(testIntegrationScenario);
-    CPPUNIT_TEST(testInvalidStatusValues);
+    CPPUNIT_TEST(testVersionComparison);
+    CPPUNIT_TEST(testExtremePageIds);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -423,6 +424,30 @@ public:
         CPPUNIT_ASSERT(status.isSelectedPage(20));
     }
 
+    void testStateIndependence()
+    {
+        Status status(Specification::VERSION_1_3_1);
+        StcTime pts(StcTimeType::LOW_32, 6000);
+
+        status.setPageIds(10, 20);
+        status.setLastPts(pts);
+
+        CPPUNIT_ASSERT(status.isSelectedPage(10));
+        CPPUNIT_ASSERT(status.isCompositionPage(10));
+        CPPUNIT_ASSERT(!status.isAncillaryPage(10));
+        CPPUNIT_ASSERT(status.isSelectedPage(20));
+        CPPUNIT_ASSERT(!status.isCompositionPage(20));
+        CPPUNIT_ASSERT(status.isAncillaryPage(20));
+        CPPUNIT_ASSERT(status.getLastPts() == pts);
+
+        status.setPageIds(30, 40);
+
+        CPPUNIT_ASSERT(!status.isSelectedPage(10));
+        CPPUNIT_ASSERT(status.isCompositionPage(30));
+        CPPUNIT_ASSERT(status.isAncillaryPage(40));
+        CPPUNIT_ASSERT(status.getLastPts() == pts);
+    }
+
     void testPageQueryConsistency()
     {
         Status status(Specification::VERSION_1_3_1);
@@ -562,9 +587,9 @@ public:
         }
     }
 
-    void testIntegrationScenario()
+    void testVersionComparison()
     {
-        // Integration test with both specification versions
+        // Compare behavior with both specification versions
         Status status121(Specification::VERSION_1_2_1);
         Status status131(Specification::VERSION_1_3_1);
         
@@ -589,17 +614,16 @@ public:
         CPPUNIT_ASSERT(status131.getSpecVersion() == Specification::VERSION_1_3_1);
     }
 
-    void testInvalidStatusValues()
+    void testExtremePageIds()
     {
         Status status(Specification::VERSION_1_3_1);
-        // Set page IDs to extreme values
+
         status.setPageIds(65535, 65535);
-        CPPUNIT_ASSERT(status.isSelectedPage(65535)); // Should be selected
-        // Set page IDs to zero (if not valid)
+        CPPUNIT_ASSERT(status.isSelectedPage(65535));
+
         status.setPageIds(0, 0);
-        // Check propagation logic if applicable
-        CPPUNIT_ASSERT(status.isCompositionPage(0)); // Should be true
-        CPPUNIT_ASSERT(status.isAncillaryPage(0));   // Should be true
+        CPPUNIT_ASSERT(status.isCompositionPage(0));
+        CPPUNIT_ASSERT(status.isAncillaryPage(0));
     }
 };
 

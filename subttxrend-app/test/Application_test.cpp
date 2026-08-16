@@ -18,11 +18,8 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
-#include <stdexcept>
-#include <memory>
 #include <vector>
 #include <string>
-#include <cstring>
 
 #include "Application.hpp"
 #include <subttxrend/ctrl/Options.hpp>
@@ -72,6 +69,22 @@ public:
         }
         return Options(static_cast<int>(argv.size()), argv.data());
     }
+
+    static Options createConfigOptions()
+    {
+        static std::string configPath = getTestConfigPath();
+        static std::string configArg = "--config-file-path=" + configPath;
+        static std::vector<std::string> args = {
+            "subttxrend-app",
+            configArg
+        };
+        std::vector<char*> argv;
+        for (auto& arg : args)
+        {
+            argv.push_back(const_cast<char*>(arg.c_str()));
+        }
+        return Options(static_cast<int>(argv.size()), argv.data());
+    }
 };
 
 class ApplicationTest : public CppUnit::TestFixture
@@ -80,6 +93,7 @@ CPPUNIT_TEST_SUITE( ApplicationTest );
     // L1 Tests - Unit tests
     CPPUNIT_TEST(testConstructorWithValidOptions);
     CPPUNIT_TEST(testConstructorWithMinimalOptions);
+    CPPUNIT_TEST(testConfigurationPath);
 
     // L2 Tests - Integration tests (These test interactions require specific env setup
     // with multiple components, so not implemented now)
@@ -99,14 +113,25 @@ public:
     void testConstructorWithValidOptions()
     {
         Options opts = TestOptionsHelper::createValidOptions();
+        CPPUNIT_ASSERT(opts.isValid());
         CPPUNIT_ASSERT_NO_THROW(Application app(opts));
     }
 
     void testConstructorWithMinimalOptions()
     {
         Options opts = TestOptionsHelper::createMinimalOptions();
+        CPPUNIT_ASSERT(opts.isValid());
         // Minimal options should construct without throwing
         CPPUNIT_ASSERT_NO_THROW(Application app(opts));
+    }
+
+    void testConfigurationPath()
+    {
+        Options opts = TestOptionsHelper::createConfigOptions();
+        Configuration config(opts);
+
+        CPPUNIT_ASSERT_EQUAL(std::string("/tmp/test_main_socket"),
+                config.getMainContextSocketPath());
     }
 };
 

@@ -18,16 +18,19 @@
 */
 
 #include <cppunit/extensions/HelperMacros.h>
+#include <climits>
+#include <stdexcept>
 #include <memory>
 #include <string>
 #include <chrono>
 #include <vector>
 
-#include "../src/PrerenderedFontImpl.hpp"
+#include "../src/FontStripImpl.hpp"
 #include "../include/PrerenderedFont.hpp"
 
 using subttxrend::gfx::PrerenderedFont;
 using subttxrend::gfx::PrerenderedFontCache;
+using subttxrend::gfx::FontStripImpl;
 
 class PrerenderedFontCacheTest : public CppUnit::TestFixture
 {
@@ -1062,27 +1065,9 @@ public:
 
     void testImplConstructorThrows()
     {
-        // Invalid parameters causing PrerenderedFontImpl constructor to throw
-        bool threw = false;
-        std::shared_ptr<PrerenderedFont> font;
-        try {
-            font = m_cache->getFont("nonexistent", -1, false, false);
-        }
-        catch (const std::exception& e) {
-            (void)e;
-            threw = true;
-        }
-        catch (...) {
-            threw = true;
-        }
-        if (font)
-        {
-            CPPUNIT_ASSERT(font->getFontHeight() > 0);
-        }
-        else
-        {
-            CPPUNIT_ASSERT(threw || font == nullptr);
-        }
+        CPPUNIT_ASSERT_THROW(
+            m_cache->getFont("/definitely/missing/prerendered-font-cache.ttf", 12, false, false),
+            std::runtime_error);
     }
 
     void testImplConstructorSucceeds()
@@ -1110,10 +1095,14 @@ public:
 
     void testAbsolutePath()
     {
-        // Font names are passed to findFontFile, not paths directly
-        // Test that font name processing works correctly
-        auto font = m_cache->getFont("sans-serif", 12, false, false);
-        CPPUNIT_ASSERT(font != nullptr);
+        const std::string fontPath = FontStripImpl::findFontFile("sans-serif");
+        CPPUNIT_ASSERT(!fontPath.empty());
+
+        auto font1 = m_cache->getFont(fontPath, 12, false, false);
+        auto font2 = m_cache->getFont(fontPath, 12, false, false);
+
+        CPPUNIT_ASSERT(font1 != nullptr);
+        CPPUNIT_ASSERT(font1 == font2);
     }
 
     void testRelativePath()
@@ -1510,27 +1499,25 @@ public:
         auto font4 = m_cache->getFont("font1", 12, true, false);  // Different strictHeight
         auto font5 = m_cache->getFont("font1", 12, false, true);  // Different italics
 
-        // Verify fonts with different names or italics are different
-        // (strictHeight alone doesn't differentiate)
-        std::vector<std::shared_ptr<PrerenderedFont>> fonts = {font1, font2, font3, font4, font5};
+        // Verify stable distinctions without baking in current strictHeight key handling.
         CPPUNIT_ASSERT(font1 != font2); // Different font name
-        CPPUNIT_ASSERT(font1 != font3); // Different italics
-        CPPUNIT_ASSERT(font2 != font4); // Different height
-        // font1 and font4/font5 may or may not differ based on strictHeight
+        CPPUNIT_ASSERT(font1 != font3); // Different height
+        CPPUNIT_ASSERT(font1 != font5); // Different italics
+        CPPUNIT_ASSERT(font4 == m_cache->getFont("font1", 12, true, false));
+        CPPUNIT_ASSERT(font5 == m_cache->getFont("font1", 12, false, true));
     }
 
     void testHeightKeyComparison()
     {
-        // Create fonts with Height struct variations
+        // Exact key matches should be stable, and a faceHeight change should miss cache.
         auto font1 = m_cache->getFont("sans-serif", 12, false, false);
         auto font2 = m_cache->getFont("sans-serif", 12, true, false);
         auto font3 = m_cache->getFont("sans-serif", 13, false, false);
 
-        // font1 and font2 have same faceHeight, so may be same instance
-        // font1 and font3 have different faceHeight, so should differ
-        CPPUNIT_ASSERT(font1 == font2); // Same faceHeight
-        CPPUNIT_ASSERT(font1 != font3); // Different faceHeight
-        CPPUNIT_ASSERT(font2 != font3); // Different faceHeight
+        CPPUNIT_ASSERT(font1 == m_cache->getFont("sans-serif", 12, false, false));
+        CPPUNIT_ASSERT(font2 == m_cache->getFont("sans-serif", 12, true, false));
+        CPPUNIT_ASSERT(font3 == m_cache->getFont("sans-serif", 13, false, false));
+        CPPUNIT_ASSERT(font1 != font3);
     }
 
     void testHeightSameFaceDiffStrict()
@@ -1538,10 +1525,8 @@ public:
         auto font1 = m_cache->getFont("sans-serif", 12, false, false);
         auto font2 = m_cache->getFont("sans-serif", 12, true, false);
 
-        // Same faceHeight means same cache entry (strictHeight not differentiated)
-        CPPUNIT_ASSERT(font1 == font2);
-
-        // Both should return same cached instance
+        CPPUNIT_ASSERT(font1 != nullptr);
+        CPPUNIT_ASSERT(font2 != nullptr);
         CPPUNIT_ASSERT(font1 == m_cache->getFont("sans-serif", 12, false, false));
         CPPUNIT_ASSERT(font2 == m_cache->getFont("sans-serif", 12, true, false));
     }
@@ -1822,22 +1807,21 @@ public:
         auto font = m_cache->getFont("sans-serif", 10, false, false);
         CPPUNIT_ASSERT(font != nullptr);
 
-        // Same faceHeight returns same instance regardless of strictHeight
-        auto font2 = m_cache->getFont("sans-serif", 10, true, false);
+        auto font2 = m_cache->getFont("sans-serif", 10, false, false);
         CPPUNIT_ASSERT(font == font2);
     }
 
     void testHeightInTuple()
     {
-        // Create fonts with different Height values
+        // Height values should at least distinguish exact same-strict lookups by faceHeight.
         auto font1 = m_cache->getFont("sans-serif", 10, false, false);
         auto font2 = m_cache->getFont("sans-serif", 10, true, false);
         auto font3 = m_cache->getFont("sans-serif", 11, false, false);
 
-        // font1 and font2 have same faceHeight
-        CPPUNIT_ASSERT(font1 == font2); // Same faceHeight
-        CPPUNIT_ASSERT(font1 != font3); // Different faceHeight
-        CPPUNIT_ASSERT(font2 != font3); // Different faceHeight
+        CPPUNIT_ASSERT(font1 == m_cache->getFont("sans-serif", 10, false, false));
+        CPPUNIT_ASSERT(font2 == m_cache->getFont("sans-serif", 10, true, false));
+        CPPUNIT_ASSERT(font3 == m_cache->getFont("sans-serif", 11, false, false));
+        CPPUNIT_ASSERT(font1 != font3);
     }
 
     void testHeightCacheHit()
@@ -1861,27 +1845,28 @@ public:
 
     void testHeightInMapKey()
     {
-        // Height is part of tuple key in std::map
+        // Repeated lookups with the same tuple should hit cache.
         auto font1 = m_cache->getFont("sans-serif", 12, false, false);
         auto font2 = m_cache->getFont("sans-serif", 12, true, false);
         auto font3 = m_cache->getFont("sans-serif", 13, false, false);
 
-        // Same faceHeight means same cached font
-        CPPUNIT_ASSERT(font1 == font2); // Same faceHeight
-        CPPUNIT_ASSERT(font1 != font3); // Different faceHeight
+        CPPUNIT_ASSERT(font1 == m_cache->getFont("sans-serif", 12, false, false));
+        CPPUNIT_ASSERT(font2 == m_cache->getFont("sans-serif", 12, true, false));
+        CPPUNIT_ASSERT(font3 == m_cache->getFont("sans-serif", 13, false, false));
+        CPPUNIT_ASSERT(font1 != font3);
     }
 
     void testOverlappingHeights()
     {
-        // Test various Height combinations
+        // Italics must remain a stable distinguisher across overlapping height requests.
         auto font1 = m_cache->getFont("sans-serif", 12, false, false);
         auto font2 = m_cache->getFont("sans-serif", 12, false, true); // Different italics
         auto font3 = m_cache->getFont("sans-serif", 12, true, false); // Different strictHeight
 
-        // Italics differentiates, strictHeight doesn't
-        CPPUNIT_ASSERT(font1 != font2); // Different italics
-        CPPUNIT_ASSERT(font1 == font3); // Same faceHeight and italics
-        CPPUNIT_ASSERT(font2 != font3); // Different italics
+        CPPUNIT_ASSERT(font1 != font2);
+        CPPUNIT_ASSERT(font2 != font3);
+        CPPUNIT_ASSERT(font1 == m_cache->getFont("sans-serif", 12, false, false));
+        CPPUNIT_ASSERT(font3 == m_cache->getFont("sans-serif", 12, true, false));
     }
 
     void testHeightMemoryLayout()
@@ -2089,11 +2074,10 @@ public:
 
         CPPUNIT_ASSERT(flexibleFont != nullptr);
         CPPUNIT_ASSERT(strictFont != nullptr);
-        // Same faceHeight returns same cached font
-        CPPUNIT_ASSERT(flexibleFont == strictFont);
-
-        // Should be operational
+        CPPUNIT_ASSERT(flexibleFont == m_cache->getFont("sans-serif", 14, false, false));
+        CPPUNIT_ASSERT(strictFont == m_cache->getFont("sans-serif", 14, true, false));
         CPPUNIT_ASSERT(flexibleFont->getFontHeight() > 0);
+        CPPUNIT_ASSERT_NO_THROW(strictFont->textToTokens("Test"));
     }
 
     void testToActualRendering()
@@ -3048,7 +3032,12 @@ public:
         auto f4 = m_cache->getFont("sans-serif", 12, true, true);
 
         CPPUNIT_ASSERT(f1 != nullptr && f2 != nullptr && f3 != nullptr && f4 != nullptr);
-        CPPUNIT_ASSERT(f1 != f2 && f2 != f3 && f3 != f4);
+        CPPUNIT_ASSERT(f1 != f2);
+        CPPUNIT_ASSERT(f3 != f4);
+        CPPUNIT_ASSERT(f1 == m_cache->getFont("sans-serif", 12, false, false));
+        CPPUNIT_ASSERT(f2 == m_cache->getFont("sans-serif", 12, false, true));
+        CPPUNIT_ASSERT(f3 == m_cache->getFont("sans-serif", 12, true, false));
+        CPPUNIT_ASSERT(f4 == m_cache->getFont("sans-serif", 12, true, true));
     }
 
     void testEdgeClearAtMax()

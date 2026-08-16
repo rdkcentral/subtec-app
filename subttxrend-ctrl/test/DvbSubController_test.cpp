@@ -52,7 +52,7 @@ public:
 class MockWindow : public Window
 {
 public:
-    MockWindow() : m_visible(false), m_visibleTrueCount(0), m_visibleFalseCount(0), m_updateCount(0) {}
+    MockWindow() : m_visible(false), m_visibleTrueCount(0), m_visibleFalseCount(0) {}
     virtual ~MockWindow() {}
 
     void addKeyEventListener(KeyEventListener* listener) override {}
@@ -94,7 +94,7 @@ public:
         }
     }
     void clear() override {}
-    void update() override { ++m_updateCount; }
+    void update() override {}
     void setDrawDirection(DrawDirection dir) override {}
 
     bool isVisible() const { return m_visible; }
@@ -105,7 +105,6 @@ private:
     bool m_visible;
     int m_visibleTrueCount;
     int m_visibleFalseCount;
-    int m_updateCount;
     Size m_size{1920, 1080};
 };
 
@@ -144,8 +143,8 @@ class PacketDataBuilder
 public:
     static std::unique_ptr<PacketData> buildWithPesData(uint32_t channelId, const std::vector<uint8_t>& pesData)
     {
-        // PacketData requires: channel_id(4) + data
-        uint32_t size = 4 + pesData.size();
+        // PES data requires: channel_id(4) + channel_type(4) + data
+        uint32_t size = 8 + pesData.size();
 
         std::vector<uint8_t> data = {
             0x01, 0x00, 0x00, 0x00, // type = PES_DATA (1)
@@ -153,7 +152,8 @@ public:
             static_cast<uint8_t>(size), static_cast<uint8_t>(size >> 8),
             static_cast<uint8_t>(size >> 16), static_cast<uint8_t>(size >> 24), // size
             static_cast<uint8_t>(channelId), static_cast<uint8_t>(channelId >> 8),
-            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24) // channel ID
+            static_cast<uint8_t>(channelId >> 16), static_cast<uint8_t>(channelId >> 24), // channel ID
+            0x00, 0x00, 0x00, 0x00 // channel type
         };
 
         data.insert(data.end(), pesData.begin(), pesData.end());
@@ -164,11 +164,6 @@ public:
             return nullptr;
         }
         return packet;
-    }
-
-    static std::unique_ptr<PacketData> buildEmpty(uint32_t channelId)
-    {
-        return buildWithPesData(channelId, std::vector<uint8_t>());
     }
 
     // Create PES packet structure
@@ -365,7 +360,11 @@ protected:
 
         controller.activate();
         controller.deactivate();
+        const int visibleFalseCountBeforeProcess = m_window->getVisibleFalseCount();
         controller.process();
+
+        CPPUNIT_ASSERT(!m_window->isVisible());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeProcess, m_window->getVisibleFalseCount());
 
         // Verify controller still maintains its channel even after deactivate + process
         auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
@@ -383,6 +382,11 @@ protected:
         auto pesData = PacketDataBuilder::createPesPacket(50);
         auto dataPacket = PacketDataBuilder::buildWithPesData(100, pesData);
         CPPUNIT_ASSERT(dataPacket != nullptr);
+        CPPUNIT_ASSERT_EQUAL(pesData.size(), dataPacket->getDataSize());
+        CPPUNIT_ASSERT_EQUAL(static_cast<unsigned char>(0), static_cast<unsigned char>(dataPacket->getData()[0]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<unsigned char>(0), static_cast<unsigned char>(dataPacket->getData()[1]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<unsigned char>(1), static_cast<unsigned char>(dataPacket->getData()[2]));
+        CPPUNIT_ASSERT_EQUAL(static_cast<unsigned char>(0xBD), static_cast<unsigned char>(dataPacket->getData()[3]));
 
         controller.addData(*dataPacket);
 
@@ -424,11 +428,15 @@ protected:
 
         // Don't activate - constructor already starts it, but test deactivated state
         controller.deactivate();
+        const int visibleFalseCountBeforeData = m_window->getVisibleFalseCount();
 
         auto pesData = PacketDataBuilder::createPesPacket(30);
         auto dataPacket = PacketDataBuilder::buildWithPesData(100, pesData);
 
         controller.addData(*dataPacket);
+
+        CPPUNIT_ASSERT(!m_window->isVisible());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountBeforeData, m_window->getVisibleFalseCount());
 
         // Verify controller still wants data from its channel even when deactivated
         auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
@@ -542,6 +550,8 @@ protected:
         controller.mute(true);
         controller.mute(false);
 
+        CPPUNIT_ASSERT_MESSAGE("Unmuting should show the window", m_window->isVisible());
+
         // Verify controller remains functional after mute/unmute
         auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
         CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after mute/unmute",
@@ -554,7 +564,11 @@ protected:
         DvbSubController controller(*packet, m_window, m_engine, *m_stcProvider);
 
         controller.mute(true);
+        const int visibleFalseCountAfterFirstMute = m_window->getVisibleFalseCount();
         controller.mute(true); // Should be idempotent
+
+        CPPUNIT_ASSERT(!m_window->isVisible());
+        CPPUNIT_ASSERT_EQUAL(visibleFalseCountAfterFirstMute, m_window->getVisibleFalseCount());
 
         // Verify controller remains functional
         auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
@@ -567,8 +581,12 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(100, 1, 2);
         DvbSubController controller(*packet, m_window, m_engine, *m_stcProvider);
 
+        const int visibleTrueCountBeforeUnmute = m_window->getVisibleTrueCount();
         controller.mute(false);
         controller.mute(false); // Should be idempotent
+
+        CPPUNIT_ASSERT(m_window->isVisible());
+        CPPUNIT_ASSERT_EQUAL(visibleTrueCountBeforeUnmute, m_window->getVisibleTrueCount());
 
         // Verify controller remains functional
         auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
@@ -656,6 +674,7 @@ protected:
 
         controller.activate();
         controller.mute(true);
+        CPPUNIT_ASSERT(!m_window->isVisible());
 
         auto pesData = PacketDataBuilder::createPesPacket(50);
         auto dataPacket = PacketDataBuilder::buildWithPesData(100, pesData);
@@ -664,6 +683,7 @@ protected:
         controller.process();
 
         controller.mute(false);
+        CPPUNIT_ASSERT(m_window->isVisible());
         controller.deactivate();
 
         // Verify controller completed workflow with muting and maintains state
@@ -679,14 +699,17 @@ protected:
 
         // Constructor already starts, so deactivate first
         controller.deactivate();
+        CPPUNIT_ASSERT(!m_window->isVisible());
 
         // Add data while stopped (should be ignored)
         auto pesData1 = PacketDataBuilder::createPesPacket(30);
         auto dataPacket1 = PacketDataBuilder::buildWithPesData(100, pesData1);
         controller.addData(*dataPacket1);
+        CPPUNIT_ASSERT(!m_window->isVisible());
 
         // Now activate and add data
         controller.activate();
+        CPPUNIT_ASSERT(m_window->isVisible());
         auto pesData2 = PacketDataBuilder::createPesPacket(40);
         auto dataPacket2 = PacketDataBuilder::buildWithPesData(100, pesData2);
         controller.addData(*dataPacket2);

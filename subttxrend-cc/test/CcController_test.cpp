@@ -28,7 +28,6 @@
 #include <subttxrend/gfx/Types.hpp>
 #include <memory>
 #include <vector>
-#include <cstring>
 
 using namespace subttxrend::cc;
 using namespace subttxrend::protocol;
@@ -56,7 +55,7 @@ class MockWindow : public subttxrend::gfx::Window
 {
 public:
     MockWindow()
-        : clearCalled(0), updateCalled(0), visibleState(false) {}
+        : clearCalled(0), updateCalled(0), setSizeCalled(0), visibleState(false), size(1920, 1080) {}
     virtual ~MockWindow() {}
 
     void addKeyEventListener(subttxrend::gfx::KeyEventListener* listener) override {}
@@ -74,7 +73,10 @@ public:
         return Size(1920, 1080);
     }
 
-    void setSize(const Size& newSize) override {}
+    void setSize(const Size& newSize) override {
+        setSizeCalled++;
+        size = newSize;
+    }
 
     Size getSize() const override {
         return Size(1920, 1080);
@@ -98,6 +100,7 @@ public:
     void resetCounters() {
         clearCalled = 0;
         updateCalled = 0;
+        setSizeCalled = 0;
         mockContext.resetCounters();
     }
 
@@ -105,7 +108,9 @@ public:
 
     int clearCalled;
     int updateCalled;
+    int setSizeCalled;
     bool visibleState;
+    Size size;
 
 private:
     MockDrawContext mockContext;
@@ -149,13 +154,13 @@ public:
     }
 
     // Build raw CC triplets to match the active UserData parser path.
-    static std::vector<uint8_t> buildCEA708CCPStart(uint8_t serviceNo, uint8_t seqNo, uint8_t packetSize)
+    static std::vector<uint8_t> buildCEA708CCPStart(uint8_t serviceNo, uint8_t seqNo, uint8_t packetSize, uint8_t blockSize = 2)
     {
         // CCP header: sequence_no (2 bits) | packet_size_code (6 bits)
         uint8_t header = ((seqNo & 0x03) << 6) | (packetSize & 0x3F);
 
         // First service block header: service_number (3 bits) | block_size (5 bits)
-        uint8_t sbHeader = ((serviceNo & 0x07) << 5) | 0x02;  // block_size = 2
+        uint8_t sbHeader = ((serviceNo & 0x07) << 5) | (blockSize & 0x1F);
 
         return {0x03, header, sbHeader};
     }
@@ -164,6 +169,24 @@ public:
     static std::vector<uint8_t> buildCEA708CCPData(uint8_t data1, uint8_t data2)
     {
         return {0x02, data1, data2};
+    }
+
+    static std::vector<uint8_t> buildFontColorPacket(uint32_t color)
+    {
+        std::vector<uint8_t> data = {
+            0x12, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00,
+            0x44, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00,
+            static_cast<uint8_t>(color & 0xFF),
+            static_cast<uint8_t>((color >> 8) & 0xFF),
+            static_cast<uint8_t>((color >> 16) & 0xFF),
+            static_cast<uint8_t>((color >> 24) & 0xFF)
+        };
+        data.insert(data.end(), 13 * 4, 0x00);
+        return data;
     }
 
     // Build padding data
@@ -187,11 +210,6 @@ public:
         return std::vector<uint8_t>{0xFF, 0xFF, 0xFF};
     }
 
-    // Build empty data
-    static std::vector<uint8_t> buildEmptyData()
-    {
-        return std::vector<uint8_t>();
-    }
 };
 
 class CcControllerTest : public CppUnit::TestFixture
@@ -702,7 +720,14 @@ public:
     {
         controller->init(static_cast<subttxrend::gfx::Window*>(mockWindow), fontCache);
         PacketSetCCAttributes packet;
-        controller->processSetCCAttributesPacket(packet);  // Should process successfully
+        auto data = CCDataBuilder::buildFontColorPacket(0xFF102030);
+        auto buffer = std::make_unique<subttxrend::common::DataBuffer>(data.begin(), data.end());
+        CPPUNIT_ASSERT(packet.parse(std::move(buffer)));
+        CPPUNIT_ASSERT(packet.containsAttribute(PacketSetCCAttributes::CcAttribType::FONT_COLOR));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(0xFF102030),
+                             packet.getAttributeValue(PacketSetCCAttributes::CcAttribType::FONT_COLOR));
+
+        controller->processSetCCAttributesPacket(packet);
         // Verify controller state unchanged by processing attributes
         CPPUNIT_ASSERT_EQUAL(false, controller->isStarted());
     }
@@ -911,7 +936,7 @@ public:
         controller->unmute();
 
         // Build complete CCP
-        auto startData = CCDataBuilder::buildCEA708CCPStart(1, 0, 4);
+        auto startData = CCDataBuilder::buildCEA708CCPStart(1, 0, 2);
         TestPacketData startPacket(startData);
         controller->addData(startPacket);
 
@@ -1142,6 +1167,9 @@ public:
 
         controller->unmute();
         CPPUNIT_ASSERT_EQUAL(true, mockWindow->visibleState);
+        CPPUNIT_ASSERT_EQUAL(1, mockWindow->setSizeCalled);
+        CPPUNIT_ASSERT_EQUAL(1280, mockWindow->size.m_w);
+        CPPUNIT_ASSERT_EQUAL(720, mockWindow->size.m_h);
     }
 
     void testRendererHiddenWhenMuted()
@@ -1258,7 +1286,7 @@ public:
         controller->unmute();
 
         // Add CCP with zero-size service block
-        auto data = CCDataBuilder::buildCEA708CCPStart(1, 0, 1);
+        auto data = CCDataBuilder::buildCEA708CCPStart(1, 0, 1, 0);
         TestPacketData packet(data);
         controller->addData(packet);
 

@@ -21,7 +21,6 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include <cstring>
 
 #include "Controller.hpp"
 #include <subttxrend/ctrl/Options.hpp>
@@ -139,9 +138,11 @@ CPPUNIT_TEST_SUITE( ControllerTest );
     CPPUNIT_TEST(testConstructorWithNullGfxEngine);
     CPPUNIT_TEST(testConstructorWithNullGfxWindow);
     CPPUNIT_TEST(testStopWithoutStartAsync);
+    CPPUNIT_TEST(testStartStopAsync);
     CPPUNIT_TEST(testOnStreamBrokenNotification);
     CPPUNIT_TEST(testAddBufferWhenNotRendering);
     CPPUNIT_TEST(testOnPacketReceivedBeforeStart);
+    CPPUNIT_TEST(testControlPacketsBeforeStart);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -195,6 +196,24 @@ public:
         CPPUNIT_ASSERT_NO_THROW(controller.stop());
     }
 
+    void testStartStopAsync()
+    {
+        Options opts = TestOptionsHelper::createValidOptions();
+        Configuration config(opts);
+        Controller controller(config, m_mockEngine, m_mockWindow);
+
+        auto startAndStop = [&]() {
+            controller.startAsync();
+            try {
+                controller.stop();
+            } catch (...) {
+                controller.stop();
+                throw;
+            }
+        };
+        CPPUNIT_ASSERT_NO_THROW(startAndStop());
+    }
+
     void testOnStreamBrokenNotification()
     {
         Options opts = TestOptionsHelper::createValidOptions();
@@ -230,6 +249,37 @@ public:
 
         PacketResetAll packet;
         CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(packet));
+    }
+
+    void testControlPacketsBeforeStart()
+    {
+        Options opts = TestOptionsHelper::createValidOptions();
+        Configuration config(opts);
+        Controller controller(config, m_mockEngine, m_mockWindow);
+
+        PacketPause pause;
+        PacketResume resume;
+        PacketMute mute;
+        PacketUnmute unmute;
+        PacketFlush flush;
+        PacketTimestamp timestamp;
+        PacketTtmlTimestamp ttmlTimestamp;
+        PacketWebvttTimestamp webvttTimestamp;
+        PacketTtmlInfo ttmlInfo;
+        PacketSetCCAttributes ccAttributes;
+        PacketData data(Packet::Type::PES_DATA);
+
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(pause));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(resume));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(mute));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(unmute));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(flush));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(timestamp));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(ttmlTimestamp));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(webvttTimestamp));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(ttmlInfo));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(ccAttributes));
+        CPPUNIT_ASSERT_NO_THROW(controller.onPacketReceived(data));
     }
 
 private:

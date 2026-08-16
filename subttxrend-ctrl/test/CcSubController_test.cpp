@@ -25,7 +25,10 @@
 #include <subttxrend/gfx/Window.hpp>
 #include <subttxrend/gfx/DrawContext.hpp>
 #include <subttxrend/gfx/Types.hpp>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 using namespace subttxrend::ctrl;
@@ -50,7 +53,7 @@ public:
 class MockWindow : public Window
 {
 public:
-    MockWindow() : m_mockContext() {}
+    MockWindow() : m_mockContext(), m_visible(false), m_updateCount(0) {}
     virtual ~MockWindow() {}
 
     void addKeyEventListener(KeyEventListener* listener) override {}
@@ -74,16 +77,21 @@ public:
         return Size(1920, 1080);
     }
 
-    void setVisible(bool visible) override {}
+    void setVisible(bool visible) override { m_visible = visible; }
 
     void clear() override {}
 
-    void update() override {}
+    void update() override { ++m_updateCount; }
 
     void setDrawDirection(DrawDirection dir) override {}
 
+    bool isVisible() const { return m_visible; }
+    std::size_t getUpdateCount() const { return m_updateCount; }
+
 private:
     MockDrawContext m_mockContext;
+    bool m_visible;
+    std::size_t m_updateCount;
 };
 
 // Helper to create PacketSubtitleSelection for testing
@@ -370,9 +378,8 @@ protected:
         auto packet = PacketSubtitleSelectionBuilder::build(100, static_cast<uint32_t>(subttxrend::cc::CeaType::CEA_608), 1);
         CcSubController controller(*packet, m_mockWindow, m_fontCache);
 
-        controller.process();
+        CPPUNIT_ASSERT_NO_THROW(controller.process());
 
-        // Verify controller still functional after process
         auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
         CPPUNIT_ASSERT_MESSAGE("Controller should still want data after process",
                                controller.wantsData(*testPacket));
@@ -385,10 +392,9 @@ protected:
 
         // Process multiple times should work
         for (int i = 0; i < 10; i++) {
-            controller.process();
+            CPPUNIT_ASSERT_NO_THROW(controller.process());
         }
 
-        // Verify controller still functional
         auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
         CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after multiple process calls",
                                controller.wantsData(*testPacket));
@@ -637,10 +643,11 @@ protected:
     {
         auto packet = PacketSubtitleSelectionBuilder::build(100, static_cast<uint32_t>(subttxrend::cc::CeaType::CEA_608), 1);
         CcSubController controller(*packet, m_mockWindow, m_fontCache);
+        const auto updateCount = m_mockWindow->getUpdateCount();
 
         controller.setTextForPreview("Test preview text");
 
-        // Verify controller remains functional
+        CPPUNIT_ASSERT_MESSAGE("Preview text should update the window", m_mockWindow->getUpdateCount() > updateCount);
         auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
         CPPUNIT_ASSERT_MESSAGE("Controller should remain functional after setTextForPreview",
                                controller.wantsData(*testPacket));
@@ -714,9 +721,11 @@ protected:
         CcSubController controller(*packet, m_mockWindow, m_fontCache);
 
         auto testPacket = PacketSubtitleSelectionBuilder::build(100, 0, 0);
+        CPPUNIT_ASSERT_MESSAGE("Controller should start muted", !m_mockWindow->isVisible());
 
-        // Mute while active - should not affect wantsData
+        // Mute while active - should hide the window without rejecting data.
         controller.mute(true);
+        CPPUNIT_ASSERT_MESSAGE("Mute should hide the window", !m_mockWindow->isVisible());
         CPPUNIT_ASSERT_MESSAGE("Muted controller should still want data",
                                controller.wantsData(*testPacket));
 
@@ -730,6 +739,7 @@ protected:
 
         // Unmute
         controller.mute(false);
+        CPPUNIT_ASSERT_MESSAGE("Unmute should show the window", m_mockWindow->isVisible());
 
         // Should still want data after unmute
         CPPUNIT_ASSERT_MESSAGE("Unmuted controller should still want data",
@@ -741,8 +751,10 @@ protected:
         // Test idempotency and stability
         controller.mute(true);
         controller.mute(true);
+        CPPUNIT_ASSERT_MESSAGE("Repeated mute should keep the window hidden", !m_mockWindow->isVisible());
         controller.mute(false);
         controller.mute(false);
+        CPPUNIT_ASSERT_MESSAGE("Repeated unmute should keep the window visible", m_mockWindow->isVisible());
 
         // Verify still functional after mute operations
         CPPUNIT_ASSERT_NO_THROW(controller.process());

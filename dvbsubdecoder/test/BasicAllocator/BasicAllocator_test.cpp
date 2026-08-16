@@ -21,6 +21,8 @@
 #include <cppunit/extensions/HelperMacros.h>
 
 #include <array>
+#include <cstdint>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -40,6 +42,7 @@ CPPUNIT_TEST_SUITE( BasicAllocatorTest );
     CPPUNIT_TEST(testAllocNoInit);
     CPPUNIT_TEST(testDoubleFree);
     CPPUNIT_TEST(testTraits);
+    CPPUNIT_TEST(testTraitsLifetime);
     CPPUNIT_TEST(testConstructorInitialState);
     CPPUNIT_TEST(testInitBoundaryValues);
     CPPUNIT_TEST(testAllocateZeroSize);
@@ -240,6 +243,40 @@ public:
         CPPUNIT_ASSERT_THROW(traits.allocUnique<BigArray>(), std::bad_alloc);
 
         CPPUNIT_ASSERT_THROW(traits.allocUnique<Thrower>(), std::invalid_argument);
+    }
+
+    void testTraitsLifetime()
+    {
+        struct Tracked
+        {
+            explicit Tracked(int* destroyed) :
+                    m_destroyed(destroyed)
+            {
+            }
+
+            ~Tracked()
+            {
+                ++*m_destroyed;
+            }
+
+            int* m_destroyed;
+        };
+
+        const std::size_t BUFFER_SIZE = 128;
+        std::array<std::uint8_t, BUFFER_SIZE> buffer;
+        int destroyed = 0;
+        BasicAllocator allocator;
+        allocator.init(buffer.data(), buffer.size());
+
+        {
+            AllocatorTraits traits(allocator);
+            auto block = traits.allocUnique<Tracked>(&destroyed);
+            CPPUNIT_ASSERT(block);
+            CPPUNIT_ASSERT_EQUAL(0, destroyed);
+        }
+
+        CPPUNIT_ASSERT_EQUAL(1, destroyed);
+        allocator.reset();
     }
 
     // Basic API coverage tests
@@ -497,14 +534,13 @@ public:
         // Test exception safety during allocation failure
         allocator.init(buffer.data(), buffer.size());
         
-        try {
-            allocator.allocate(BUFFER_SIZE * 2, 1); // Too large
-        } catch (const std::bad_alloc&) {
-            // Allocator should still be in valid state
-            void* block = allocator.allocate(100, 1);
-            CPPUNIT_ASSERT(block);
-            allocator.free(block);
-        }
+        CPPUNIT_ASSERT_THROW(allocator.allocate(BUFFER_SIZE * 2, 1),
+                std::bad_alloc);
+
+        // Allocator should still be in valid state.
+        void* block = allocator.allocate(100, 1);
+        CPPUNIT_ASSERT(block);
+        allocator.free(block);
         
         allocator.reset();
     }
@@ -551,13 +587,11 @@ public:
         CPPUNIT_ASSERT(validBlock);
         
         // Attempt invalid operations
-        try {
-            allocator.allocate(BUFFER_SIZE * 2, 1);
-        } catch (const std::bad_alloc&) {}
-        
-        try {
-            allocator.allocate(100, 3); // Invalid alignment
-        } catch (const std::logic_error&) {}
+        CPPUNIT_ASSERT_THROW(allocator.allocate(BUFFER_SIZE * 2, 1),
+            std::bad_alloc);
+
+        CPPUNIT_ASSERT_THROW(allocator.allocate(100, 3),
+            std::logic_error);
         
         // Valid block should still be freeable
         allocator.free(validBlock);

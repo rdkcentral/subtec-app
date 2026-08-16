@@ -29,7 +29,6 @@
 #include "dvbsubdecoder/Types.hpp"
 
 #include "DecoderClientMock.hpp"
-#include "PesPackets/PesBuilder.hpp"
 
 #include "TestCaseData.hpp"
 
@@ -384,6 +383,24 @@ public:
         m_decoderClient.clearCallbackHistory();
         m_decoder->draw();
         CPPUNIT_ASSERT(dataSet.getCallsAfterDraw() == m_decoderClient.getCallbackHistory());
+
+        m_decoderClient.clearCallbackHistory();
+        CPPUNIT_ASSERT(m_decoder->addPesPacket(pesPacket.getData(), pesPacket.getSize()));
+        CPPUNIT_ASSERT(m_decoder->process());
+
+        m_decoderClient.clearCallbackHistory();
+        m_decoder->draw();
+
+        bool drewSubtitle = false;
+        for (const auto& methodData : m_decoderClient.getCallbackHistory())
+        {
+            if (methodData.method == MethodData::Method::gfxDraw)
+            {
+                drewSubtitle = true;
+                break;
+            }
+        }
+        CPPUNIT_ASSERT(drewSubtitle);
     }
 
     void testInvalidate()
@@ -520,10 +537,16 @@ public:
         std::uint8_t dummyBuffer[1] = {0};
         CPPUNIT_ASSERT(!decoder->addPesPacket(dummyBuffer, 0));
 
-        // Very small buffer (single sync byte) – capture return but don't assert strict value
+        // Packets shorter than the PES header are rejected.
         std::uint8_t smallBuffer[1] = {0x47};
-        (void)decoder->addPesPacket(smallBuffer, 1);
+        CPPUNIT_ASSERT(!decoder->addPesPacket(smallBuffer, 1));
         decoder->process(); // Should not crash regardless of accept/reject
+
+        std::uint8_t invalidStreamId[6] = {0x00, 0x00, 0x01, 0xBE, 0x00, 0x01};
+        CPPUNIT_ASSERT(!decoder->addPesPacket(invalidStreamId, sizeof(invalidStreamId)));
+
+        std::uint8_t invalidPesLength[6] = {0x00, 0x00, 0x01, 0xBD, 0x00, 0x01};
+        CPPUNIT_ASSERT(!decoder->addPesPacket(invalidPesLength, sizeof(invalidPesLength)));
 
         // Multiple empty packets all rejected
         for (int i = 0; i < 5; ++i) {
@@ -763,10 +786,12 @@ public:
         decoder->setPageIds(0, 0);
         decoder->start();
         
-        // Test repeated process calls
+        // Repeated calls report the pending redraw until draw() clears it.
         for (int i = 0; i < 10; ++i) {
             CPPUNIT_ASSERT(decoder->process());
         }
+        decoder->draw();
+        CPPUNIT_ASSERT(!decoder->process());
         
         // Test repeated draw calls
         for (int i = 0; i < 5; ++i) {

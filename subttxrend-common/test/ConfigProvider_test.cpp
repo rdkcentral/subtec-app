@@ -19,6 +19,8 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <map>
+#include <string>
+#include <vector>
 #include <climits>
 
 #include "ConfigProvider.hpp"
@@ -100,6 +102,7 @@ CPPUNIT_TEST_SUITE(ConfigProviderTest);
     CPPUNIT_TEST(testGetIntSignOnly);
     CPPUNIT_TEST(testGetIntOverflow);
     CPPUNIT_TEST(testGetIntUnderflow);
+    CPPUNIT_TEST(testGetIntBoundaries);
     CPPUNIT_TEST(testGetArrayBasicSplit);
     CPPUNIT_TEST(testGetArraySingleToken);
     CPPUNIT_TEST(testGetArrayEmptyValue);
@@ -116,6 +119,8 @@ CPPUNIT_TEST_SUITE(ConfigProviderTest);
     CPPUNIT_TEST(testGetCstrWithMissingKey);
     CPPUNIT_TEST(testGetCstrWithEmptyString);
     CPPUNIT_TEST(testGetCstrNullDefault);
+    CPPUNIT_TEST(testSetNullValue);
+    CPPUNIT_TEST(testRemoveValue);
     CPPUNIT_TEST(testMixedTypesInConfig);
     CPPUNIT_TEST(testBulkRetrieval);
     CPPUNIT_TEST(testHasValueVsGetDefaultConsistency);
@@ -291,6 +296,15 @@ public:
         CPPUNIT_ASSERT_EQUAL(99, m_provider.getInt("intKey", 99));
     }
 
+    void testGetIntBoundaries()
+    {
+        m_provider.setValue("maxKey", std::to_string(INT_MAX));
+        m_provider.setValue("minKey", std::to_string(INT_MIN));
+
+        CPPUNIT_ASSERT_EQUAL(INT_MAX, m_provider.getInt("maxKey"));
+        CPPUNIT_ASSERT_EQUAL(INT_MIN, m_provider.getInt("minKey"));
+    }
+
     void testGetArrayBasicSplit()
     {
         m_provider.setValue("arrayKey", "a,b,c");
@@ -408,6 +422,11 @@ public:
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1000), result.size());
         CPPUNIT_ASSERT_EQUAL(std::string("item0"), result[0]);
         CPPUNIT_ASSERT_EQUAL(std::string("item999"), result[999]);
+
+        for (int i = 0; i < 1000; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL("item" + std::to_string(i), result[i]);
+        }
     }
 
     void testGetCstrWithExistingKey()
@@ -437,6 +456,25 @@ public:
     {
         const char* result = m_provider.getCstr("missing", nullptr);
         CPPUNIT_ASSERT(result == nullptr);
+    }
+
+    void testSetNullValue()
+    {
+        m_provider.setValue("nullKey", "value");
+        m_provider.setValue("nullKey", nullptr);
+
+        CPPUNIT_ASSERT(!m_provider.hasValue("nullKey"));
+        CPPUNIT_ASSERT_EQUAL(std::string("default"), m_provider.get("nullKey", "default"));
+        CPPUNIT_ASSERT(m_provider.getCstr("nullKey") == nullptr);
+    }
+
+    void testRemoveValue()
+    {
+        m_provider.setValue("removeKey", "value");
+        m_provider.removeValue("removeKey");
+
+        CPPUNIT_ASSERT(!m_provider.hasValue("removeKey"));
+        CPPUNIT_ASSERT_EQUAL(std::string("default"), m_provider.get("removeKey", "default"));
     }
 
     void testMixedTypesInConfig()
@@ -524,21 +562,21 @@ public:
 
     void testConstCorrectnessAllMethods()
     {
-        m_provider.setValue("testKey", "value");
+        m_provider.setValue("testKey", "42");
 
         // Create const reference to test const-correctness
         const ConfigProvider& constProvider = m_provider;
 
         // All these should compile and work with const reference
         CPPUNIT_ASSERT(constProvider.hasValue("testKey"));
-        CPPUNIT_ASSERT_EQUAL(std::string("value"), constProvider.get("testKey"));
-        CPPUNIT_ASSERT_EQUAL(0, constProvider.getInt("testKey", 0));
+        CPPUNIT_ASSERT_EQUAL(std::string("42"), constProvider.get("testKey"));
+        CPPUNIT_ASSERT_EQUAL(42, constProvider.getInt("testKey", 0));
 
         std::vector<std::string> result = constProvider.getArray("testKey", ",");
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), result.size());
 
         const char* cstrResult = constProvider.getCstr("testKey");
-        CPPUNIT_ASSERT_EQUAL(std::string("value"), std::string(cstrResult));
+        CPPUNIT_ASSERT_EQUAL(std::string("42"), std::string(cstrResult));
     }
 
     void testUnicodeKeyAndValue()
@@ -554,12 +592,11 @@ public:
 
     void testSpecialCharactersInValues()
     {
-        m_provider.setValue("specialKey", "value\nwith\ttabs\rand\r\nnewlines");
+        const std::string expected = "value\nwith\ttabs\rand\r\nnewlines";
+        m_provider.setValue("specialKey", expected);
         std::string result = m_provider.get("specialKey");
 
-        CPPUNIT_ASSERT(result.find('\n') != std::string::npos);
-        CPPUNIT_ASSERT(result.find('\t') != std::string::npos);
-        CPPUNIT_ASSERT(result.find('\r') != std::string::npos);
+        CPPUNIT_ASSERT_EQUAL(expected, result);
     }
 
     void testNullCharacterInValue()

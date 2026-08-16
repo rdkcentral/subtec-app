@@ -21,10 +21,10 @@
 #include <cppunit/extensions/HelperMacros.h>
 
 #include "Parser.hpp"
+#include "ParserException.hpp"
 
 #include "DecoderClientMock.hpp"
 #include "BitStreamWriter.hpp"
-#include "Misc.hpp"
 
 #include "Database.hpp"
 #include "PesBuffer.hpp"
@@ -49,6 +49,7 @@ std::uint32_t g_rcsCounter = 0;
 std::uint32_t g_cdsCounter = 0;
 std::uint32_t g_odsCounter = 0;
 std::uint32_t g_edsCounter = 0;
+bool g_throwParserException = false;
 
 }
 
@@ -78,6 +79,10 @@ void ParserRCS::parseRegionCompositionSegment(Database& database,
 void ParserCDS::parseClutDefinitionSegment(Database& database,
                                            PesPacketReader& reader)
 {
+    if (g_throwParserException)
+    {
+        throw ParserException("test parser exception");
+    }
     ++g_cdsCounter;
 }
 
@@ -105,8 +110,9 @@ CPPUNIT_TEST_SUITE( ParserTest );
     CPPUNIT_TEST(testOdsSegment);
     CPPUNIT_TEST(testEdsSegment);
     CPPUNIT_TEST(testUnknownSegment);
+    CPPUNIT_TEST(testDisparitySegmentIgnored);
     CPPUNIT_TEST(testEmptyBufferReturnsFalse);
-    CPPUNIT_TEST(testNonSubtitlePacketSkipped);
+    CPPUNIT_TEST(testNonSubtitlePacketRejected);
     CPPUNIT_TEST(testPacketWithoutPtsSkipped);
     CPPUNIT_TEST(testInvalidDataIdentifierSkipped);
     CPPUNIT_TEST(testInvalidStreamIdSkipped);
@@ -115,6 +121,7 @@ CPPUNIT_TEST_SUITE( ParserTest );
     CPPUNIT_TEST(testTimingProcessClassification);
     CPPUNIT_TEST(testWaitPacketRetention);
     CPPUNIT_TEST(testDropPacketConsumed);
+    CPPUNIT_TEST(testMultiplePacketsProcessed);
     CPPUNIT_TEST(testMultipleSegmentsSinglePacket);
     CPPUNIT_TEST(testUnselectedPageIgnored);
     CPPUNIT_TEST(testNonCompositionPagePcsIgnored);
@@ -129,12 +136,15 @@ CPPUNIT_TEST_SUITE( ParserTest );
     CPPUNIT_TEST(testInvalidSyncByteException);
     CPPUNIT_TEST(testInvalidEndMarkerException);
     CPPUNIT_TEST(testTruncatedSegmentBuffer);
+    CPPUNIT_TEST(testParserExceptionResetsEpoch);
+    CPPUNIT_TEST(testPageTimeout);
     CPPUNIT_TEST(testDatabaseStateAfterBadPacket);
 CPPUNIT_TEST_SUITE_END();
 
 public:
     void setUp()
     {
+        clearCounters();
         m_client.reset(new DecoderClientMock());
         m_client->setAllocLimit(PixmapAllocator::BUFFER_SIZE_131);
         m_pixmapAllocator.reset(new PixmapAllocator(SPEC_VERSION, *m_client));
@@ -228,6 +238,30 @@ public:
         CPPUNIT_ASSERT(g_edsCounter == 0);
     }
 
+    void testDisparitySegmentIgnored()
+    {
+        BitStreamWriter pesWriter;
+
+        DynamicAllocator allocator;
+        PesBuffer pesBuffer(allocator);
+        Parser parser(*m_client, *m_database, pesBuffer);
+
+        m_database->getStatus().setPageIds(0, 0);
+        buildPesWithEmptySegment(pesWriter,
+                dvbsubdecoder::SegmentTypeBits::DISPARITY_SIGNALLING);
+
+        CPPUNIT_ASSERT(pesBuffer.addPesPacket(pesWriter.data(), pesWriter.size()));
+
+        clearCounters();
+        CPPUNIT_ASSERT(parser.process(StcTime(StcTimeType::LOW_32, 0)));
+        CPPUNIT_ASSERT(g_ddsCounter == 0);
+        CPPUNIT_ASSERT(g_pcsCounter == 0);
+        CPPUNIT_ASSERT(g_rcsCounter == 0);
+        CPPUNIT_ASSERT(g_cdsCounter == 0);
+        CPPUNIT_ASSERT(g_odsCounter == 0);
+        CPPUNIT_ASSERT(g_edsCounter == 0);
+    }
+
     // Empty buffer should return false
     void testEmptyBufferReturnsFalse()
     {
@@ -248,7 +282,7 @@ public:
     }
 
     // Non-subtitle packet should be skipped
-    void testNonSubtitlePacketSkipped()
+    void testNonSubtitlePacketRejected()
     {
         DynamicAllocator allocator;
         PesBuffer pesBuffer(allocator);
@@ -603,7 +637,7 @@ public:
         
         startPesData(pesDataWriter);
         segmentWriter.clear();
-        buildPesSegment(pesDataWriter, dvbsubdecoder::SegmentTypeBits::PAGE_COMPOSITION, 3, segmentWriter); // Page 3 (not composition)
+        buildPesSegment(pesDataWriter, dvbsubdecoder::SegmentTypeBits::PAGE_COMPOSITION, 2, segmentWriter); // Ancillary page
         endPesData(pesDataWriter);
 
         buildPesPacket(pesWriter, 0, pesDataWriter);
@@ -632,7 +666,7 @@ public:
         
         startPesData(pesDataWriter);
         segmentWriter.clear();
-        buildPesSegment(pesDataWriter, dvbsubdecoder::SegmentTypeBits::REGION_COMPOSITION, 4, segmentWriter); // Page 4 (not composition)
+        buildPesSegment(pesDataWriter, dvbsubdecoder::SegmentTypeBits::REGION_COMPOSITION, 2, segmentWriter); // Ancillary page
         endPesData(pesDataWriter);
 
         buildPesPacket(pesWriter, 0, pesDataWriter);
@@ -661,7 +695,7 @@ public:
         
         startPesData(pesDataWriter);
         segmentWriter.clear();
-        buildPesSegment(pesDataWriter, dvbsubdecoder::SegmentTypeBits::DISPLAY_DEFINITION, 5, segmentWriter); // Page 5 (not composition)
+        buildPesSegment(pesDataWriter, dvbsubdecoder::SegmentTypeBits::DISPLAY_DEFINITION, 2, segmentWriter); // Ancillary page
         endPesData(pesDataWriter);
 
         buildPesPacket(pesWriter, 0, pesDataWriter);
@@ -690,7 +724,7 @@ public:
         
         startPesData(pesDataWriter);
         segmentWriter.clear();
-        buildPesSegment(pesDataWriter, dvbsubdecoder::SegmentTypeBits::END_OF_DISPLAY_SET, 6, segmentWriter); // Page 6 (not ancillary)
+        buildPesSegment(pesDataWriter, dvbsubdecoder::SegmentTypeBits::END_OF_DISPLAY_SET, 1, segmentWriter); // Composition page
         endPesData(pesDataWriter);
 
         buildPesPacket(pesWriter, 0, pesDataWriter);
@@ -757,6 +791,32 @@ public:
         // Should be WAIT (boundary inclusive)
         CPPUNIT_ASSERT(!result);
         CPPUNIT_ASSERT(g_odsCounter == 0);
+    }
+
+    void testMultiplePacketsProcessed()
+    {
+        DynamicAllocator allocator;
+        PesBuffer pesBuffer(allocator);
+        Parser parser(*m_client, *m_database, pesBuffer);
+
+        m_database->getStatus().setPageIds(0, 0);
+
+        BitStreamWriter firstPesWriter;
+        BitStreamWriter secondPesWriter;
+        buildPesWithEmptySegment(firstPesWriter,
+                dvbsubdecoder::SegmentTypeBits::CLUT_DEFINITION);
+        buildPesWithEmptySegment(secondPesWriter,
+                dvbsubdecoder::SegmentTypeBits::OBJECT_DATA);
+
+        CPPUNIT_ASSERT(pesBuffer.addPesPacket(firstPesWriter.data(),
+                firstPesWriter.size()));
+        CPPUNIT_ASSERT(pesBuffer.addPesPacket(secondPesWriter.data(),
+                secondPesWriter.size()));
+
+        clearCounters();
+        CPPUNIT_ASSERT(parser.process(StcTime(StcTimeType::LOW_32, 0)));
+        CPPUNIT_ASSERT(g_cdsCounter == 1);
+        CPPUNIT_ASSERT(g_odsCounter == 1);
     }
 
     // Boundary timing at dvbsubdecoder::PTS_STC_DIFF_MAX_90KHZ (WAIT)
@@ -894,6 +954,9 @@ public:
         Parser parser(*m_client, *m_database, pesBuffer);
 
         m_database->getStatus().setPageIds(0, 0);
+        m_database->getPage().startParsing(1,
+            StcTime(StcTimeType::LOW_32, 0), 0);
+        m_database->getPage().finishParsing();
 
         BitStreamWriter pesDataWriter;
         pesDataWriter.clear();
@@ -921,6 +984,8 @@ public:
         // Exception should be caught, epoch reset, returns true
         CPPUNIT_ASSERT(result);
         CPPUNIT_ASSERT(g_cdsCounter == 1); // Segment processed before exception
+        CPPUNIT_ASSERT(m_database->getPage().getState()
+            == dvbsubdecoder::Page::State::INVALID);
     }
 
     void testTruncatedSegmentBuffer()
@@ -933,14 +998,14 @@ public:
 
         BitStreamWriter pesDataWriter;
         pesDataWriter.clear();
-        // Write valid header but incomplete segment (missing segment length and data)
+        // Write a segment length larger than the remaining payload.
         pesDataWriter.write(dvbsubdecoder::PesBits::SUBTITLE_DATA_IDENTIFIER, 8);
         pesDataWriter.write(dvbsubdecoder::PesBits::STREAM_ID_VALUE, 8);
         pesDataWriter.write(dvbsubdecoder::PesBits::SYNC_BYTE_VALUE, 8);
         pesDataWriter.write(dvbsubdecoder::SegmentTypeBits::OBJECT_DATA, 8);
         pesDataWriter.write(0, 16); // Page ID
-        // Omit segment length and data
-        pesDataWriter.write(dvbsubdecoder::PesBits::END_MARKER_VALUE, 8);
+        pesDataWriter.write(2, 16); // Segment length
+        pesDataWriter.write(0, 8); // Incomplete segment data
 
         BitStreamWriter pesWriter;
         buildPesPacket(pesWriter, 0, pesDataWriter);
@@ -955,6 +1020,61 @@ public:
         CPPUNIT_ASSERT(g_odsCounter == 0);
     }
 
+    void testParserExceptionResetsEpoch()
+    {
+        DynamicAllocator allocator;
+        PesBuffer pesBuffer(allocator);
+        Parser parser(*m_client, *m_database, pesBuffer);
+
+        m_database->getStatus().setPageIds(0, 0);
+        m_database->getPage().startParsing(1, StcTime(StcTimeType::LOW_32, 0), 0);
+        m_database->getPage().finishParsing();
+
+        BitStreamWriter pesWriter;
+        buildPesWithEmptySegment(pesWriter,
+            dvbsubdecoder::SegmentTypeBits::CLUT_DEFINITION);
+        CPPUNIT_ASSERT(pesBuffer.addPesPacket(pesWriter.data(), pesWriter.size()));
+
+        clearCounters();
+        g_throwParserException = true;
+        CPPUNIT_ASSERT(parser.process(StcTime(StcTimeType::LOW_32, 0)));
+        CPPUNIT_ASSERT(g_cdsCounter == 0);
+        CPPUNIT_ASSERT(m_database->getPage().getState()
+            == dvbsubdecoder::Page::State::INVALID);
+    }
+
+    void testPageTimeout()
+    {
+        DynamicAllocator allocator;
+        PesBuffer pesBuffer(allocator);
+        Parser parser(*m_client, *m_database, pesBuffer);
+
+        const std::uint32_t pts = 1000000;
+        m_database->getPage().startParsing(1,
+            StcTime(StcTimeType::LOW_32, pts), 1);
+        m_database->getPage().finishParsing();
+
+        CPPUNIT_ASSERT(!parser.process(StcTime(StcTimeType::LOW_32,
+            pts - dvbsubdecoder::PTS_STC_DIFF_MIN_90KHZ)));
+        CPPUNIT_ASSERT(m_database->getPage().getState()
+            == dvbsubdecoder::Page::State::COMPLETE);
+
+        CPPUNIT_ASSERT(!parser.process(StcTime(StcTimeType::LOW_32,
+            pts + 179999)));
+        CPPUNIT_ASSERT(m_database->getPage().getState()
+            == dvbsubdecoder::Page::State::COMPLETE);
+
+        CPPUNIT_ASSERT(!parser.process(StcTime(StcTimeType::LOW_32,
+            pts + 180000)));
+        CPPUNIT_ASSERT(m_database->getPage().getState()
+            == dvbsubdecoder::Page::State::TIMEDOUT);
+
+        CPPUNIT_ASSERT(!parser.process(StcTime(StcTimeType::LOW_32,
+            pts + 180001)));
+        CPPUNIT_ASSERT(m_database->getPage().getState()
+            == dvbsubdecoder::Page::State::TIMEDOUT);
+    }
+
     void testDatabaseStateAfterBadPacket()
     {
         DynamicAllocator allocator;
@@ -962,6 +1082,11 @@ public:
         Parser parser(*m_client, *m_database, pesBuffer);
 
         m_database->getStatus().setPageIds(0, 0);
+        m_database->getPage().startParsing(1,
+            StcTime(StcTimeType::LOW_32, 0), 0);
+        m_database->getPage().finishParsing();
+        CPPUNIT_ASSERT(m_database->getPage().getState()
+            == dvbsubdecoder::Page::State::COMPLETE);
 
         // Save initial state
         int initialClutCount = 0;
@@ -1015,6 +1140,8 @@ public:
         }
         CPPUNIT_ASSERT(clutCount == initialClutCount);
         CPPUNIT_ASSERT(objectCount == initialObjectCount);
+        CPPUNIT_ASSERT(m_database->getPage().getState()
+            == dvbsubdecoder::Page::State::COMPLETE);
     }
 
 private:
@@ -1061,6 +1188,7 @@ private:
         g_cdsCounter = 0;
         g_odsCounter = 0;
         g_edsCounter = 0;
+        g_throwParserException = false;
     }
 
     void buildPesWithEmptySegment(BitStreamWriter& pesWriter,

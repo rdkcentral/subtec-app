@@ -33,6 +33,7 @@ public:
     MockWindow()
         : m_visible(false)
         , m_size(0, 0)
+        , m_updateCount(0)
     {}
 
     virtual ~MockWindow() {}
@@ -55,11 +56,12 @@ public:
     Size getSize() const override { return m_size; }
     void setVisible(bool visible) override { m_visible = visible; }
     void clear() override {}
-    void update() override {}
+    void update() override { ++m_updateCount; }
     void setDrawDirection(DrawDirection dir) override {}
 
     // Test helper methods
     bool isVisible() const { return m_visible; }
+    int getUpdateCount() const { return m_updateCount; }
 
     class MockDrawContext : public DrawContext
     {
@@ -80,6 +82,7 @@ public:
 private:
     bool m_visible;
     Size m_size;
+    int m_updateCount;
     MockDrawContext m_mockDrawContext;
 };
 
@@ -113,6 +116,7 @@ class SubtitlesRendererImplTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testShutdownNotInitialized);
     CPPUNIT_TEST(testShutdownCalledTwice);
     CPPUNIT_TEST(testStartAfterInit);
+    CPPUNIT_TEST(testStartWhenStarted);
     CPPUNIT_TEST(testStartWhenMuted);
     CPPUNIT_TEST(testStopWhenStarted);
     CPPUNIT_TEST(testStopWhenAlreadyStopped);
@@ -196,6 +200,7 @@ public:
         bool result = m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
 
         CPPUNIT_ASSERT_EQUAL(true, result);
+        CPPUNIT_ASSERT(m_renderer->m_decoderInstance != nullptr);
     }
 
     void testInitWithNullWindow()
@@ -229,16 +234,19 @@ public:
     {
         m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
         m_renderer->shutdown();
+        CPPUNIT_ASSERT(m_renderer->m_decoderInstance == nullptr);
 
         // Should be able to reinitialize
         bool result = m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
 
         CPPUNIT_ASSERT_EQUAL(true, result);
+        CPPUNIT_ASSERT(m_renderer->m_decoderInstance != nullptr);
     }
 
     void testShutdown()
     {
         m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
+        CPPUNIT_ASSERT(m_renderer->m_decoderInstance != nullptr);
 
         // Perform shutdown and verify it is safe to call
         try {
@@ -248,6 +256,8 @@ public:
         } catch (...) {
             CPPUNIT_FAIL("Shutdown threw unknown exception");
         }
+
+        CPPUNIT_ASSERT(m_renderer->m_decoderInstance == nullptr);
     }
 
     void testShutdownNotInitialized()
@@ -285,6 +295,21 @@ public:
         CPPUNIT_ASSERT_EQUAL(true, result);
         CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
         CPPUNIT_ASSERT_EQUAL(true, m_mockWindow->isVisible());
+    }
+
+    void testStartWhenStarted()
+    {
+        m_renderer->init(m_mockWindow.get(), m_mockTimeSource.get());
+        m_renderer->start(100, 200);
+
+        int updateCount = m_mockWindow->getUpdateCount();
+
+        bool result = m_renderer->start(300, 400);
+
+        CPPUNIT_ASSERT_EQUAL(true, result);
+        CPPUNIT_ASSERT_EQUAL(true, m_renderer->isStarted());
+        CPPUNIT_ASSERT_EQUAL(true, m_mockWindow->isVisible());
+        CPPUNIT_ASSERT_EQUAL(updateCount + 2, m_mockWindow->getUpdateCount());
     }
 
     void testStartWhenMuted()
@@ -404,7 +429,7 @@ public:
         m_renderer->unmute();
 
         CPPUNIT_ASSERT_EQUAL(false, m_renderer->isMuted());
-        // Should show graphics and invalidate decoder
+        // Should show graphics again
         CPPUNIT_ASSERT_EQUAL(true, m_mockWindow->isVisible());
     }
 

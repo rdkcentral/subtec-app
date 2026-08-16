@@ -19,7 +19,12 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <atomic>
+#include <map>
+#include <sstream>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include "LoggerManagerImpl.hpp"
 #include "ConfigProvider.hpp"
@@ -40,11 +45,6 @@ public:
     void setValue(const std::string& key, const std::string& value)
     {
         m_values[key] = value;
-    }
-
-    void removeValue(const std::string& key)
-    {
-        m_values.erase(key);
     }
 
     void clear()
@@ -82,7 +82,7 @@ CPPUNIT_TEST_SUITE(LoggerManagerImplTest);
     CPPUNIT_TEST(testInitUnknownBackendFallsBack);
     CPPUNIT_TEST(testInitRdkBackendMissingConfigFile);
     CPPUNIT_TEST(testInitRdkBackendEmptyConfigFile);
-    CPPUNIT_TEST(testInitRdkBackendInvalidConfigFile);
+    CPPUNIT_TEST(testInitRdkBackendWithConfig);
     CPPUNIT_TEST(testDeinitResetsToStdBackend);
     CPPUNIT_TEST(testDeinitWithNullConfigProvider);
     CPPUNIT_TEST(testLevelResolutionElementOverridesComponent);
@@ -108,6 +108,7 @@ CPPUNIT_TEST_SUITE(LoggerManagerImplTest);
     CPPUNIT_TEST(testExecutorReconfigurationAfterInit);
     CPPUNIT_TEST(testReinitChangesLevels);
     CPPUNIT_TEST(testConcurrentRegisterElement);
+    CPPUNIT_TEST(testConcurrentDuplicateRegister);
     CPPUNIT_TEST(testInitDuringRegisterElement);
     CPPUNIT_TEST(testExecutorsRemainValid);
     CPPUNIT_TEST(testUnregisterElementIsNoop);
@@ -260,6 +261,7 @@ public:
 
         const LoggerExecutor* executor = manager->registerElement("App", "test");
         CPPUNIT_ASSERT(executor != nullptr);
+        CPPUNIT_ASSERT(executor->getGroupName() == nullptr);
     }
 
     void testInitRdkBackendEmptyConfigFile()
@@ -274,32 +276,41 @@ public:
 
         const LoggerExecutor* executor = manager->registerElement("App", "test");
         CPPUNIT_ASSERT(executor != nullptr);
+        CPPUNIT_ASSERT(executor->getGroupName() == nullptr);
     }
 
-    void testInitRdkBackendInvalidConfigFile()
+    void testInitRdkBackendWithConfig()
     {
         LoggerManagerImpl* manager = LoggerManagerImpl::getInstance();
 
         m_configProvider.setValue("BACKEND", "rdk");
-        m_configProvider.setValue("BACKEND_RDK_CONFIG_FILE", "/nonexistent/path/config.ini");
+        m_configProvider.setValue("BACKEND_RDK_CONFIG_FILE", "/test/config.ini");
 
-        // Should fall back to std backend when RDK init fails
+        // The test RDK stub accepts the path and selects the RDK backend.
         CPPUNIT_ASSERT_NO_THROW(manager->init(&m_configProvider));
 
         const LoggerExecutor* executor = manager->registerElement("App", "test");
         CPPUNIT_ASSERT(executor != nullptr);
+        CPPUNIT_ASSERT_EQUAL(std::string("LOG.RDK.SUBS.CORE"),
+            std::string(executor->getGroupName()));
     }
 
     void testDeinitResetsToStdBackend()
     {
         LoggerManagerImpl* manager = LoggerManagerImpl::getInstance();
 
+        m_configProvider.setValue("BACKEND", "rdk");
+        m_configProvider.setValue("BACKEND_RDK_CONFIG_FILE", "/test/config.ini");
         manager->init(&m_configProvider);
+        const LoggerExecutor* rdkExecutor = manager->registerElement("App", "deinit-rdk");
+        CPPUNIT_ASSERT_EQUAL(std::string("LOG.RDK.SUBS.CORE"),
+                std::string(rdkExecutor->getGroupName()));
         manager->deinit();
 
         // Should still work after deinit
-        const LoggerExecutor* executor = manager->registerElement("App", "test");
+        const LoggerExecutor* executor = manager->registerElement("App", "deinit-std");
         CPPUNIT_ASSERT(executor != nullptr);
+        CPPUNIT_ASSERT(executor->getGroupName() == nullptr);
     }
 
     void testDeinitWithNullConfigProvider()
@@ -620,17 +631,26 @@ public:
     {
         LoggerManagerImpl* manager = LoggerManagerImpl::getInstance();
 
-        // Test that all known components don't crash
-        std::vector<std::string> components = {
-            "App", "Common", "Dbus", "DvbSub", "DvbSubDecoder",
-            "Gfx", "GfxEngine", "Protocol", "SockSrc", "TtmlEngine",
-            "WebvttEngine", "TtxDecoder", "Ttxt", "Scte", "ClosedCaptions"
+        m_configProvider.setValue("BACKEND", "rdk");
+        m_configProvider.setValue("BACKEND_RDK_CONFIG_FILE", "/test/config.ini");
+        manager->init(&m_configProvider);
+
+        std::vector<std::pair<std::string, std::string>> components = {
+            {"App", "LOG.RDK.SUBS.CORE"}, {"Common", "LOG.RDK.SUBS.CORE"},
+            {"Dbus", "LOG.RDK.SUBS.CORE"}, {"DvbSub", "LOG.RDK.SUBS.REND"},
+            {"DvbSubDecoder", "LOG.RDK.SUBS.REND"}, {"Gfx", "LOG.RDK.SUBS.GFX"},
+            {"GfxEngine", "LOG.RDK.SUBS.GFX"}, {"Protocol", "LOG.RDK.SUBS.CORE"},
+            {"SockSrc", "LOG.RDK.SUBS.CORE"}, {"TtmlEngine", "LOG.RDK.SUBS.REND"},
+            {"WebvttEngine", "LOG.RDK.SUBS.REND"}, {"TtxDecoder", "LOG.RDK.SUBS.REND"},
+            {"Ttxt", "LOG.RDK.SUBS.REND"}, {"Scte", "LOG.RDK.SUBS.REND"},
+            {"ClosedCaptions", "LOG.RDK.SUBS.REND"}
         };
 
         for (const auto& component : components)
         {
-            const LoggerExecutor* executor = manager->registerElement(component, "test");
+            const LoggerExecutor* executor = manager->registerElement(component.first, "mapping");
             CPPUNIT_ASSERT(executor != nullptr);
+            CPPUNIT_ASSERT_EQUAL(component.second, std::string(executor->getGroupName()));
         }
     }
 
@@ -640,9 +660,8 @@ public:
 
         manager->init(&m_configProvider);
 
-        // Test that calls don't crash - we can't easily verify delegation without backend mocking
-        CPPUNIT_ASSERT_NO_THROW(manager->isEnabled(LoggerLevel::INFO, "CORE"));
-        CPPUNIT_ASSERT_NO_THROW(manager->isEnabled(LoggerLevel::ERROR, "REND"));
+        CPPUNIT_ASSERT(manager->isEnabled(LoggerLevel::INFO, "CORE"));
+        CPPUNIT_ASSERT(manager->isEnabled(LoggerLevel::ERROR, "REND"));
     }
 
     void testPrintMessageDelegatesToBackend()
@@ -651,8 +670,10 @@ public:
 
         manager->init(&m_configProvider);
 
-        // Test that calls don't crash
         CPPUNIT_ASSERT_NO_THROW(manager->printMessage(LoggerLevel::INFO, "CORE", "App", "test", "Test message"));
+
+        const LoggerExecutor* executor = manager->registerElement("App", "print");
+        CPPUNIT_ASSERT_NO_THROW(executor->printMessage(LoggerLevel::INFO, "Test message"));
     }
 
     void testExecutorReconfigurationAfterInit()
@@ -695,6 +716,7 @@ public:
 
         // Should now have DEBUG enabled
         CPPUNIT_ASSERT(executor->isEnabled(LoggerLevel::DEBUG));
+        CPPUNIT_ASSERT(!executor->isEnabled(LoggerLevel::ERROR));
     }
 
     void testConcurrentRegisterElement()
@@ -725,25 +747,54 @@ public:
         }
     }
 
+    void testConcurrentDuplicateRegister()
+    {
+        LoggerManagerImpl* manager = LoggerManagerImpl::getInstance();
+        std::vector<const LoggerExecutor*> executors(10);
+        std::vector<std::thread> threads;
+
+        for (std::size_t index = 0; index < executors.size(); ++index)
+        {
+            threads.emplace_back([&, index, manager]() {
+                executors[index] = manager->registerElement("App", "duplicate");
+            });
+        }
+
+        for (auto& thread : threads)
+        {
+            thread.join();
+        }
+
+        CPPUNIT_ASSERT(executors.front() != nullptr);
+        for (const auto* executor : executors)
+        {
+            CPPUNIT_ASSERT_EQUAL(executors.front(), executor);
+        }
+    }
+
     void testInitDuringRegisterElement()
     {
         LoggerManagerImpl* manager = LoggerManagerImpl::getInstance();
 
         // Use atomic for defined cross-thread visibility instead of volatile.
+        std::atomic<bool> initStarted{false};
         std::atomic<bool> initComplete{false};
         const LoggerExecutor* executor = nullptr;
 
         // Thread 1: init
         std::thread initThread([&]() {
             m_configProvider.setValue("LEVELS_DEFAULT", "ERROR");
+            initStarted.store(true, std::memory_order_release);
             manager->init(&m_configProvider);
             initComplete.store(true, std::memory_order_release);
         });
 
         // Thread 2: register element
         std::thread registerThread([&]() {
-            // Wait a bit to ensure init starts first
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            while (!initStarted.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
             executor = manager->registerElement("App", "test");
         });
 
@@ -752,6 +803,8 @@ public:
 
         CPPUNIT_ASSERT(initComplete.load(std::memory_order_acquire));
         CPPUNIT_ASSERT(executor != nullptr);
+        CPPUNIT_ASSERT(executor->isEnabled(LoggerLevel::ERROR));
+        CPPUNIT_ASSERT(!executor->isEnabled(LoggerLevel::DEBUG));
     }
 
     void testExecutorsRemainValid()

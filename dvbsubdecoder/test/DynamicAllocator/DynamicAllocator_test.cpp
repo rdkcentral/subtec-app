@@ -45,6 +45,7 @@ CPPUNIT_TEST_SUITE( DynamicAllocatorTest );
     CPPUNIT_TEST(testPowerOfTwoAlignments);
     CPPUNIT_TEST(testLargeAlignment);
     CPPUNIT_TEST(testLargeSize);
+    CPPUNIT_TEST(testWritableAllocation);
     CPPUNIT_TEST(testMaxSizeAllocation);
     CPPUNIT_TEST(testFreeNullPointer);
     CPPUNIT_TEST(testFreeInvalidPointer);
@@ -52,13 +53,14 @@ CPPUNIT_TEST_SUITE( DynamicAllocatorTest );
     CPPUNIT_TEST(testFreePointerToMiddleOfAllocation);
     CPPUNIT_TEST(testReturnedPointerAlignment);
     CPPUNIT_TEST(testComplexAlignmentScenarios);
-    CPPUNIT_TEST(testDirectAllocationSuccess);
-    CPPUNIT_TEST(testExtendedAllocationFallback);
+    CPPUNIT_TEST(testAlignedAllocation);
+    CPPUNIT_TEST(testLargeAlignmentAllocation);
     CPPUNIT_TEST(testAllocationOrderIndependence);
     CPPUNIT_TEST(testMixedSizeAlignmentPatterns);
     CPPUNIT_TEST(testHighFrequencyAllocationDeallocation);
     CPPUNIT_TEST(testMemoryExhaustionHandling);
     CPPUNIT_TEST(testAllocatorTraitsIntegration);
+    CPPUNIT_TEST(testTraitsConstructorFailure);
     CPPUNIT_TEST(testExceptionSafetyInAllocation);
     CPPUNIT_TEST(testStateConsistencyAfterErrors);
 CPPUNIT_TEST_SUITE_END();
@@ -195,6 +197,28 @@ public:
         allocator.free(ptr);
     }
 
+    void testWritableAllocation()
+    {
+        DynamicAllocator allocator;
+        const std::size_t size = 257;
+
+        void* ptr = allocator.allocate(size, 16);
+        CPPUNIT_ASSERT(ptr != nullptr);
+
+        auto* bytes = static_cast<std::uint8_t*>(ptr);
+        for (std::size_t index = 0; index < size; ++index)
+        {
+            bytes[index] = static_cast<std::uint8_t>(index);
+        }
+
+        for (std::size_t index = 0; index < size; ++index)
+        {
+            CPPUNIT_ASSERT(bytes[index] == static_cast<std::uint8_t>(index));
+        }
+
+        allocator.free(ptr);
+    }
+
     void testMaxSizeAllocation()
     {
         DynamicAllocator allocator;
@@ -326,7 +350,7 @@ public:
     }
 
     // Two-phase Allocation Strategy Tests
-    void testDirectAllocationSuccess()
+    void testAlignedAllocation()
     {
         DynamicAllocator allocator;
 
@@ -338,7 +362,7 @@ public:
         allocator.free(ptr);
     }
 
-    void testExtendedAllocationFallback()
+    void testLargeAlignmentAllocation()
     {
         DynamicAllocator allocator;
 
@@ -467,6 +491,27 @@ public:
         auto arrayPtr = traits.allocUnique<std::array<int, 10>>();
         CPPUNIT_ASSERT(arrayPtr != nullptr);
         // Objects should be automatically freed when unique_ptrs go out of scope
+    }
+
+    void testTraitsConstructorFailure()
+    {
+        struct ThrowingObject
+        {
+            ThrowingObject()
+            {
+                throw std::runtime_error("construction failed");
+            }
+        };
+
+        DynamicAllocator allocator;
+        AllocatorTraits traits(allocator);
+
+        CPPUNIT_ASSERT_THROW(traits.allocUnique<ThrowingObject>(),
+                std::runtime_error);
+
+        void* ptr = allocator.allocate(64, 8);
+        CPPUNIT_ASSERT(ptr != nullptr);
+        allocator.free(ptr);
     }
 
     // Exception Safety

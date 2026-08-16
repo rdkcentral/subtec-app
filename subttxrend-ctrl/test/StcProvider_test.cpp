@@ -44,7 +44,8 @@ class StcProviderTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testGetStcImmediatelyAfterProcessTimestamp);
     CPPUNIT_TEST(testGetStcAfterSmallDelay);
     CPPUNIT_TEST(testGetStcAfterLargeDelay);
-    CPPUNIT_TEST(testGetStcTimeDiffExactlyOneHour);
+    CPPUNIT_TEST(testGetStcTimeDiffNearOneHour);
+    CPPUNIT_TEST(testGetStcTimeDiffOverOneHour);
     CPPUNIT_TEST(testGetStcTimeDiffSlightlyUnderOneHour);
     CPPUNIT_TEST(testGetStcWithoutPriorProcessTimestamp);
     CPPUNIT_TEST(testGetStcCalculationAccuracy);
@@ -256,19 +257,32 @@ protected:
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(20000), stc);
     }
 
-    void testGetStcTimeDiffExactlyOneHour()
+    void testGetStcTimeDiffNearOneHour()
     {
         StcProvider provider;
-        std::uint64_t oneHourAgo = getCurrentTimestampMs() - (60 * 60 * 1000);
+        std::uint64_t nearOneHourAgo = getCurrentTimestampMs() - ((60 * 60 * 1000) - 500);
 
-        provider.processTimestamp(30000, oneHourAgo);
+        provider.processTimestamp(30000, nearOneHourAgo);
 
         std::uint32_t stc = provider.getStc();
 
-        // At exactly 1 hour, the condition is NOT > 1 hour, so update IS applied
-        // Expected: 30000 + (3600000ms * 45) = 30000 + 162000000 = 162030000
-        // Allow tolerance for timing variations (±1 second = ±45000)
-        CPPUNIT_ASSERT(stc >= 161985000 && stc <= 162075000);
+        // Keep enough margin from the 1 hour cutoff so scheduler jitter does not flip the branch.
+        std::uint32_t expectedMin = 30000 + ((60 * 60 * 1000 - 500) * 45);
+        std::uint32_t expectedMax = 30000 + (60 * 60 * 1000 * 45);
+        CPPUNIT_ASSERT(stc >= expectedMin && stc <= expectedMax);
+    }
+
+    void testGetStcTimeDiffOverOneHour()
+    {
+        StcProvider provider;
+        std::uint64_t overOneHourAgo = getCurrentTimestampMs() - ((60 * 60 * 1000) + 100);
+
+        provider.processTimestamp(35000, overOneHourAgo);
+
+        std::uint32_t stc = provider.getStc();
+
+        // Once the diff crosses the threshold, no time-based increment should be applied.
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(35000), stc);
     }
 
     void testGetStcTimeDiffSlightlyUnderOneHour()
@@ -568,25 +582,28 @@ protected:
     void testMultipleUpdatesAndRetrievals()
     {
         StcProvider provider;
-        std::uint64_t baseTime = getCurrentTimestampMs() - 100; // Start 100ms in the past
+        std::uint64_t lastTimestamp = 0;
 
         // Simulate a series of timestamp updates
         for (int i = 0; i < 10; ++i) {
-            provider.processTimestamp(1000 * i, baseTime + i * 100);
+            const std::uint32_t expectedBaseStc = 1000 * i;
+            lastTimestamp = getCurrentTimestampMs();
+            provider.processTimestamp(expectedBaseStc, lastTimestamp);
 
             std::uint32_t stc = provider.getStc();
 
-            // Each retrieval should give a reasonable value
-            CPPUNIT_ASSERT(stc < 100000); // Sanity check
+            // Each retrieval should reflect the latest base STC with only a small elapsed-time increment.
+            CPPUNIT_ASSERT(stc >= expectedBaseStc && stc <= expectedBaseStc + 5000);
 
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
         // Final check
+        const std::uint64_t elapsedMs = getCurrentTimestampMs() - lastTimestamp;
         std::uint32_t finalStc = provider.getStc();
-        // Should be close to the last set value (9000) plus time delta
-        // With accumulated delays, allow wider range
-        CPPUNIT_ASSERT(finalStc >= 8000 && finalStc <= 15000);
+        const std::uint32_t expectedFinalStc = 9000 + (elapsedMs * 45);
+        const std::uint32_t tolerance = 45;
+        CPPUNIT_ASSERT(finalStc >= expectedFinalStc && finalStc <= expectedFinalStc + tolerance);
     }
 };
 

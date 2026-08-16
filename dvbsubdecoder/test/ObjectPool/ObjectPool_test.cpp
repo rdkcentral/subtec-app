@@ -20,7 +20,13 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <list>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "ObjectPool.hpp"
 
@@ -44,9 +50,7 @@ CPPUNIT_TEST_SUITE( ObjectPoolTest );
     CPPUNIT_TEST(testDifferentObjectTypes);
     CPPUNIT_TEST(testHighFrequencyOperations);
     CPPUNIT_TEST(testLargePoolSize);
-    CPPUNIT_TEST(testSecondAllocationUniqueness);
     CPPUNIT_TEST(testZeroPoolSize);
-    CPPUNIT_TEST(testThreadSafetyDocumentation);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -403,6 +407,7 @@ public:
         ObjectPool<PoolItem, POOL_SIZE> pool;
         std::vector<PoolItem*> firstAllocation;
         std::vector<PoolItem*> secondAllocation;
+        bool firstReleased = false;
         
         try
         {
@@ -419,8 +424,7 @@ public:
             {
                 pool.release(firstAllocation[i]);
             }
-            // Clear the vector since objects are now released
-            firstAllocation.clear();
+            firstReleased = true;
             
             // Second allocation cycle
             for (std::size_t i = 0; i < POOL_SIZE; ++i)
@@ -433,13 +437,21 @@ public:
             // Verify objects are valid and unique
             std::set<PoolItem*> uniqueObjects(secondAllocation.begin(), secondAllocation.end());
             CPPUNIT_ASSERT(uniqueObjects.size() == POOL_SIZE); // All objects should be unique
+            for (auto object : secondAllocation)
+            {
+                CPPUNIT_ASSERT(std::find(firstAllocation.begin(), firstAllocation.end(), object)
+                        != firstAllocation.end());
+            }
         }
         catch (...)
         {
             // Ensure cleanup on exception
-            for (auto obj : firstAllocation)
+            if (!firstReleased)
             {
-                pool.release(obj);
+                for (auto obj : firstAllocation)
+                {
+                    pool.release(obj);
+                }
             }
             for (auto obj : secondAllocation)
             {
@@ -487,6 +499,11 @@ public:
         
         // Pool should be exhausted again
         CPPUNIT_ASSERT(pool.alloc() == nullptr);
+
+        std::set<PoolItem*> originalObjects(objects.begin(), objects.end());
+        std::set<PoolItem*> returnedObjects(newObjects.begin(), newObjects.end());
+        CPPUNIT_ASSERT(returnedObjects.size() == POOL_SIZE);
+        CPPUNIT_ASSERT(returnedObjects == originalObjects);
         
         // Clean up
         for (auto obj : newObjects)
@@ -513,6 +530,8 @@ public:
             }
             
             // Release every other object (create fragmentation)
+            auto secondObject = objects[1];
+            auto fourthObject = objects[3];
             pool.release(objects[1]); // Release 2nd
             pool.release(objects[3]); // Release 4th
             
@@ -532,6 +551,8 @@ public:
             
             // Pool should now be exhausted (2 + 4 = 6 total)
             CPPUNIT_ASSERT(pool.alloc() == nullptr);
+            CPPUNIT_ASSERT(newObjects[0] == fourthObject);
+            CPPUNIT_ASSERT(newObjects[1] == secondObject);
         }
         catch (...)
         {
@@ -717,78 +738,11 @@ public:
         }
     }
 
-    void testSecondAllocationUniqueness()
-    {
-        const std::size_t POOL_SIZE = 5;
-        ObjectPool<PoolItem, POOL_SIZE> pool;
-        std::vector<PoolItem*> firstAllocation;
-        std::vector<PoolItem*> secondAllocation;
-        
-        try
-        {
-            // First allocation - record addresses
-            for (std::size_t i = 0; i < POOL_SIZE; ++i)
-            {
-                auto obj = pool.alloc();
-                CPPUNIT_ASSERT(obj != nullptr);
-                firstAllocation.push_back(obj);
-            }
-            
-            // Release all
-            for (auto obj : firstAllocation)
-            {
-                pool.release(obj);
-            }
-            // Clear the vector since objects are now released
-            firstAllocation.clear();
-            
-            // Second allocation - should get same addresses
-            for (std::size_t i = 0; i < POOL_SIZE; ++i)
-            {
-                auto obj = pool.alloc();
-                CPPUNIT_ASSERT(obj != nullptr);
-                secondAllocation.push_back(obj);
-            }
-            
-            // For comparison, we need to refill firstAllocation with the original addresses
-            // Since we can't get them back, let's modify the test approach
-            // Verify we got all different objects
-            std::set<PoolItem*> secondSet(secondAllocation.begin(), secondAllocation.end());
-            CPPUNIT_ASSERT(secondSet.size() == POOL_SIZE); // All objects should be unique
-        }
-        catch (...)
-        {
-            // Ensure cleanup on exception - clean up any allocated objects
-            for (auto obj : firstAllocation)
-            {
-                pool.release(obj);
-            }
-            for (auto obj : secondAllocation)
-            {
-                pool.release(obj);
-            }
-            throw;
-        }
-        
-        // Clean up
-        for (auto obj : secondAllocation)
-        {
-            pool.release(obj);
-        }
-    }
-
     void testZeroPoolSize()
     {
         // Zero pool size: should not allow allocation
         ObjectPool<PoolItem, 0> pool;
         CPPUNIT_ASSERT(pool.alloc() == nullptr);
-    }
-
-    void testThreadSafetyDocumentation()
-    {
-        // ObjectPool is intended for single-threaded use only.
-        // No thread-safety guarantees; concurrent access is undefined.
-        CPPUNIT_ASSERT(true); // Documentation only
     }
 
 private:

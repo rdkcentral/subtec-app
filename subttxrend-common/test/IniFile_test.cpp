@@ -20,6 +20,8 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <string>
+
 #include "IniFile.hpp"
 
 using subttxrend::common::IniFile;
@@ -66,7 +68,7 @@ CPPUNIT_TEST_SUITE( IniFileTest );
     CPPUNIT_TEST(testHasValueAfterClear);
     CPPUNIT_TEST(testGetCstrNullDefault);
     CPPUNIT_TEST(testParseOverwriteExisting);
-    CPPUNIT_TEST(testParseAppendOverwriteExisting);
+    CPPUNIT_TEST(testParseAppendDuplicate);
     CPPUNIT_TEST(testLongKeyValue);
     CPPUNIT_TEST(testUnicodeKeyValue);
 CPPUNIT_TEST_SUITE_END();
@@ -184,20 +186,22 @@ public:
     void testParseNonExistentFile()
     {
         IniFile iniFile;
+        CPPUNIT_ASSERT(iniFile.parse("testdata/test1.ini"));
         CPPUNIT_ASSERT(!iniFile.parse("testdata/nonexistent.ini"));
+        CPPUNIT_ASSERT(!iniFile.hasValue("key1"));
     }
 
     void testParseEmptyFile()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/empty.ini"); // Don't assert on return value
+        CPPUNIT_ASSERT(iniFile.parse("testdata/empty.ini"));
         CPPUNIT_ASSERT(iniFile.get("anykey", "default") == "default");
     }
 
     void testParseCommentsOnlyFile()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/comments_only.ini"); // Don't assert on return value
+        iniFile.parse("testdata/comments_only.ini");
         CPPUNIT_ASSERT(iniFile.get("key", "default") == "default");
     }
 
@@ -244,7 +248,8 @@ public:
     void testGetArrayEmptyValue()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/empty_array.ini"); // Don't assert on return value
+        CPPUNIT_ASSERT(iniFile.parse("testdata/empty_array.ini"));
+        CPPUNIT_ASSERT(iniFile.hasValue("emptykey"));
         auto arr = iniFile.getArray("emptykey", ",");
         CPPUNIT_ASSERT(arr.empty());
     }
@@ -264,19 +269,21 @@ public:
         IniFile iniFile;
         CPPUNIT_ASSERT(iniFile.parse("testdata/test1.ini"));
         CPPUNIT_ASSERT(!iniFile.parseAppend("testdata/nonexistent_append.ini"));
+        CPPUNIT_ASSERT(iniFile.get("key1") == "value1");
     }
 
     void testCaseSensitivity()
     {
         IniFile iniFile;
         CPPUNIT_ASSERT(iniFile.parse("testdata/case_test.ini"));
-        CPPUNIT_ASSERT(iniFile.get("Key1") != iniFile.get("key1"));
+        CPPUNIT_ASSERT(iniFile.get("Key1") == "upper");
+        CPPUNIT_ASSERT(iniFile.get("key1") == "lower");
     }
 
     void testMalformedLines()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/malformed.ini"); // Don't assert on return value
+        CPPUNIT_ASSERT(!iniFile.parse("testdata/malformed.ini"));
         CPPUNIT_ASSERT(iniFile.get("goodkey") == "goodvalue");
         CPPUNIT_ASSERT(iniFile.get("badkey", "default") == "default");
     }
@@ -284,8 +291,9 @@ public:
     void testWhitespaceKeysValues()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/whitespace.ini"); // Don't assert on return value
+        iniFile.parse("testdata/whitespace.ini");
         CPPUNIT_ASSERT(iniFile.get("key with spaces") == "value with spaces");
+        CPPUNIT_ASSERT(!iniFile.hasValue("keywithspace"));
         CPPUNIT_ASSERT(iniFile.get("keywithspace", "default") == "default");
     }
 
@@ -395,7 +403,7 @@ public:
     {
         IniFile iniFile;
         // This should succeed but add no keys
-        iniFile.parse("testdata/spaces_only.ini"); // Don't assert return value
+        iniFile.parse("testdata/spaces_only.ini");
         CPPUNIT_ASSERT(!iniFile.hasValue("anykey"));
     }
 
@@ -403,7 +411,7 @@ public:
     void testParseWithOnlyComments()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/comments_only.ini"); // Don't assert return value
+        iniFile.parse("testdata/comments_only.ini");
         CPPUNIT_ASSERT(!iniFile.hasValue("anykey"));
         CPPUNIT_ASSERT(iniFile.get("anykey", "default") == "default");
     }
@@ -420,7 +428,8 @@ public:
     void testParseWithEmptyValue()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/empty_value.ini"); // Don't assert return value
+        CPPUNIT_ASSERT(iniFile.parse("testdata/empty_value.ini"));
+        CPPUNIT_ASSERT(iniFile.hasValue("emptykey"));
         CPPUNIT_ASSERT(iniFile.get("emptykey", "default") == "");
     }
 
@@ -436,7 +445,7 @@ public:
     void testParseWithMultipleEquals()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/multiple_equals.ini"); // Don't assert return value
+        CPPUNIT_ASSERT(iniFile.parse("testdata/multiple_equals.ini"));
         // Should treat everything after first '=' as value
         CPPUNIT_ASSERT(iniFile.get("equation") == "x=y+z");
     }
@@ -445,7 +454,7 @@ public:
     void testGetIntWithFloat()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/float_value.ini"); // Don't assert return value
+        CPPUNIT_ASSERT(iniFile.parse("testdata/float_value.ini"));
         // Should return default for non-integer values
         CPPUNIT_ASSERT(iniFile.getInt("floatkey", 42) == 42);
     }
@@ -465,9 +474,7 @@ public:
         CPPUNIT_ASSERT(iniFile.parse("testdata/test3.ini"));
         
         auto arr = iniFile.getArray("keySpace1", "");
-        // Behavior with empty delimiter - could return single element or empty array
-        // Accept either behavior as implementation-dependent
-        CPPUNIT_ASSERT(arr.size() <= 1); // Should be 0 or 1
+        CPPUNIT_ASSERT(arr.empty());
     }
 
     // Test getArray with multi-character delimiter
@@ -525,8 +532,8 @@ public:
         CPPUNIT_ASSERT(iniFile.hasValue("key_append_string"));
     }
 
-    // Test parseAppend overwriting existing keys
-    void testParseAppendOverwriteExisting()
+    // Test parseAppend preserving the first value for duplicate keys
+    void testParseAppendDuplicate()
     {
         IniFile iniFile;
         CPPUNIT_ASSERT(iniFile.parse("testdata/test1.ini"));
@@ -541,24 +548,19 @@ public:
     void testLongKeyValue()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/long_keyvalue.ini"); // Don't assert return value
-        
-        std::string longKey(1000, 'k');
-        std::string longValue(2000, 'v');
-        
-        // Should handle long strings gracefully
-        CPPUNIT_ASSERT_NO_THROW(iniFile.get(longKey, "default"));
+        CPPUNIT_ASSERT(iniFile.parse("testdata/long_keyvalue.ini"));
+        CPPUNIT_ASSERT(iniFile.get("very_long_key_name_that_goes_on_and_on_and_on_and_on_and_on") == "short_value");
+        CPPUNIT_ASSERT(iniFile.hasValue("short_key"));
+        CPPUNIT_ASSERT(iniFile.get("normal_key") == "normal_value");
     }
 
     // Test with unicode characters in keys and values
     void testUnicodeKeyValue()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/unicode.ini"); // Don't assert return value
-        
-        // Should handle unicode characters gracefully
-        CPPUNIT_ASSERT_NO_THROW(iniFile.get("unicodekey", "default"));
-        CPPUNIT_ASSERT_NO_THROW(iniFile.get("αβγδε", "default"));
+        CPPUNIT_ASSERT(iniFile.parse("testdata/unicode.ini"));
+        CPPUNIT_ASSERT(iniFile.get("unicodekey") == "unicode_value_éñ中文");
+        CPPUNIT_ASSERT(iniFile.get("αβγδε") == "greek_letters");
     }
 
 };

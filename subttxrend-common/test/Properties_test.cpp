@@ -37,6 +37,11 @@ enum class TestEnum : int
     VALUE_C = 3
 };
 
+std::ostream& operator<<(std::ostream& os, TestEnum value)
+{
+    return os << static_cast<int>(value);
+}
+
 class PropertiesTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE(PropertiesTest);
@@ -49,7 +54,8 @@ CPPUNIT_TEST_SUITE(PropertiesTest);
     CPPUNIT_TEST(testGetStringMissingKeyThrows);
     CPPUNIT_TEST(testGetWithDefaultValue);
     CPPUNIT_TEST(testGetWithDefaultValueMissingKey);
-    CPPUNIT_TEST(testSetGetEnumValueOnly);
+    CPPUNIT_TEST(testScopedEnumKey);
+    CPPUNIT_TEST(testConversionFailure);
     CPPUNIT_TEST(testHasKeyString);
     CPPUNIT_TEST(testHasKeyNonExistent);
     CPPUNIT_TEST(testForEachEmpty);
@@ -69,6 +75,7 @@ CPPUNIT_TEST_SUITE(PropertiesTest);
     CPPUNIT_TEST(testParamsToPropertiesEmptySegments);
     CPPUNIT_TEST(testParamsToPropertiesNoColon);
     CPPUNIT_TEST(testParamsToPropertiesMultipleColons);
+    CPPUNIT_TEST(testParamsBoundaryValues);
     CPPUNIT_TEST(testLargeNumberOfEntries);
     CPPUNIT_TEST(testSpecialCharactersInKeys);
     CPPUNIT_TEST(testSpecialCharactersInValues);
@@ -125,6 +132,9 @@ public:
         props.setString("bool_key_false", "false");
         CPPUNIT_ASSERT_EQUAL(false, props.get<bool>("bool_key_false"));
         CPPUNIT_ASSERT_EQUAL(std::string("false"), props.getString("bool_key_false"));
+
+        props.setString("bool_key_one", "1");
+        CPPUNIT_ASSERT_EQUAL(true, props.get<bool>("bool_key_one"));
     }
 
     void testSetGetDouble()
@@ -179,14 +189,22 @@ public:
         CPPUNIT_ASSERT_EQUAL(std::string("default"), props.get("missing", std::string("default")));
     }
 
-    void testSetGetEnumValueOnly()
+    void testScopedEnumKey()
     {
         Properties props;
-        // Store enum value under a string key
-        props.setString("enum_key", "2");
-        CPPUNIT_ASSERT(props.hasKey("enum_key"));
-        CPPUNIT_ASSERT_EQUAL(static_cast<int>(TestEnum::VALUE_B), props.get<int>("enum_key"));
-        CPPUNIT_ASSERT_EQUAL(std::string("2"), props.getString("enum_key"));
+        props.set(TestEnum::VALUE_A, 2);
+
+        CPPUNIT_ASSERT(props.hasKey(TestEnum::VALUE_A));
+        CPPUNIT_ASSERT_EQUAL(2, props.get<int>(TestEnum::VALUE_A));
+        CPPUNIT_ASSERT_EQUAL(7, props.get<int>(TestEnum::VALUE_B, 7));
+    }
+
+    void testConversionFailure()
+    {
+        Properties props;
+        props.setString("invalid", "not-a-number");
+
+        CPPUNIT_ASSERT_THROW(props.get<int>("invalid"), std::invalid_argument);
     }
 
     void testHasKeyString()
@@ -335,8 +353,9 @@ public:
     void testParamsToPropertiesNormal()
     {
         Properties props;
-        paramsToProperties(props, "key1:value1;key2:value2");
+        Properties& result = paramsToProperties(props, "key1:value1;key2:value2");
 
+        CPPUNIT_ASSERT_EQUAL(&props, &result);
         CPPUNIT_ASSERT(props.hasKey("key1"));
         CPPUNIT_ASSERT(props.hasKey("key2"));
         CPPUNIT_ASSERT_EQUAL(std::string("value1"), props.getString("key1"));
@@ -409,6 +428,18 @@ public:
         CPPUNIT_ASSERT(props.hasKey("url"));
         CPPUNIT_ASSERT_EQUAL(std::string("12:34:56"), props.getString("time"));
         CPPUNIT_ASSERT_EQUAL(std::string("http://test:8080/path"), props.getString("url"));
+    }
+
+    void testParamsBoundaryValues()
+    {
+        Properties props;
+        paramsToProperties(props, ":value;empty:;;key:value;;");
+
+        CPPUNIT_ASSERT(props.hasKey(""));
+        CPPUNIT_ASSERT_EQUAL(std::string("value"), props.getString(""));
+        CPPUNIT_ASSERT(props.hasKey("empty"));
+        CPPUNIT_ASSERT_EQUAL(std::string(""), props.getString("empty"));
+        CPPUNIT_ASSERT_EQUAL(std::string("value"), props.getString("key"));
     }
 
     void testLargeNumberOfEntries()
@@ -522,14 +553,20 @@ public:
 
         // Test iteration and accumulation
         std::ostringstream combined;
+        size_t count = 0;
         props.forEach([&combined](const std::string& k, const std::string& v) {
             combined << k << "=" << v << "&";
         });
+        props.forEach([&count](const std::string&, const std::string&) { ++count; });
 
         std::string result = combined.str();
         CPPUNIT_ASSERT(!result.empty());
+        CPPUNIT_ASSERT_EQUAL(size_t(5), count);
         CPPUNIT_ASSERT(result.find("server=localhost:8080&") != std::string::npos);
+        CPPUNIT_ASSERT(result.find("timeout=30&") != std::string::npos);
         CPPUNIT_ASSERT(result.find("ssl=true&") != std::string::npos);
+        CPPUNIT_ASSERT(result.find("path=/api/v1&") != std::string::npos);
+        CPPUNIT_ASSERT(result.find("query=param=value&other=data&") != std::string::npos);
     }
 };
 

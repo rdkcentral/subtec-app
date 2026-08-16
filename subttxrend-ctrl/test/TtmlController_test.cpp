@@ -52,7 +52,21 @@ public:
         , m_customStyling("")
         , m_dataCount(0)
         , m_processCount(0)
+        , m_lastDataSize(0)
+        , m_lastDisplayOffset(0)
+        , m_configProvider(nullptr)
+        , m_gfxWindow(nullptr)
     {}
+
+    static void resetCounters()
+    {
+        s_stopCount = 0;
+    }
+
+    static std::size_t getStopCount()
+    {
+        return s_stopCount;
+    }
 
     void init(const ConfigProvider* configProvider, Window* gfxWindow, Properties const& properties) override
     {
@@ -74,6 +88,7 @@ public:
     void stop() override
     {
         m_started = false;
+        ++s_stopCount;
     }
 
     void flush() override
@@ -147,6 +162,8 @@ public:
     std::string getContentType() const { return m_contentType; }
     std::string getSubsInfo() const { return m_subsInfo; }
     std::string getCustomStyling() const { return m_customStyling; }
+    const ConfigProvider* getConfigProvider() const { return m_configProvider; }
+    Window* getGfxWindow() const { return m_gfxWindow; }
     std::size_t getDataCount() const { return m_dataCount; }
     std::size_t getProcessCount() const { return m_processCount; }
     std::size_t getLastDataSize() const { return m_lastDataSize; }
@@ -173,7 +190,11 @@ private:
     std::chrono::milliseconds m_waitTime{0};
     const ConfigProvider* m_configProvider;
     Window* m_gfxWindow;
+
+    static std::size_t s_stopCount;
 };
+
+std::size_t MockTtmlEngine::s_stopCount = 0;
 
 // Mock Window for testing
 class MockWindow : public Window
@@ -202,9 +223,6 @@ public:
     MockConfigProvider() {}
 
     const char* getValue(const std::string& key) const override { return ""; }
-    std::string getString(const std::string& key) const { return ""; }
-    std::int32_t getInt(const std::string& key) const { return 0; }
-    bool getBool(const std::string& key) const { return false; }
 };
 
 // Helper to create PacketTtmlSelection for testing
@@ -344,8 +362,6 @@ namespace Factory {
     std::unique_ptr<TtmlEngine> createTtmlEngine()
     {
         if (g_mockEngine) {
-            // Return a raw pointer wrapped in unique_ptr without ownership
-            // This is safe because we manage the mock lifecycle in tests
             auto engine = g_mockEngine;
             g_mockEngine = nullptr;
             return std::unique_ptr<TtmlEngine>(engine);
@@ -362,11 +378,14 @@ class TtmlControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testConstructorWithValidParameters);
     CPPUNIT_TEST(testConstructorInitializesEngine);
     CPPUNIT_TEST(testConstructorSelectsChannel);
+    CPPUNIT_TEST(testDestructorStopsEngine);
+    CPPUNIT_TEST(testActivate);
+    CPPUNIT_TEST(testDeactivate);
     CPPUNIT_TEST(testSelectWithPacket);
     CPPUNIT_TEST(testSelectWithZeroWidthHeight);
     CPPUNIT_TEST(testSelectWithMaxDimensions);
     CPPUNIT_TEST(testAddDataWithValidPacket);
-    CPPUNIT_TEST(testAddDataWithEmptyData);
+    CPPUNIT_TEST(testAddDataWithMinimalData);
     CPPUNIT_TEST(testAddDataWithLargeData);
     CPPUNIT_TEST(testAddDataWithNegativeOffset);
     CPPUNIT_TEST(testAddDataWithPositiveOffset);
@@ -405,6 +424,7 @@ public:
         m_mockWindow = std::make_shared<MockWindow>();
         m_mockConfig = std::make_unique<MockConfigProvider>();
         // Properties should be default-constructed without parameters
+        MockTtmlEngine::resetCounters();
         g_mockEngine = new MockTtmlEngine();
     }
 
@@ -426,6 +446,8 @@ protected:
 
         CPPUNIT_ASSERT(savedMock->isInitialized());
         CPPUNIT_ASSERT(savedMock->isStarted());
+        CPPUNIT_ASSERT_EQUAL(static_cast<const ConfigProvider*>(m_mockConfig.get()), savedMock->getConfigProvider());
+        CPPUNIT_ASSERT(savedMock->getGfxWindow() == m_mockWindow.get());
     }
 
     void testConstructorInitializesEngine()
@@ -451,6 +473,42 @@ protected:
 
         CPPUNIT_ASSERT(savedMock->isStarted());
         CPPUNIT_ASSERT(controller.wantsData(*packet));
+    }
+
+    void testDestructorStopsEngine()
+    {
+        auto packet = PacketTtmlSelectionBuilder::build(300, 640, 480);
+        CPPUNIT_ASSERT(packet != nullptr);
+
+        {
+            TtmlController controller(*packet, *m_mockConfig, m_mockWindow, Properties());
+        }
+
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), MockTtmlEngine::getStopCount());
+    }
+
+    void testActivate()
+    {
+        auto packet = PacketTtmlSelectionBuilder::build(100, 1920, 1080);
+        auto savedMock = g_mockEngine;
+        TtmlController controller(*packet, *m_mockConfig, m_mockWindow, Properties());
+
+        controller.activate();
+
+        CPPUNIT_ASSERT(savedMock->isStarted());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), MockTtmlEngine::getStopCount());
+    }
+
+    void testDeactivate()
+    {
+        auto packet = PacketTtmlSelectionBuilder::build(100, 1920, 1080);
+        auto savedMock = g_mockEngine;
+        TtmlController controller(*packet, *m_mockConfig, m_mockWindow, Properties());
+
+        controller.deactivate();
+
+        CPPUNIT_ASSERT(savedMock->isStarted());
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), MockTtmlEngine::getStopCount());
     }
 
     void testSelectWithPacket()
@@ -497,9 +555,11 @@ protected:
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), savedMock->getDataCount());
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), savedMock->getLastDataSize());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int64_t>(0), savedMock->getLastDisplayOffset());
+        CPPUNIT_ASSERT(savedMock->getLastData() == testData);
     }
 
-    void testAddDataWithEmptyData()
+    void testAddDataWithMinimalData()
     {
         auto selPacket = PacketTtmlSelectionBuilder::build(100, 1920, 1080);
         auto savedMock = g_mockEngine;
@@ -515,6 +575,7 @@ protected:
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), savedMock->getDataCount());
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), savedMock->getLastDataSize());
+        CPPUNIT_ASSERT(savedMock->getLastData() == minimalData);
     }
 
     void testAddDataWithLargeData()
@@ -531,6 +592,7 @@ protected:
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), savedMock->getDataCount());
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(10000), savedMock->getLastDataSize());
+        CPPUNIT_ASSERT(savedMock->getLastData() == largeData);
     }
 
     void testAddDataWithNegativeOffset()
@@ -546,6 +608,8 @@ protected:
         controller.addData(*dataPacket);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), savedMock->getDataCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int64_t>(-5000), savedMock->getLastDisplayOffset());
+        CPPUNIT_ASSERT(savedMock->getLastData() == testData);
     }
 
     void testAddDataWithPositiveOffset()
@@ -561,6 +625,8 @@ protected:
         controller.addData(*dataPacket);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), savedMock->getDataCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::int64_t>(3000), savedMock->getLastDisplayOffset());
+        CPPUNIT_ASSERT(savedMock->getLastData() == testData);
     }
 
     void testWantsDataMatchingChannel()

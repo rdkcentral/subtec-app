@@ -21,9 +21,9 @@
 #include <cppunit/extensions/HelperMacros.h>
 
 #include "PixmapAllocator.hpp"
-#include "Misc.hpp"
 #include "DecoderClientMock.hpp"
 #include <limits>
+#include <vector>
 
 using dvbsubdecoder::PixmapAllocator;
 using dvbsubdecoder::Specification;
@@ -76,8 +76,6 @@ public:
 
         PixmapAllocator allocator131(Specification::VERSION_1_3_1, client);
 
-        std::vector<std::uint8_t*> chunks;
-
         std::size_t totalSize = 0;
 
         const auto ALLOC_STEP = 1024;
@@ -95,8 +93,6 @@ public:
                 auto chunk = allocator131.allocate(ALLOC_STEP);
                 CPPUNIT_ASSERT(chunk);
 
-                chunks.push_back(chunk);
-
                 totalSize += ALLOC_STEP;
             }
             else
@@ -105,18 +101,17 @@ public:
             }
         }
 
-        CPPUNIT_ASSERT(totalSize <= client.getAllocTotal());
+        CPPUNIT_ASSERT_EQUAL(client.getAllocTotal(), totalSize);
 
         allocator131.reset();
-        chunks.clear();
+
+        totalSize = 0;
 
         for (;;)
         {
             auto chunk = allocator131.allocate(ALLOC_STEP);
             if (chunk)
             {
-                chunks.push_back(chunk);
-
                 totalSize += ALLOC_STEP;
             }
             else
@@ -124,6 +119,8 @@ public:
                 break;
             }
         }
+
+        CPPUNIT_ASSERT_EQUAL(client.getAllocTotal(), totalSize);
 
         allocator131.reset();
     }
@@ -135,8 +132,6 @@ public:
         client.setAllocLimit(PixmapAllocator::BUFFER_SIZE_121);
 
         PixmapAllocator allocator121(Specification::VERSION_1_2_1, client);
-
-        std::vector<std::uint8_t*> chunks;
 
         std::size_t totalSize = 0;
 
@@ -155,8 +150,6 @@ public:
                 auto chunk = allocator121.allocate(ALLOC_STEP);
                 CPPUNIT_ASSERT(chunk);
 
-                chunks.push_back(chunk);
-
                 totalSize += ALLOC_STEP;
             }
             else
@@ -165,18 +158,17 @@ public:
             }
         }
 
-        CPPUNIT_ASSERT(totalSize <= client.getAllocTotal());
+        CPPUNIT_ASSERT_EQUAL(client.getAllocTotal(), totalSize);
 
         allocator121.reset();
-        chunks.clear();
+
+        totalSize = 0;
 
         for (;;)
         {
             auto chunk = allocator121.allocate(ALLOC_STEP);
             if (chunk)
             {
-                chunks.push_back(chunk);
-
                 totalSize += ALLOC_STEP;
             }
             else
@@ -184,6 +176,8 @@ public:
                 break;
             }
         }
+
+        CPPUNIT_ASSERT_EQUAL(client.getAllocTotal(), totalSize);
 
         allocator121.reset();
     }
@@ -226,8 +220,14 @@ public:
 
         allocator.reset();
         
-        // Should be able to allocate something less than the original max
+        // The allocator should select the largest block that fits the limit.
         CPPUNIT_ASSERT(allocator.canAllocate(PixmapAllocator::BUFFER_SIZE_MIN));
+        CPPUNIT_ASSERT(allocator.canAllocate(
+            PixmapAllocator::BUFFER_SIZE_MIN
+                + PixmapAllocator::BUFFER_SIZE_STEP));
+        CPPUNIT_ASSERT(!allocator.canAllocate(
+            PixmapAllocator::BUFFER_SIZE_MIN
+                + PixmapAllocator::BUFFER_SIZE_STEP + 1));
         
         // But not the full 1.3.1 buffer size
         CPPUNIT_ASSERT(!allocator.canAllocate(PixmapAllocator::BUFFER_SIZE_131));
@@ -507,8 +507,10 @@ public:
             }
         }
 
-        // Verify total doesn't exceed block size
-        CPPUNIT_ASSERT(totalAllocated <= PixmapAllocator::BUFFER_SIZE_121);
+        auto remainder = PixmapAllocator::BUFFER_SIZE_121 - totalAllocated;
+        CPPUNIT_ASSERT(allocator.canAllocate(remainder));
+        CPPUNIT_ASSERT(allocator.allocate(remainder) != nullptr);
+        CPPUNIT_ASSERT(!allocator.canAllocate(1));
     }
 
     void testCanAllocateVsAllocateConsistency()
@@ -519,7 +521,8 @@ public:
         PixmapAllocator allocator(Specification::VERSION_1_2_1, client);
         allocator.reset();
 
-        std::vector<std::size_t> testSizes = {1, 512, 1024, 2048, 8192};
+        std::vector<std::size_t> testSizes = {1, 512, 1024, 2048, 8192,
+            PixmapAllocator::BUFFER_SIZE_121};
 
         for (auto size : testSizes)
         {
@@ -589,7 +592,7 @@ public:
     {
         DecoderClientMock client;
         
-        // Set limit between min and step to force exactly one step-down
+        // Set limit above the minimum but below the next fallback size.
         std::size_t limitSize = PixmapAllocator::BUFFER_SIZE_MIN + (PixmapAllocator::BUFFER_SIZE_STEP / 2);
         client.setAllocLimit(limitSize);
 

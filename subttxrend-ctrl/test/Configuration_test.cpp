@@ -52,27 +52,13 @@ public:
         }
         else
         {
-            // Fallback: use tmpnam
-            char tmp[L_tmpnam];
-            if (std::tmpnam(tmp))
+            static int counter = 0;
+            m_filename = "/tmp/test_config_fallback_" + std::to_string(getpid()) + "_" + std::to_string(++counter) + ".ini";
+            std::ofstream file(m_filename, std::ios::out | std::ios::trunc);
+            if (file.is_open())
             {
-                m_filename = std::string(tmp);
-                std::ofstream file(m_filename);
-                if (file.is_open())
-                {
-                    file << content;
-                    file.close();
-                }
-            }
-            else
-            {
-                m_filename = "/tmp/test_config_fallback.ini";
-                std::ofstream file(m_filename);
-                if (file.is_open())
-                {
-                    file << content;
-                    file.close();
-                }
+                 file << content;
+                 file.close();
             }
         }
     }

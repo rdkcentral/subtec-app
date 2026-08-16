@@ -189,7 +189,11 @@ public:
         m_renderer.reset(new TestableSubtitlesRendererImpl());
 
         m_gfxEngine = std::make_shared<MockGfxEngine>();
-        m_renderer->init(&m_window, m_gfxEngine, &m_configProvider, &m_timeSource);
+        CPPUNIT_ASSERT_EQUAL(true,
+                             m_renderer->init(&m_window,
+                                              m_gfxEngine,
+                                              &m_configProvider,
+                                              &m_timeSource));
     }
 
     void tearDown() override

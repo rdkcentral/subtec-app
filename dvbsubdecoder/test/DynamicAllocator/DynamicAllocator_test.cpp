@@ -224,7 +224,7 @@ public:
     {
         DynamicAllocator allocator;
 
-	CPPUNIT_ASSERT_THROW(allocator.allocate(std::numeric_limits<std::size_t>::max(), 8),
+        CPPUNIT_ASSERT_THROW(allocator.allocate(std::numeric_limits<std::size_t>::max(), 8),
                              std::bad_alloc);
     }
 

@@ -22,6 +22,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <new>
 #include <stdexcept>
 #include <string>

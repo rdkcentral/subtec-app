@@ -291,7 +291,7 @@ public:
     void testWhitespaceKeysValues()
     {
         IniFile iniFile;
-        iniFile.parse("testdata/whitespace.ini");
+        CPPUNIT_ASSERT(!iniFile.parse("testdata/whitespace.ini"));
         CPPUNIT_ASSERT(iniFile.get("key with spaces") == "value with spaces");
         CPPUNIT_ASSERT(!iniFile.hasValue("keywithspace"));
         CPPUNIT_ASSERT(iniFile.get("keywithspace", "default") == "default");

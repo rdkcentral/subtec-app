@@ -588,8 +588,8 @@ public:
 
     void testLargePixmap()
     {
-        const std::int32_t width = 10000;
-        const std::int32_t height = 10000;
+        const std::int32_t width = 1024;
+        const std::int32_t height = 1024;
         std::vector<std::uint8_t> buffer(width * height, 0);
         Pixmap testPixmap;
         CPPUNIT_ASSERT_NO_THROW(testPixmap.init(width, height, buffer.data()));

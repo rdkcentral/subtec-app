@@ -223,21 +223,8 @@ public:
     {
         DynamicAllocator allocator;
 
-        // Test very large allocation - should either succeed or throw std::bad_alloc
-        const std::size_t veryLargeSize = 1024 * 1024 * 1024; // 1GB
-
-        try
-        {
-            void* ptr = allocator.allocate(veryLargeSize, 8);
-            if (ptr != nullptr)
-            {
-                allocator.free(ptr);
-            }
-        }
-        catch (const std::bad_alloc&)
-        {
-            // This is expected for very large allocations
-        }
+	CPPUNIT_ASSERT_THROW(allocator.allocate(std::numeric_limits<std::size_t>::max(), 8),
+                             std::bad_alloc);
     }
 
     // Invalid Inputs and Error Handling

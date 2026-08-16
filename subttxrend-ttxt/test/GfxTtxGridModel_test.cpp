@@ -83,25 +83,25 @@ public:
     // Unused pure virtual implementations - stubbed for compilation
     void resetAcquisition() override {}
     std::uint32_t process() override { return 0; }
-    bool addPesPacket(const std::uint8_t* packet, std::uint16_t packetLength) override { return true; }
+    bool addPesPacket(const std::uint8_t*, std::uint16_t) override { return true; }
     ttxdecoder::PageId getNextPageId(const ttxdecoder::PageId& inputPageId) const override { return inputPageId; }
     ttxdecoder::PageId getPrevPageId(const ttxdecoder::PageId& inputPageId) const override { return inputPageId; }
-    void setNavigationMode(ttxdecoder::NavigationMode navigationMode) override {}
+    void setNavigationMode(ttxdecoder::NavigationMode) override {}
     ttxdecoder::NavigationState getNavigationState() const override { return ttxdecoder::NavigationState(); }
-    void getTopLinkText(std::uint16_t magazine, std::uint32_t page, std::uint16_t* text) const override {}
+    void getTopLinkText(std::uint16_t, std::uint32_t, std::uint16_t*) const override {}
     std::uint8_t getScreenColorIndex() const override { return 0; }
-    std::uint8_t getRowColorIndex(std::uint8_t row) const override { return 0; }
-    bool getColors(std::array<std::uint32_t, 16>& colors) const override { return true; }
-    const ttxdecoder::CharsetMappingArray& getCharsetMapping(ttxdecoder::Charset charset) const override
+    std::uint8_t getRowColorIndex(std::uint8_t) const override { return 0; }
+    bool getColors(std::array<std::uint32_t, 16>&) const override { return true; }
+    const ttxdecoder::CharsetMappingArray& getCharsetMapping(ttxdecoder::Charset) const override
     {
         static ttxdecoder::CharsetMappingArray mapping;
         return mapping;
     }
-    void setCharsetMapping(ttxdecoder::Charset charset, const ttxdecoder::CharsetMappingArray& mapping) override {}
-    void setDefaultPrimaryNationalCharset(std::uint8_t index, ttxdecoder::NationalCharset charset) override {}
-    void setDefaultSecondaryNationalCharset(std::uint8_t index, ttxdecoder::NationalCharset charset) override {}
+    void setCharsetMapping(ttxdecoder::Charset, const ttxdecoder::CharsetMappingArray&) override {}
+    void setDefaultPrimaryNationalCharset(std::uint8_t, ttxdecoder::NationalCharset) override {}
+    void setDefaultSecondaryNationalCharset(std::uint8_t, ttxdecoder::NationalCharset) override {}
     std::uint8_t getPageControlInfo() const override { return m_pageControlInfo; }
-    void setIgnorePts(bool ignorePts) override {}
+    void setIgnorePts(bool) override {}
 
 private:
     ttxdecoder::DecodedPage m_decodedPage;

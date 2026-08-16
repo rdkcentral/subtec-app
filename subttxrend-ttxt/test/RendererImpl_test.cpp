@@ -40,27 +40,27 @@ using namespace subttxrend::ttxt;
 class MockDrawContext : public subttxrend::gfx::DrawContext
 {
 public:
-    void fillRectangle(subttxrend::gfx::ColorArgb color,
-                      const subttxrend::gfx::Rectangle& rect) override {}
-    void drawUnderline(subttxrend::gfx::ColorArgb color,
-                      const subttxrend::gfx::Rectangle& rect) override {}
-    void drawPixmap(const subttxrend::gfx::ClutBitmap& bitmap,
-                   const subttxrend::gfx::Rectangle& src,
-                   const subttxrend::gfx::Rectangle& dst) override {}
-    void drawBitmap(const subttxrend::gfx::Bitmap& bitmap,
-                   const subttxrend::gfx::Rectangle& dst) override {}
-    void drawGlyph(const subttxrend::gfx::FontStripPtr& fontStrip,
-                  std::int32_t glyphIndex,
-                  const subttxrend::gfx::Rectangle& dst,
-                  subttxrend::gfx::ColorArgb fgColor,
-                  subttxrend::gfx::ColorArgb bgColor) override {}
-    void drawString(subttxrend::gfx::PrerenderedFont& font,
-                   const subttxrend::gfx::Rectangle& dst,
-                   const std::vector<subttxrend::gfx::GlyphData>& glyphs,
-                   subttxrend::gfx::ColorArgb fgColor,
-                   subttxrend::gfx::ColorArgb bgColor,
-                   int xOffset,
-                   int yOffset) override {}
+    void fillRectangle(subttxrend::gfx::ColorArgb,
+                      const subttxrend::gfx::Rectangle&) override {}
+    void drawUnderline(subttxrend::gfx::ColorArgb,
+                      const subttxrend::gfx::Rectangle&) override {}
+    void drawPixmap(const subttxrend::gfx::ClutBitmap&,
+                   const subttxrend::gfx::Rectangle&,
+                   const subttxrend::gfx::Rectangle&) override {}
+    void drawBitmap(const subttxrend::gfx::Bitmap&,
+                   const subttxrend::gfx::Rectangle&) override {}
+    void drawGlyph(const subttxrend::gfx::FontStripPtr&,
+                  std::int32_t,
+                  const subttxrend::gfx::Rectangle&,
+                  subttxrend::gfx::ColorArgb,
+                  subttxrend::gfx::ColorArgb) override {}
+    void drawString(subttxrend::gfx::PrerenderedFont&,
+                   const subttxrend::gfx::Rectangle&,
+                   const std::vector<subttxrend::gfx::GlyphData>&,
+                   subttxrend::gfx::ColorArgb,
+                   subttxrend::gfx::ColorArgb,
+                   int,
+                   int) override {}
 };
 
 /**
@@ -88,9 +88,9 @@ public:
     void clear() override {}
     subttxrend::gfx::DrawContext& getDrawContext() override { return m_drawContext; }
     subttxrend::gfx::Rectangle getBounds() const override { return m_bounds; }
-    void setDrawDirection(subttxrend::gfx::DrawDirection dir) override {}
-    void addKeyEventListener(subttxrend::gfx::KeyEventListener* listener) override {}
-    void removeKeyEventListener(subttxrend::gfx::KeyEventListener* listener) override {}
+    void setDrawDirection(subttxrend::gfx::DrawDirection) override {}
+    void addKeyEventListener(subttxrend::gfx::KeyEventListener*) override {}
+    void removeKeyEventListener(subttxrend::gfx::KeyEventListener*) override {}
 
     bool isVisible() const { return m_visible; }
     bool wasUpdateCalled() const { return m_updateCalled; }
@@ -127,9 +127,9 @@ public:
         return false;
     }
 
-    bool loadFont(const std::string& fontName,
-                  const subttxrend::gfx::Size& glyphSize,
-                  const subttxrend::gfx::FontStripMap& mapping) override
+    bool loadFont(const std::string&,
+                  const subttxrend::gfx::Size&,
+                  const subttxrend::gfx::FontStripMap&) override
     {
         return true;
     }
@@ -146,12 +146,12 @@ private:
 class MockGfxEngine : public subttxrend::gfx::Engine
 {
 public:
-    void init(const std::string &displayName = {}) override {}
+    void init(const std::string & = {}) override {}
     void shutdown() override {}
     void execute() override {}
     subttxrend::gfx::WindowPtr createWindow() override { return nullptr; }
-    void attach(subttxrend::gfx::WindowPtr window) override {}
-    void detach(subttxrend::gfx::WindowPtr window) override {}
+    void attach(subttxrend::gfx::WindowPtr) override {}
+    void detach(subttxrend::gfx::WindowPtr) override {}
     subttxrend::gfx::FontStripPtr createFontStrip(const subttxrend::gfx::Size& glyphSize,
                                                   std::size_t glyphCount) override
     {

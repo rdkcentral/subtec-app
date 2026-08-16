@@ -26,6 +26,9 @@
 int main(int argc,
          char* argv[])
 {
+    (void)argc;
+    (void)argv;
+
     CppUnit::Test* suite =
             CppUnit::TestFactoryRegistry::getRegistry().makeTest();
 

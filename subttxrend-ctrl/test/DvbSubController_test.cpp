@@ -39,13 +39,13 @@ public:
     MockEngine() {}
     virtual ~MockEngine() {}
 
-    void init(const std::string &displayName = {}) override {}
+    void init(const std::string & = {}) override {}
     void shutdown() override {}
     void execute() override {}
     WindowPtr createWindow() override { return nullptr; }
-    FontStripPtr createFontStrip(const Size& glyphSize, const std::size_t glyphCount) override { return nullptr; }
-    void attach(WindowPtr window) override {}
-    void detach(WindowPtr window) override {}
+    FontStripPtr createFontStrip(const Size&, const std::size_t) override { return nullptr; }
+    void attach(WindowPtr) override {}
+    void detach(WindowPtr) override {}
 };
 
 // Mock Window for testing
@@ -55,8 +55,8 @@ public:
     MockWindow() : m_visible(false), m_visibleTrueCount(0), m_visibleFalseCount(0) {}
     virtual ~MockWindow() {}
 
-    void addKeyEventListener(KeyEventListener* listener) override {}
-    void removeKeyEventListener(KeyEventListener* listener) override {}
+    void addKeyEventListener(KeyEventListener*) override {}
+    void removeKeyEventListener(KeyEventListener*) override {}
 
     Rectangle getBounds() const override {
         return Rectangle(0, 0, 1920, 1080);
@@ -65,12 +65,12 @@ public:
     DrawContext& getDrawContext() override {
         static class MockDrawContext : public DrawContext {
         public:
-            void fillRectangle(ColorArgb color, const Rectangle& rectangle) override {}
-            void drawUnderline(ColorArgb color, const Rectangle& rectangle) override {}
-            void drawPixmap(const ClutBitmap& bitmap, const Rectangle& srcRect, const Rectangle& dstRect) override {}
-            void drawBitmap(const Bitmap& bitmap, const Rectangle& dstRect) override {}
-            void drawGlyph(const FontStripPtr& fontStrip, std::int32_t glyphIndex, const Rectangle& rect, ColorArgb fgColor, ColorArgb bgColor) override {}
-            void drawString(PrerenderedFont& font, const Rectangle &destinationRect, const std::vector<GlyphData>& glyphs, const ColorArgb fgColor, const ColorArgb bgColor, int outlineSize = 0, int verticalOffset = 0) override {}
+            void fillRectangle(ColorArgb, const Rectangle&) override {}
+            void drawUnderline(ColorArgb, const Rectangle&) override {}
+            void drawPixmap(const ClutBitmap&, const Rectangle&, const Rectangle&) override {}
+            void drawBitmap(const Bitmap&, const Rectangle&) override {}
+            void drawGlyph(const FontStripPtr&, std::int32_t, const Rectangle&, ColorArgb, ColorArgb) override {}
+            void drawString(PrerenderedFont&, const Rectangle&, const std::vector<GlyphData>&, const ColorArgb, const ColorArgb, int = 0, int = 0) override {}
         } mockContext;
         return mockContext;
     }
@@ -95,7 +95,7 @@ public:
     }
     void clear() override {}
     void update() override {}
-    void setDrawDirection(DrawDirection dir) override {}
+    void setDrawDirection(DrawDirection) override {}
 
     bool isVisible() const { return m_visible; }
     int getVisibleTrueCount() const { return m_visibleTrueCount; }

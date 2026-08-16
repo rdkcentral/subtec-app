@@ -22,6 +22,7 @@
 #define SUBTTXREND_GFX_COLOR_ARGB_HPP_
 
 #include <cstdint>
+#include <iosfwd>
 #include <string>
 
 namespace subttxrend

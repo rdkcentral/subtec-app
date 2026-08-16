@@ -128,3 +128,12 @@ add_cppunit_test(StreamValidator_Test
                  ../src/Packet.cpp
                  ../src/Buffer.cpp
                  ../src/BufferReader.cpp)
+
+add_cppunit_test(PacketSetCCAttributes_Test
+                 PacketSetCCAttributes_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/PacketSetCCAttributes.cpp
+                 ../src/Packet.cpp
+                 ../src/Buffer.cpp
+                 ../src/BufferReader.cpp)

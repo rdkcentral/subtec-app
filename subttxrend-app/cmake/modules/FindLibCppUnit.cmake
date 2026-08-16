@@ -15,17 +15,10 @@
 # limitations under the License.
 ##############################################################################
 
-# Some test comment
-# And another
+include(PkgConfigHelper)
 
-####### And another after empty line
-
-# and some more
-
-key1 = value1
-key2 = ala ma kota
-key3=     ala ma kota    
-
-keyInt1 =  -16
-keyInt2 =  0xFE
-keyInt3 =  -072
+pkgconfig_resolve(LibCppUnit
+    cppunit
+    cppunit/TestCase.h
+    cppunit
+)

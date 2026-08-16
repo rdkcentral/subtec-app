@@ -23,6 +23,7 @@
 #include <fstream>
 #include <memory>
 #include <cstdio>
+#include <ctime>
 #include <vector>
 #include <unistd.h>
 #include <sys/types.h>

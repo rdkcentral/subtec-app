@@ -17,9 +17,6 @@
  * limitations under the License.
 */
 #include <sstream>
-#include <iostream>
-#include <map>
-#include <memory>
 #include <algorithm>
 
 #include <cppunit/extensions/HelperMacros.h>
@@ -39,6 +36,15 @@ CPPUNIT_TEST_SUITE(LineBuilderTest);
 CPPUNIT_TEST(TestLineBuilder);
 CPPUNIT_TEST(TestFontSizes);
 CPPUNIT_TEST(TestLineBreaking);
+CPPUNIT_TEST(TestStyleTags);
+CPPUNIT_TEST(TestColorTags);
+CPPUNIT_TEST(TestNestedTags);
+CPPUNIT_TEST(TestEscapedCharacters);
+CPPUNIT_TEST(TestRegionHandling);
+CPPUNIT_TEST(TestRegionScrollUp);
+CPPUNIT_TEST(TestRegionLineLimit);
+CPPUNIT_TEST(TestOpacityAndEdgeColor);
+CPPUNIT_TEST(TestUnknownStyleFallback);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -64,15 +70,21 @@ public:
     */
     std::list<Line> buildOutputLines(LineBuilder &builder, std::istringstream &stream)
     {
+        return buildOutputLines(builder, stream, false);
+    }
+
+    std::list<Line> buildOutputLines(LineBuilder &builder, std::istringstream &stream, bool includeRegions)
+    {
         CueList cueList;
         CueSharedList sh_list;
         WebVTTDocument documentParser;
+        RegionMap regionMap;
 
-        std::tie(cueList, std::ignore) = documentParser.parseCueList(stream, 0);
+        std::tie(cueList, regionMap) = documentParser.parseCueList(stream, 0);
         std::for_each(cueList.begin(), cueList.end(), [&sh_list](CuePtr &unique_ptr) {
             sh_list.emplace_back(static_cast<CueSharedPtr>(std::move(unique_ptr)));
         });
-        return builder.buildOutputLines(sh_list, {{}});
+        return builder.buildOutputLines(sh_list, includeRegions ? regionMap : RegionMap{});
     }
 
     /**
@@ -110,6 +122,22 @@ public:
         }
 
         return rendered;
+    }
+
+    const Token* findToken(const std::list<Line> &output, const std::string &text)
+    {
+        for (const auto &line : output)
+        {
+            for (const auto &token : line.tokenVector)
+            {
+                if (token.token->mStr == text)
+                {
+                    return &token;
+                }
+            }
+        }
+
+        return nullptr;
     }
 
     void TestLineBuilder()
@@ -349,6 +377,202 @@ std::istringstream auto_empty(
             std::string rendered = renderOutputLines(output);
             CPPUNIT_ASSERT_EQUAL(test_case.expected_rendering, rendered);
         }
+    }
+
+    void TestStyleTags() {
+        // Bold, Italic, Underline, Color
+        std::istringstream style_cue(R"(WEBVTT
+
+00:01:00.000 --> 00:01:10.000
+<b>bold</b> <i>italic</i> <u>underline</u> <c.red>red</c>
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, style_cue);
+        auto boldToken = findToken(output, "bold");
+        auto italicToken = findToken(output, "italic");
+        auto underlineToken = findToken(output, "underline");
+        auto redToken = findToken(output, "red");
+
+        CPPUNIT_ASSERT(boldToken != nullptr);
+        CPPUNIT_ASSERT(italicToken != nullptr);
+        CPPUNIT_ASSERT(underlineToken != nullptr);
+        CPPUNIT_ASSERT(redToken != nullptr);
+        CPPUNIT_ASSERT_EQUAL(Style::FontStyleType::kBold, boldToken->style.fontStyle());
+        CPPUNIT_ASSERT_EQUAL(Style::FontStyleType::kItalic, italicToken->style.fontStyle());
+        CPPUNIT_ASSERT_EQUAL(Style::FontStyleType::kUnderline, underlineToken->style.fontStyle());
+        CPPUNIT_ASSERT(Style::kRed == redToken->style.textColour());
+    }
+
+    void TestColorTags() {
+        // Color and background color
+        std::istringstream color_cue(R"(WEBVTT
+
+00:01:00.000 --> 00:01:10.000
+<c.lime.bg_red>lime on red</c>
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, color_cue);
+        const std::string texts[] = {"lime", "on", "red"};
+
+        for (const auto &text : texts)
+        {
+            const auto *token = findToken(output, text);
+            CPPUNIT_ASSERT(token != nullptr);
+            CPPUNIT_ASSERT(Style::kLime == token->style.textColour());
+            CPPUNIT_ASSERT(Style::kRed == token->style.bgColour());
+        }
+    }
+
+    void TestNestedTags() {
+        // Nested tags should propagate both font style and color to all tokens.
+        std::istringstream nested_cue(R"(WEBVTT
+
+00:01:00.000 --> 00:01:10.000
+<b><c.red>red bold</c></b>
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, nested_cue);
+        const std::string texts[] = {"red", "bold"};
+
+        for (const auto &text : texts)
+        {
+            const auto *token = findToken(output, text);
+            CPPUNIT_ASSERT(token != nullptr);
+            CPPUNIT_ASSERT_EQUAL(Style::FontStyleType::kBold, token->style.fontStyle());
+            CPPUNIT_ASSERT(Style::kRed == token->style.textColour());
+        }
+    }
+
+    void TestEscapedCharacters() {
+        // HTML-escaped characters
+        std::istringstream esc_cue(R"(WEBVTT
+
+00:01:00.000 --> 00:01:10.000
+&lt;tag&gt; &amp; &quot;test&quot; &apos;ok&apos;
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, esc_cue);
+        std::string rendered = renderOutputLines(output);
+        CPPUNIT_ASSERT_EQUAL(std::string("<tag> & \"test\" 'ok'\n"), rendered);
+    }
+
+    void TestRegionHandling() {
+        // Region handling (basic)
+        std::istringstream region_cue(R"(WEBVTT
+
+REGION
+id:region1
+width:50%
+lines:3
+regionanchor:0%,100%
+viewportanchor:10%,90%
+scroll:up
+
+00:01:00.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+Regioned text
+)");
+        LineBuilder builder{1920, 1080};
+        Converter converter{1920, 1080};
+        auto output = buildOutputLines(builder, region_cue, true);
+        CPPUNIT_ASSERT_MESSAGE("Region cue should produce output", !output.empty());
+        CPPUNIT_ASSERT_EQUAL(std::size_t{1}, output.size());
+
+        const auto &line = output.front();
+        const auto expectedX = converter.vwToWidthPixels(1000) + converter.screenPaddingWidthPixels();
+        const auto expectedY = converter.vhToHeightPixels(9000 - converter.lineHeightVh());
+        CPPUNIT_ASSERT_EQUAL(expectedX, line.lineRectangle.m_x);
+        CPPUNIT_ASSERT_EQUAL(expectedY, line.lineRectangle.m_y);
+    }
+
+    void TestRegionScrollUp() {
+        // Region scroll-up should keep the newest lines when the line limit is exceeded.
+        std::istringstream region_cue(R"(WEBVTT
+
+REGION
+id:region1
+width:50%
+lines:2
+regionanchor:0%,100%
+viewportanchor:10%,90%
+scroll:up
+
+00:01:00.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+one
+
+00:01:01.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+two
+
+00:01:02.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+three
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, region_cue, true);
+        std::string rendered = renderOutputLines(output);
+
+        CPPUNIT_ASSERT_EQUAL(std::size_t{2}, output.size());
+        CPPUNIT_ASSERT_EQUAL(std::string("two\nthree\n"), rendered);
+    }
+
+    void TestRegionLineLimit() {
+        // Region without scroll should stop once the line limit is reached.
+        std::istringstream region_cue(R"(WEBVTT
+
+REGION
+id:region1
+width:50%
+lines:2
+regionanchor:0%,100%
+viewportanchor:10%,90%
+
+00:01:00.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+one
+
+00:01:01.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+two
+
+00:01:02.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+three
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, region_cue, true);
+        std::string rendered = renderOutputLines(output);
+
+        CPPUNIT_ASSERT_EQUAL(std::size_t{2}, output.size());
+        CPPUNIT_ASSERT_EQUAL(std::string("three\ntwo\n"), rendered);
+        CPPUNIT_ASSERT(rendered.find("one") == std::string::npos);
+    }
+
+    void TestOpacityAndEdgeColor() {
+        // Opacity and edge color via attributes
+        WebVTTConfig config;
+        WebVTTAttributes attributes;
+        attributes.setInteger(WebVTTAttributes::AttributeType::FONT_OPACITY, static_cast<uint32_t>(WebVTTAttributes::Opacity::TRANSLUCENT));
+        attributes.setInteger(WebVTTAttributes::AttributeType::EDGE_COLOR, 0xFF00FF00); // ARGB green
+        LineBuilder builder{1920, 1080, config, attributes};
+        std::istringstream cue(R"(WEBVTT
+
+00:01:00.000 --> 00:01:10.000
+Opacity and edge color
+)");
+        auto output = buildOutputLines(builder, cue);
+        auto opacityToken = findToken(output, "Opacity");
+
+        CPPUNIT_ASSERT(opacityToken != nullptr);
+        CPPUNIT_ASSERT(subttxrend::gfx::ColorArgb(100, 255, 255, 255) == opacityToken->style.textColour());
+        CPPUNIT_ASSERT(subttxrend::gfx::ColorArgb(255, 0, 255, 0) == opacityToken->style.edgeColour());
+    }
+
+    void TestUnknownStyleFallback() {
+        // Unknown style should fallback gracefully
+        std::istringstream unknown_style(R"(WEBVTT
+
+00:01:00.000 --> 00:01:10.000
+<foo>unknown</foo>
+)");
+        LineBuilder builder{1920, 1080};
+        auto output = buildOutputLines(builder, unknown_style);
+        std::string rendered = renderOutputLines(output);
+        CPPUNIT_ASSERT(rendered.find("unknown") != std::string::npos);
     }
 };
 

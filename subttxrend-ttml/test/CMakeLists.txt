@@ -62,11 +62,18 @@ endmacro()
 #
 # Tests
 #
-add_cppunit_test(TtmlTiming_Test
+add_cppunit_test(Elements_Test
                  Elements_test.cpp
+                 TestRunner.cpp
+                 ../src/Parser/AttributeHandlers.cpp
+                 ../src/Parser/Utils.cpp
+                 )
+
+add_cppunit_test(TtmlTiming_Test
                  TtmlTiming_test.cpp
                  TestRunner.cpp
                  ../src/Parser/AttributeHandlers.cpp
+                 ../src/Parser/Utils.cpp
                  )
                  
 add_cppunit_test(StyleSet_Test
@@ -85,7 +92,6 @@ add_cppunit_test(DocumentInstance_Test
                  ../src/Parser/Outline.cpp
                  ../src/Parser/StyleSet.cpp
                  ../src/Parser/Utils.cpp
-                 ../src/Parser/DocumentInstance.cpp
                  TestRunner.cpp
                  )
 

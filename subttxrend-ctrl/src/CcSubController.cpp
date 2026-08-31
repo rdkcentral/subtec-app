@@ -118,6 +118,11 @@ void CcSubController::setTextForPreview(const std::string& text)
     m_controller.setTextForPreview(text);
 }
 
+void CcSubController::displayPreviewText(const std::string& text, float verOffset, float horOffset, cc::PenAnchorPoint anchorPoint)
+{
+    m_controller.displayPreviewText(text, verOffset, horOffset, anchorPoint);
+}
+
 } // namespace ctrl
 } // namespace subttxrend
 

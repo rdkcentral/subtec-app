@@ -61,6 +61,8 @@ public:
 private:
     /** Socket handle. */
     int m_socketHandle;
+    /** True if this instance successfully bound the socket path. */
+    bool m_isBound;
 };
 
 } // namespace testapps

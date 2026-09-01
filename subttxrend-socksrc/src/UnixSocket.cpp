@@ -53,21 +53,31 @@ UnixSocket::UnixSocket(std::string const& path)
 
 #ifndef PC_BUILD
 #ifdef SUBTTXACCESS_GROUP
-    using namespace std::string_literals;
-    struct group* grp = getgrnam(SUBTTXACCESS_GROUP);
-    if (grp == NULL) {
-        auto errorMsg = strerror(errno);
-        throw SocketException("getgrnam() failed with error: "s + errorMsg);
-    }
+    try {
+        using namespace std::string_literals;
+        errno = 0;
+        struct group* grp = getgrnam(SUBTTXACCESS_GROUP);
+        if (grp == NULL) {
+            if (errno == 0) {
+                throw SocketException("getgrnam() failed: group not found");
+            }
+            auto errorMsg = strerror(errno);
+            throw SocketException("getgrnam() failed with error: "s + errorMsg);
+        }
 
-    if (chown(path.c_str(), getuid(), grp->gr_gid) == -1) {
-        auto errorMsg = strerror(errno);
-        throw SocketException("chown() failed with error: "s + errorMsg);
-    }
+        if (chown(path.c_str(), getuid(), grp->gr_gid) == -1) {
+            auto errorMsg = strerror(errno);
+            throw SocketException("chown() failed with error: "s + errorMsg);
+        }
 
-    if (chmod(path.c_str(), S_IRWXU|S_IRWXG) < 0) {
-        auto errorMsg = strerror(errno);
-        throw SocketException("chmod() failed with error: "s + errorMsg);
+        if (chmod(path.c_str(), S_IRWXU|S_IRWXG) < 0) {
+            auto errorMsg = strerror(errno);
+            throw SocketException("chmod() failed with error: "s + errorMsg);
+        }
+    }
+    catch (...) {
+        (void) ::unlink(path.c_str());
+        throw;
     }
 #endif
 #endif
@@ -103,7 +113,12 @@ std::size_t UnixSocket::read(common::DataBuffer& buffer, bool peekOnly)
 {
     std::size_t result{};
     int flags = (peekOnly ? MSG_PEEK : 0);
-    auto bytesRead = ::recv(*m_socketHandlePtr, buffer.data(), buffer.capacity(), flags);
+
+    ssize_t bytesRead = -1;
+    do {
+        bytesRead = ::recv(*m_socketHandlePtr, buffer.data(), buffer.capacity(), flags);
+    } while ((bytesRead < 0) && (errno == EINTR));
+
     if (bytesRead >= 0) {
         buffer.resize(bytesRead);
         result = static_cast<std::size_t>(bytesRead);

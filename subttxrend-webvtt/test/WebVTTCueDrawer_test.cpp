@@ -16,26 +16,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-#include <sstream>
-#include <iostream>
+#include <memory>
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <cppunit/TestCase.h>
-
-#include <subttxrend/gfx/DrawContext.hpp>
 
 #include <WebVTTDraw.hpp>
 #include <WebVTTCue.hpp>
 
 using namespace subttxrend::webvttengine;
 
-#define INT32(a) static_cast<std::int32_t>(a)
-
 class WebVTTCueDrawerTest : public CppUnit::TestFixture {
 
 CPPUNIT_TEST_SUITE(WebVTTCueDrawerTest);
 CPPUNIT_TEST(testCreateDrawer);
-CPPUNIT_TEST(testSetUpRegion);
+CPPUNIT_TEST(testCreateDrawerAfterCueSetup);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -60,16 +55,15 @@ public:
         CPPUNIT_ASSERT_NO_THROW(drawer = std::make_unique<WebVTTDraw>(1200, 1080));
     }
 
-    void testSetUpRegion()
+    void testCreateDrawerAfterCueSetup()
     {
         auto cue = std::make_shared<WebVTTCue>(buildTp(3000, 5000));
         const std::int32_t Width = 1920, Height = 1080;
         std::unique_ptr<WebVTTDraw> drawer;
 
-        CPPUNIT_ASSERT_NO_THROW(cue->addCueSettings({{"position", "20%"}}, {}));
+        CPPUNIT_ASSERT_NO_THROW(cue->addCueSettings({{"position", "20%"}}));
+        CPPUNIT_ASSERT_EQUAL(std::int32_t(2000), cue->cueBox().computedPositionVwH);
         CPPUNIT_ASSERT_NO_THROW(drawer = std::make_unique<WebVTTDraw>(Width, Height));
-        //CPPUNIT_ASSERT_NO_THROW(drawer->SetUpRegionFromCue(cue, regionptr));
-        //CPPUNIT_ASSERT_EQUAL(std::int32_t(384), regionptr->penX());
     }
 };
 

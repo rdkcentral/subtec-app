@@ -71,7 +71,7 @@ std::unique_ptr<TextDrawer> TextDrawer::create(std::shared_ptr<Gfx> gfx, std::sh
 }
 
 TextGfxDrawer::TextGfxDrawer(std::shared_ptr<Gfx> gfx, std::shared_ptr<gfx::PrerenderedFontCache> fontCache, FontGroup fonts, int row, int column):
-    TextDrawer(gfx, fontCache, fonts, row, column),
+    TextDrawer(std::move(gfx), std::move(fontCache), fonts, row, column),
     m_flashState(FlashControl::Show),
     logger("ClosedCaptions", "TextGfxDrawer"),
     m_overridePenAttributes(false)

@@ -182,12 +182,10 @@ void Parser::onCharacters(const std::string& content)
 
 void Parser::onError(const char * msg, ...)
 {
-    m_logger.ostrace(__LOGGER_FUNC__, " xml parse error: ", msg ? msg : "");
 }
 
 void Parser::onWarning(const char * msg, ...)
 {
-    m_logger.ostrace(__LOGGER_FUNC__, " xml parse warning: ", msg ? msg : "");
 }
 
 void Parser::parseAttributes(Element* element,

@@ -127,7 +127,16 @@ void CommandParser::processBlock(const ServiceBlock &block)
                     m_serviceBlock[itr+m_serviceBlockSize] = data[itr];
                 }
                 m_serviceBlockSize += data_len;
-                consumed = (this->*fun)(&m_serviceBlock[0], m_serviceBlockSize);
+                if (fun)
+                {
+                    consumed = (this->*fun)(&m_serviceBlock[0], m_serviceBlockSize);
+                }
+                else
+                {
+                    m_cmdLengthExceeds = false;
+                    m_serviceBlockSize = 0;
+                    consumed = data_len;
+                }
             }
             else
             {
@@ -590,7 +599,7 @@ size_t CommandParser::handleG1(const uint8_t *data, size_t)
         str.push_back(0x80 | (ch & 0x3f));
     }
 
-    m_proc->report(str);
+    m_proc->report(std::move(str));
 
     return 1;
 }

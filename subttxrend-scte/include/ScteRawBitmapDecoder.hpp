@@ -45,7 +45,7 @@ private:
         OutputData(uint16_t width, uint16_t height)
             : width(width), height(height)
         {
-            data.reserve(width * height);
+            data.reserve(static_cast<uint32_t>(width) * static_cast<uint32_t>(height));
         }
     };
 

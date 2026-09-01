@@ -57,7 +57,18 @@ BasicAllocator::BasicAllocator()
 
 BasicAllocator::~BasicAllocator()
 {
-    reset();
+    try
+    {
+        reset();
+    }
+    catch (const std::exception& e)
+    {
+        g_logger.warning("%s - exception suppressed: %s", __func__, e.what());
+    }
+    catch (...)
+    {
+        g_logger.warning("%s - non-std exception suppressed", __func__);
+    }
 }
 
 void BasicAllocator::init(void* block,

@@ -17,6 +17,8 @@
 * limitations under the License.
 *****************************************************************************/
 
+#include <sstream>
+
 #include <cppunit/extensions/HelperMacros.h>
 #include "Parser/AttributeHandlers.hpp"
 
@@ -25,8 +27,29 @@ using namespace subttxrend::ttmlengine;
 class AttributeHandlersTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( AttributeHandlersTest );
-    CPPUNIT_TEST(merging);
+    CPPUNIT_TEST(mergeAttributes_emptySource);
+    CPPUNIT_TEST(mergeAttributes_overwrite);
+    CPPUNIT_TEST(operatorStream_empty);
+    CPPUNIT_TEST(styleAttributeHandler_addAndGet);
+    CPPUNIT_TEST(styleAttributeHandler_set);
+    CPPUNIT_TEST(testStyleAttributeHandlerSetReplacesAll);
+    CPPUNIT_TEST(testStyleAttributeHandlerGetStyleAttributesReturnsReference);
+    CPPUNIT_TEST(testMergeAttributesEmptyDestination);
+    CPPUNIT_TEST(testOperatorStreamSingleAttribute);
+    CPPUNIT_TEST(testOperatorStreamSpecialChars);
+    CPPUNIT_TEST(testStyleAttributeHandlerEmptyKeyValue);
+    CPPUNIT_TEST(testStyleAttributeHandlerSpecialChars);
+    CPPUNIT_TEST(testStyleAttributeHandlerSetEmpty);
 CPPUNIT_TEST_SUITE_END();
+
+    class TestableStyleAttributeHandler : public StyleAttributeHandler
+    {
+    public:
+        const Attributes& exposeStyleAttributes() const
+        {
+            return m_styleAttributes;
+        }
+    };
 
 public:
     void setUp()
@@ -39,66 +62,131 @@ public:
         // noop
     }
 
-    void merging()
+    void mergeAttributes_emptySource()
     {
-        const auto someFontName_01 = "SomeFontName_01";
+        Attributes dest = { {"a", "1"}, {"b", "2"} };
+        Attributes src = {};
+        mergeAttributes(dest, src);
+        CPPUNIT_ASSERT(dest.size() == 2);
+        CPPUNIT_ASSERT(dest.at("a") == "1");
+        CPPUNIT_ASSERT(dest.at("b") == "2");
+    }
 
-        Attributes dest = {
-        };
+    void mergeAttributes_overwrite()
+    {
+        Attributes dest = { {"a", "1"}, {"b", "2"} };
+        Attributes src = { {"a", "3"}, {"c", "4"} };
+        mergeAttributes(dest, src);
+        CPPUNIT_ASSERT(dest.size() == 3);
+        CPPUNIT_ASSERT(dest.at("a") == "3");
+        CPPUNIT_ASSERT(dest.at("b") == "2");
+        CPPUNIT_ASSERT(dest.at("c") == "4");
+    }
 
-        Attributes src_01 = {
-                {"fontFamily", someFontName_01},
-        };
+    void operatorStream_empty()
+    {
+        Attributes attrSet = {};
+        std::ostringstream oss;
+        oss << attrSet;
+        CPPUNIT_ASSERT(oss.str() == "");
+    }
 
-        mergeAttributes(dest, src_01);
-        CPPUNIT_ASSERT(dest.size() == 1);
-        CPPUNIT_ASSERT(dest.count("fontFamily") == 1);
-        auto search_01 = dest.find("fontFamily");
-        CPPUNIT_ASSERT(search_01 != dest.end());
-        CPPUNIT_ASSERT(search_01->second == someFontName_01);
+    void styleAttributeHandler_addAndGet()
+    {
+        StyleAttributeHandler handler;
+        handler.addAttribute("foo", "bar");
+        handler.addAttribute("foo", "baz");
+        const Attributes& attrs = handler.getStyleAttributes();
+        CPPUNIT_ASSERT(attrs.size() == 1);
+        CPPUNIT_ASSERT(attrs.at("foo") == "baz");
+    }
 
-        const auto someFontName_02 = "SomeFontName_02";
-        Attributes src_02 = {
-                {"fontFamily", someFontName_02},
-        };
+    void styleAttributeHandler_set()
+    {
+        StyleAttributeHandler handler;
+        Attributes attrs = { {"a", "1"}, {"b", "2"} };
+        handler.set(attrs);
+        const Attributes& got = handler.getStyleAttributes();
+        CPPUNIT_ASSERT(got.size() == 2);
+        CPPUNIT_ASSERT(got.at("a") == "1");
+        CPPUNIT_ASSERT(got.at("b") == "2");
+    }
 
-        mergeAttributes(dest, src_02);
-        CPPUNIT_ASSERT(dest.size() == 1);
-        CPPUNIT_ASSERT(dest.count("fontFamily") == 1);
-        auto search_02 = dest.find("fontFamily");
-        CPPUNIT_ASSERT(search_02 != dest.end());
-        CPPUNIT_ASSERT(search_02->second == someFontName_02);
+    void testStyleAttributeHandlerSetReplacesAll()
+    {
+        StyleAttributeHandler handler;
+        handler.addAttribute("color", "red");
+        Attributes newAttrs = {{"font", "Arial"}};
+        handler.set(newAttrs);
+        CPPUNIT_ASSERT(handler.getStyleAttributes().size() == 1);
+        CPPUNIT_ASSERT(handler.getStyleAttributes().at("font") == "Arial");
+    }
 
-        const auto someFontName_03 = "SomeFontName_03";
-        Attributes src_03 = {
-                {"fontFamily", someFontName_03},
-                {"color", "rgba(12,34,56,78)"},
-                {"backgroundColor", "#ABCDEF12"},
-                {"fontSize", "67.12%"},
-        };
+    void testStyleAttributeHandlerGetStyleAttributesReturnsReference()
+    {
+        TestableStyleAttributeHandler handler;
+        handler.addAttribute("color", "red");
 
-        mergeAttributes(dest, src_03);
-        CPPUNIT_ASSERT(dest.size() == 4);
-        CPPUNIT_ASSERT(dest.count("fontFamily") == 1);
-        auto search_03 = dest.find("fontFamily");
-        CPPUNIT_ASSERT(search_03 != dest.end());
-        CPPUNIT_ASSERT(search_03->second == someFontName_03);
+        const Attributes& ref = handler.getStyleAttributes();
+        const Attributes& internal = handler.exposeStyleAttributes();
 
+        CPPUNIT_ASSERT(&ref == &internal);
+        CPPUNIT_ASSERT(ref.at("color") == "red");
+    }
 
-        StyleAttributeHandler styleAttrHndl;
-        const auto someFontName_04 = "SomeFontName_04";
-        styleAttrHndl.addAttribute("fontFamily", someFontName_01);
-        styleAttrHndl.addAttribute("fontFamily", someFontName_02);
-        styleAttrHndl.addAttribute("fontFamily", someFontName_03);
-        styleAttrHndl.addAttribute("fontFamily", someFontName_04);
+    void testMergeAttributesEmptyDestination()
+    {
+        Attributes dest;
+        Attributes src = { {"key1", "value1"}, {"key2", "value2"} };
+        mergeAttributes(dest, src);
+        CPPUNIT_ASSERT(dest.size() == 2);
+        CPPUNIT_ASSERT(dest.at("key1") == "value1");
+        CPPUNIT_ASSERT(dest.at("key2") == "value2");
+    }
 
+    void testOperatorStreamSingleAttribute()
+    {
+        Attributes attrSet = { {"single", "value"} };
+        std::ostringstream oss;
+        oss << attrSet;
+        CPPUNIT_ASSERT(oss.str() == "[single:value], ");
+    }
 
-        mergeAttributes(dest, styleAttrHndl.getStyleAttributes());
-        CPPUNIT_ASSERT(dest.size() == 4);
-        CPPUNIT_ASSERT(dest.count("fontFamily") == 1);
-        auto search_04 = dest.find("fontFamily");
-        CPPUNIT_ASSERT(search_04 != dest.end());
-        CPPUNIT_ASSERT(search_04->second == someFontName_04);
+    void testOperatorStreamSpecialChars()
+    {
+        Attributes attrSet = { {"key:with:colon", "value,with,comma"}, {"key[bracket]", "value]bracket["} };
+        std::ostringstream oss;
+        oss << attrSet;
+        CPPUNIT_ASSERT(oss.str() == "[key:with:colon:value,with,comma], [key[bracket]:value]bracket[], ");
+    }
+
+    void testStyleAttributeHandlerEmptyKeyValue()
+    {
+        StyleAttributeHandler handler;
+        handler.addAttribute("", "value");
+        handler.addAttribute("key", "");
+        const Attributes& attrs = handler.getStyleAttributes();
+        CPPUNIT_ASSERT(attrs.at("") == "value");
+        CPPUNIT_ASSERT(attrs.at("key") == "");
+    }
+
+    void testStyleAttributeHandlerSpecialChars()
+    {
+        StyleAttributeHandler handler;
+        handler.addAttribute("key:with:colon", "value,with,comma");
+        handler.addAttribute("key[bracket]", "value]bracket[");
+        const Attributes& attrs = handler.getStyleAttributes();
+        CPPUNIT_ASSERT(attrs.at("key:with:colon") == "value,with,comma");
+        CPPUNIT_ASSERT(attrs.at("key[bracket]") == "value]bracket[");
+    }
+
+    void testStyleAttributeHandlerSetEmpty()
+    {
+        StyleAttributeHandler handler;
+        handler.addAttribute("key", "value");
+        Attributes emptyAttrs;
+        handler.set(emptyAttrs);
+        CPPUNIT_ASSERT(handler.getStyleAttributes().empty());
     }
 
 };

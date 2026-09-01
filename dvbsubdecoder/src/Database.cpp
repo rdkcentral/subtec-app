@@ -24,6 +24,8 @@
 
 #include "PixmapAllocator.hpp"
 
+#include <exception>
+
 namespace dvbsubdecoder
 {
 
@@ -53,7 +55,18 @@ Database::~Database()
 {
     g_logger.trace("%s", __func__);
 
-    epochReset();
+    try
+    {
+        epochReset();
+    }
+    catch (const std::exception& e)
+    {
+        g_logger.warning("%s - exception suppressed: %s", __func__, e.what());
+    }
+    catch (...)
+    {
+        g_logger.warning("%s - non-std exception suppressed", __func__);
+    }
 }
 
 void Database::epochReset()

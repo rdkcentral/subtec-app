@@ -12,6 +12,15 @@ To manually build and run subtec from ***subtec-app/subttxrend-app/x86_builder/*
 
 **Python 3 installation is required for the subtec L2 framework** 
 
+# Change Display Resolution in Ubuntu
+
+1. Log in to Ubuntu.
+2. Open **Settings → Display**.
+3. Under **Resolution**, select `1280 × 720`.
+4. Click **Apply**, then **Keep Changes**.
+
+> **Note:** If using Ubuntu in a VM, make sure **View → Auto-resize Guest Display** is **unchecked**.
+
 # Subtec L2 test framework set up
 
 To install required packages for tests, run the below scripts from ***subtec-app/test/*** folder for first time

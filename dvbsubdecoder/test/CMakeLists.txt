@@ -137,6 +137,13 @@ add_cppunit_test(BasicAllocator_Test
                  ../src/BasicAllocator.cpp
 )
 
+add_cppunit_test(DynamicAllocator_Test
+                 DynamicAllocator/DynamicAllocator_test.cpp
+                 common/TestRunner.cpp
+                 common/Logger.cpp
+                 ../src/DynamicAllocator.cpp
+)
+
 add_cppunit_test(Array_Test
                  Array/Array_test.cpp
                  common/TestRunner.cpp
@@ -323,6 +330,20 @@ add_cppunit_test(Database_Test
                  ../src/Pixmap.cpp
                  ../src/Clut.cpp
                  ../src/PixmapAllocator.cpp
+                 ../src/Status.cpp
+)
+
+add_cppunit_test(Presenter_Test
+                 Presenter/Presenter_test.cpp
+                 common/TestRunner.cpp
+                 common/Logger.cpp
+                 ../src/Presenter.cpp
+                 ../src/Database.cpp
+                 ../src/Region.cpp
+                 ../src/Pixmap.cpp
+                 ../src/Clut.cpp
+                 ../src/PixmapAllocator.cpp
+                 ../src/DynamicAllocator.cpp
                  ../src/Status.cpp
 )
 

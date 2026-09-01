@@ -74,8 +74,8 @@ constexpr const std::chrono::milliseconds connection_status_check_timeout{1000};
 
 Controller::Controller(ctrl::Configuration const& config, gfx::EnginePtr gfxEngine, gfx::WindowPtr gfxWindow)
     : m_config(config)
-    , m_gfxEngine(gfxEngine)
-    , m_gfxWindow(gfxWindow)
+    , m_gfxEngine(std::move(gfxEngine))
+    , m_gfxWindow(std::move(gfxWindow))
     , m_fontCache{std::make_shared<gfx::PrerenderedFontCache>()}
     , m_stcProvider()
     , m_logger("App", "Controller", this)

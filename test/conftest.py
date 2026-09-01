@@ -18,17 +18,17 @@
 #
 import pytest
 from datetime import datetime
-import sys
 from utils import CriticalSubtecError
 
 # Place any code that needs to be run before every test execution
 @pytest.fixture(scope="function", autouse=True)
 def pre_req():
-    print(f"started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")  # pass
+    """Log the start timestamp for each test function."""
+    print(f"started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 def pytest_exception_interact(call):
     """
-    Called when an exception is raised during test exection.
+    Called when an exception is raised during test execution.
     We check if it's our critical exception.
     """
     if call.excinfo and isinstance(call.excinfo.value, CriticalSubtecError):

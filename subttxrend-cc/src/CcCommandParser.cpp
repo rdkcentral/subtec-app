@@ -150,6 +150,11 @@ void CommandParser::processBlock(const ServiceBlock &block)
             m_serviceBlockSize = 0;
         }
 
+	if (consumed == 0)
+	{
+            break;
+	}
+
         i += consumed;
     }
 }

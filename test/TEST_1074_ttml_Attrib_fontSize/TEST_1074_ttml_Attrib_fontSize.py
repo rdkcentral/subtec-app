@@ -52,8 +52,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=0.25c',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [0.25c] [ ]',
-        'sizeToPixels size 18 (from 25)',
-        'drawLine font size: 18']
+        'sizeToPixels size 12 (from 25)',
+        'drawLine font size: 12']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -62,8 +62,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=0.5c',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [0.5c] [ ] ',
-        'sizeToPixels size 36 (from 50)',
-        'drawLine font size: 36']
+        'sizeToPixels size 24 (from 50)',
+        'drawLine font size: 24']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -72,8 +72,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=0.75c',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [0.75c] [ ] ',
-        'sizeToPixels size 54 (from 75)',
-        'drawLine font size: 54']
+        'sizeToPixels size 36 (from 75)',
+        'drawLine font size: 36']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -82,8 +82,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=1.2c',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [1.2c] [ ] ',
-        'sizeToPixels size 86 (from 120)',
-        'drawLine font size: 86']
+        'sizeToPixels size 58 (from 120)',
+        'drawLine font size: 58']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -92,8 +92,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=20px',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [20px] [ ] ',
-        'sizeToPixels size 20 (from 20)',
-        'drawLine font size: 20']
+        'sizeToPixels size 13 (from 20)',
+        'drawLine font size: 13']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -102,8 +102,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=36px',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [36px] [ ] ',
-        'sizeToPixels size 36 (from 36)',
-        'drawLine font size: 36']
+        'sizeToPixels size 24 (from 36)',
+        'drawLine font size: 24']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -112,8 +112,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=54px',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [54px] [ ] ',
-        'sizeToPixels size 54 (from 54)',
-        'drawLine font size: 54']
+        'sizeToPixels size 36 (from 54)',
+        'drawLine font size: 36']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -122,8 +122,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=75px',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [75px] [ ] ',
-        'sizeToPixels size 75 (from 75)',
-        'drawLine font size: 75']
+        'sizeToPixels size 50 (from 75)',
+        'drawLine font size: 50']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -132,8 +132,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=25%',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [25%] [ ] ',
-        'sizeToPixels size 18 (from 2500)',
-        'drawLine font size: 18']
+        'sizeToPixels size 12 (from 2500)',
+        'drawLine font size: 12']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -142,8 +142,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=50%',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [50%] [ ] ',
-        'sizeToPixels size 36 (from 5000)',
-        'drawLine font size: 36']
+        'sizeToPixels size 24 (from 5000)',
+        'drawLine font size: 24']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [      
@@ -152,8 +152,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=75%',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [75%] [ ] ',
-        'sizeToPixels size 54 (from 7500)',
-        'drawLine font size: 54']
+        'sizeToPixels size 36 (from 7500)',
+        'drawLine font size: 36']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [
@@ -162,8 +162,8 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=99%',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [99%] [ ] ',
-        'sizeToPixels size 71 (from 9900)',
-        'drawLine font size: 71']
+        'sizeToPixels size 48 (from 9900)',
+        'drawLine font size: 48']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     sequence = [
@@ -172,8 +172,9 @@ def test_1074():
         'parseAttributes adding xml:id=transparentspace',
         'parseAttributes adding tts:fontSize=115%',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test font size] [ ] [ ] [115%] [ ] ',
-        'sizeToPixels size 83 (from 11500)',
-        'drawLine font size: 83']
+        'sizeToPixels size 55 (from 11500)',
+        'drawLine font size: 55']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1074 missing"
 
     print("test_1074".ljust(50), "Test Passed")
+

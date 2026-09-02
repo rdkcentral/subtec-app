@@ -104,11 +104,20 @@ void DataDumper::toFile(const std::string filename, const std::uint8_t* buffer, 
         g_logger.info("dumping: %s (size %zu) to %s", bufferStr.c_str(), bufferLen, filename.c_str());
 
         std::string filePath = dirPath + filename;
-        FILE* dumpFile = fopen(filePath.c_str(), "aw+");
+        FILE* dumpFile = fopen(filePath.c_str(), "ab");
         if (dumpFile)
         {
             auto written = fwrite(buffer, 1, bufferLen, dumpFile);
-            g_logger.debug("written: %zu out of %zu to %s", written, bufferLen, filePath.c_str());
+            if (written != bufferLen)
+            {
+                g_logger.error("short write: %zu out of %zu to %s",
+                            written, bufferLen, filePath.c_str());
+            }
+            else
+            {
+                g_logger.debug("written: %zu out of %zu to %s",
+                            written, bufferLen, filePath.c_str());
+            }
             fclose(dumpFile);
         }
         else
@@ -132,6 +141,12 @@ std::vector<std::uint8_t> DataDumper::readTtmlFromFile(const std::string& path)
    {
        fseek(dataFile,0,SEEK_END);
        auto fileSize = ftell(dataFile);
+       if (fileSize < 0)
+       {
+           g_logger.error("could not determine file size: %s errno: %d", path.c_str(), errno);
+           fclose(dataFile);
+           return data;
+       }
        fseek(dataFile,0,SEEK_SET);
 
        data.resize(fileSize);

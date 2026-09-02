@@ -20,7 +20,7 @@
 
 #include <rdk_debug.h>
 #include <cstdarg>
-#include <map>
+#include <cstdio>
 #include <string>
 
 namespace
@@ -28,40 +28,36 @@ namespace
 
 const std::string& levelToString(rdk_LogLevel level)
 {
-    static std::map<rdk_LogLevel, std::string> levelNames;
+    static const std::string FATAL_NAME("FATAL");
+    static const std::string ERROR_NAME("ERROR");
+    static const std::string WARN_NAME("WARN_");
+    static const std::string NOTICE_NAME("NOTIC");
+    static const std::string INFO_NAME("INFO_");
+    static const std::string DEBUG_NAME("DEBUG");
+    static const std::string TRACE_NAME("TRACE");
     static const std::string UNKNOWN_NAME("?????");
 
-    if (levelNames.size() == 0)
+    switch (level)
     {
-        levelNames.insert(std::make_pair(RDK_LOG_FATAL, "FATAL"));
-        levelNames.insert(std::make_pair(RDK_LOG_ERROR, "ERROR"));
-        levelNames.insert(std::make_pair(RDK_LOG_WARN, "WARN_"));
-        levelNames.insert(std::make_pair(RDK_LOG_NOTICE, "NOTIC"));
-        levelNames.insert(std::make_pair(RDK_LOG_INFO, "INFO_"));
-        levelNames.insert(std::make_pair(RDK_LOG_DEBUG, "DEBUG"));
-        levelNames.insert(std::make_pair(RDK_LOG_TRACE1, "TRACE"));
-        levelNames.insert(std::make_pair(RDK_LOG_TRACE2, "TRACE"));
-        levelNames.insert(std::make_pair(RDK_LOG_TRACE3, "TRACE"));
-        levelNames.insert(std::make_pair(RDK_LOG_TRACE4, "TRACE"));
-        levelNames.insert(std::make_pair(RDK_LOG_TRACE5, "TRACE"));
-        levelNames.insert(std::make_pair(RDK_LOG_TRACE6, "TRACE"));
-        levelNames.insert(std::make_pair(RDK_LOG_TRACE7, "TRACE"));
-        levelNames.insert(std::make_pair(RDK_LOG_TRACE8, "TRACE"));
-        levelNames.insert(std::make_pair(RDK_LOG_TRACE9, "TRACE"));
+        case RDK_LOG_FATAL:  return FATAL_NAME;
+        case RDK_LOG_ERROR:  return ERROR_NAME;
+        case RDK_LOG_WARN:   return WARN_NAME;
+        case RDK_LOG_NOTICE: return NOTICE_NAME;
+        case RDK_LOG_INFO:   return INFO_NAME;
+        case RDK_LOG_DEBUG:  return DEBUG_NAME;
+        default:
+            break;
     }
 
-    auto nameIter = levelNames.find(level);
-    if (nameIter != levelNames.end())
+    if (level == RDK_LOG_TRACE)
     {
-        return nameIter->second;
+        return TRACE_NAME;
     }
-    else
-    {
-        return UNKNOWN_NAME;
-    }
+
+    return UNKNOWN_NAME;
 }
 
-}
+} // namespace
 
 rdk_Error rdk_logger_init(const char* debugConfigFile)
 {

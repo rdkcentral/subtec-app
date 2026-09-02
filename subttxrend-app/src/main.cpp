@@ -21,6 +21,9 @@
 #include <future>
 #include <iostream>
 #include <cstdlib>
+#include <signal.h>
+#include <system_error>
+#include <pthread.h>
 
 #include "Application.hpp"
 #include <subttxrend/ctrl/Options.hpp>
@@ -28,32 +31,48 @@
 using subttxrend::app::Application;
 using subttxrend::ctrl::Options;
 
-auto registerSignalListener()
+static bool blockTerminationSignals(sigset_t& sigset)
 {
-    // block signals in this thread and subsequently
-    // spawned threads
-    sigset_t sigset;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGINT);
-    sigaddset(&sigset, SIGTERM);
-    pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
+    if (sigemptyset(&sigset) != 0) {
+        return false;
+    }
 
-    auto signal_handler = [sigset]() {
+    if (sigaddset(&sigset, SIGINT) != 0) {
+        return false;
+    }
+
+    if (sigaddset(&sigset, SIGTERM) != 0) {
+        return false;
+    }
+
+    if (pthread_sigmask(SIG_BLOCK, &sigset, nullptr) != 0) {
+        return false;
+    }
+
+    return true;
+}
+
+static auto createSignalListener(const sigset_t& sigset)
+{
+    return std::async(std::launch::async, [sigset]() {
         int signum = 0;
-        // wait until a signal is delivered:
-        sigwait(&sigset, &signum);
-
+        const int rc = sigwait(&sigset, &signum);
+        if (rc != 0) {
+            throw std::system_error(rc, std::generic_category(), "sigwait failed");
+        }
         return signum;
-    };
-
-    return std::async(std::launch::async, signal_handler);
+    });
 }
 
 int main(int argc,
          char* argv[])
 {
 #ifndef __APPLE__
-    auto exitListener = registerSignalListener();
+    sigset_t exitSignalSet;
+    if (!blockTerminationSignals(exitSignalSet)) {
+        std::cerr << "Failed to block termination signals" << std::endl;
+        return EXIT_FAILURE;
+    }
 #endif
     int rv = EXIT_FAILURE;
 
@@ -80,6 +99,7 @@ int main(int argc,
         std::cerr << "subttxrend-app started" << std::endl;
 
 #ifndef __APPLE__
+        auto exitListener = createSignalListener(exitSignalSet);
         auto signalNum = exitListener.get();
         std::cerr << "subttxrend-app signaled (" << signalNum << ") to exit" << std::endl;
 #else // __APPLE__

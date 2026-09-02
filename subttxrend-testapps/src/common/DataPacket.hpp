@@ -119,7 +119,7 @@ private:
     std::size_t m_size;
 
     /** Buffer for data bytes. */
-    std::unique_ptr<char> m_buffer;
+    std::unique_ptr<char[]> m_buffer;
 };
 
 } // namespace testapps

@@ -95,7 +95,7 @@ ColorResult parseColor(const std::string& text)
     } else {
         //Get color by name
         gfx::ColorArgb color;
-        if (gfx::ColorArgb::getColorByName(trimmedText, color)) {
+        if (gfx::ColorArgb::getColorByName(std::move(trimmedText), color)) {
             result = ColorResult{true, color};
         }
     }

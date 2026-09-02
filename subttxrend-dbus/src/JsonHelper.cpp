@@ -109,7 +109,7 @@ bool JsonHelper::DecodeSubtitleSetMuted(const std::string &jsonText)
 
 std::string JsonHelper::EncodeSubtitleStatusResponse(const SubtitleStatus &status)
 {
-    static const char *JANSSON_SUBTITLE_RESPONSE_FMT = "{s:b, s:b, s:i, s:i s:i}";
+    static const char *JANSSON_SUBTITLE_RESPONSE_FMT = "{s:b, s:b, s:i, s:i, s:i}";
 
     unique_json_t obj(
             json_pack(JANSSON_SUBTITLE_RESPONSE_FMT, "started", status.m_started, "muted", status.m_muted, "type",

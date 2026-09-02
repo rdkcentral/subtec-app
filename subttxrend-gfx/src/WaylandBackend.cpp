@@ -448,7 +448,7 @@ void WaylandBackend::surfaceId(waylandcpp::SimpleShellPtr /*simpleShell*/,
 
             const char* env_name = ::getenv("SUBTEC_SURFACE_NAME");
             wl_simple_shell_set_name(m_simpleShell->getNativeObject(), surfaceId, env_name==NULL ? "subtitles-subtec" : env_name);
-			g_logger.info("%s - setting scale to %dx%d", __func__,
+			g_logger.info("%s - setting surface geometry to %dx%d", __func__,
 +                m_outputSize.m_w, m_outputSize.m_h);
 			wl_simple_shell_set_geometry(m_simpleShell->getNativeObject(),
 +                surfaceId, 0, 0, m_outputSize.m_w, m_outputSize.m_h);

@@ -284,7 +284,7 @@ void WaylandBackendEgl::surfaceResizeRequested(const Size& size)
 {
     if (m_eglWindow)
     {
-        g_logger.trace("%s - resizing window to %dx%d", __func__, size.m_w,
+        g_logger.trace("%s - resizing window to 720, actual size %dx%d", __func__, size.m_w,
                 size.m_h);
 
         wl_egl_window_resize(m_eglWindow, 1280, 720, 0, 0);

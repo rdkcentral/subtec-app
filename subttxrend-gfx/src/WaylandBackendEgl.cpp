@@ -210,11 +210,11 @@ bool WaylandBackendEgl::initRendering()
         m_initialSize = DEFAULT_SIZE;
     }
 
-    g_logger.trace("%s - creating EGL wayland window of size %dx%d", __func__,
+    g_logger.trace("%s - creating EGL wayland window of size 720, actual size %dx%d", __func__,
             m_initialSize.m_w, m_initialSize.m_h);
 
     m_eglWindow = wl_egl_window_create(getSurface()->getNativeObject(),
-            m_initialSize.m_w, m_initialSize.m_h);
+            1280, 720);
     if (!m_eglWindow)
     {
         g_logger.error("%s - cannot create EGL wayland window", __func__);
@@ -284,10 +284,10 @@ void WaylandBackendEgl::surfaceResizeRequested(const Size& size)
 {
     if (m_eglWindow)
     {
-        g_logger.trace("%s - resizing window to %dx%d", __func__, size.m_w,
+        g_logger.trace("%s - resizing window to 720, actual size %dx%d", __func__, size.m_w,
                 size.m_h);
 
-        wl_egl_window_resize(m_eglWindow, size.m_w, size.m_h, 0, 0);
+        wl_egl_window_resize(m_eglWindow, 1280, 720, 0, 0);
     }
 
     getListener()->onPreferredSize(size);

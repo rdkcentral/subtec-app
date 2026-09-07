@@ -273,7 +273,7 @@ void WebVTTDocument::checkValidWebVTTHeader(std::istream& ifile) {
     std::string line;
 
     std::getline(ifile, line);
-    if (!line.empty() && (unsigned char)line[0] == 0xEF && (unsigned char)line[1] == 0xBB && (unsigned char)line[2] == 0xBF) {
+    if (line.size() >= 3 && (unsigned char)line[0] == 0xEF && (unsigned char)line[1] == 0xBB && (unsigned char)line[2] == 0xBF) {
         line.erase(0, 3);
     }
 

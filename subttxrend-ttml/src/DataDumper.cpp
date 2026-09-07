@@ -104,7 +104,7 @@ void DataDumper::toFile(const std::string filename, const std::uint8_t* buffer, 
         g_logger.info("dumping: %s (size %zu) to %s", bufferStr.c_str(), bufferLen, filename.c_str());
 
         std::string filePath = dirPath + filename;
-        FILE* dumpFile = fopen(filePath.c_str(), "ab");
+        FILE* dumpFile = fopen(filePath.c_str(), "wb");
         if (dumpFile)
         {
             auto written = fwrite(buffer, 1, bufferLen, dumpFile);

@@ -139,7 +139,12 @@ std::vector<std::uint8_t> DataDumper::readTtmlFromFile(const std::string& path)
    FILE* dataFile = fopen(path.c_str(), "r");
    if (dataFile)
    {
-       fseek(dataFile,0,SEEK_END);
+       if (fseek(dataFile, 0, SEEK_END) != 0)
+       {
+           g_logger.error("could not seek to end of file: %s errno: %d", path.c_str(), errno);
+           fclose(dataFile);
+           return data;
+       }
        auto fileSize = ftell(dataFile);
        if (fileSize < 0)
        {
@@ -147,7 +152,12 @@ std::vector<std::uint8_t> DataDumper::readTtmlFromFile(const std::string& path)
            fclose(dataFile);
            return data;
        }
-       fseek(dataFile,0,SEEK_SET);
+       if (fseek(dataFile, 0, SEEK_SET) != 0)
+       {
+           g_logger.error("could not seek to start of file: %s errno: %d", path.c_str(), errno);
+           fclose(dataFile);
+           return data;
+       }
 
        data.resize(fileSize);
        auto dataRead = fread(data.data(), 1, data.size(), dataFile);

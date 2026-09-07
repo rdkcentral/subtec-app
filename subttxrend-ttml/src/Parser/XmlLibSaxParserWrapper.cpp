@@ -18,6 +18,8 @@
 *****************************************************************************/
 
 #include "XmlLibSaxParserWrapper.hpp"
+
+#include <utility>
 #include <cassert>
 
 namespace subttxrend
@@ -135,7 +137,7 @@ void SaxParser::onStartElementNs(void * ctx,
         auto valueEnd = reinterpret_cast<const char*>(attributes[index + 4]);
         std::string value(valueBegin, valueEnd);
 
-        attributesVector.emplace_back(SaxCallbacks::Attribute{attrPrefix, attrName, value});
+        attributesVector.emplace_back(SaxCallbacks::Attribute{std::move(attrPrefix), std::move(attrName), std::move(value)});
     }
 
     assert(localname != nullptr);

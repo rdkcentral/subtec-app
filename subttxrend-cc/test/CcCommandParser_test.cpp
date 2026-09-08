@@ -236,6 +236,7 @@ class CcCommandParserTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testProcessC0_Null);
     CPPUNIT_TEST(testProcessC0_ETX);
     CPPUNIT_TEST(testProcessC0_P16);
+    CPPUNIT_TEST(testProcessC0_TruncatedP16);
     CPPUNIT_TEST(testProcessC0_MultiByteCommands);
     CPPUNIT_TEST(testProcessG0_StandardASCII);
     CPPUNIT_TEST(testProcessG0_Delete);
@@ -247,6 +248,7 @@ class CcCommandParserTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testProcessExt_SpecialCharacters);
     CPPUNIT_TEST(testProcessExt_UnmappedCharacter);
     CPPUNIT_TEST(testProcessExt_BoxDrawing);
+    CPPUNIT_TEST(testProcessExt_Truncated);
     CPPUNIT_TEST(testProcessC1_SetCurrentWindow);
     CPPUNIT_TEST(testProcessC1_ClearWindows);
     CPPUNIT_TEST(testProcessC1_DisplayWindows);
@@ -428,6 +430,24 @@ public:
         CPPUNIT_ASSERT_EQUAL(0, mock->getCallCount());
     }
 
+    void testProcessC0_TruncatedP16()
+    {
+        const std::vector<std::vector<uint8_t>> truncatedCommands = {
+            {C0_P16},
+            {C0_P16, 0x41}
+        };
+
+        for (const auto& command : truncatedCommands) {
+            mock->clearCalls();
+            parser->process(createBlock(command));
+            CPPUNIT_ASSERT_EQUAL(0, mock->getCallCount());
+
+            parser->process(createBlock({0x42}));
+            CPPUNIT_ASSERT_EQUAL(1, mock->getCallCount("report"));
+            CPPUNIT_ASSERT_EQUAL(std::string("B"), mock->getLastCall("report").stringParams[0]);
+        }
+    }
+
     void testProcessC0_MultiByteCommands()
     {
         auto block = createBlock({0x10, 0x00, 0x18, 0x00, 0x00});
@@ -554,6 +574,17 @@ public:
         CPPUNIT_ASSERT(mock->wasMethodCalled("report"));
         auto call = mock->getLastCall("report");
         CPPUNIT_ASSERT_EQUAL(std::string("\xe2\x94\x82"), call.stringParams[0]);
+    }
+
+    void testProcessExt_Truncated()
+    {
+        mock->clearCalls();
+        parser->process(createBlock({C0_EXT1}));
+        CPPUNIT_ASSERT_EQUAL(0, mock->getCallCount());
+
+        parser->process(createBlock({0x41}));
+        CPPUNIT_ASSERT_EQUAL(1, mock->getCallCount("report"));
+        CPPUNIT_ASSERT_EQUAL(std::string("A"), mock->getLastCall("report").stringParams[0]);
     }
 
     void testProcessC1_SetCurrentWindow()

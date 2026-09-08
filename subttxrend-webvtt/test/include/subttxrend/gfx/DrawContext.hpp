@@ -18,9 +18,9 @@
 */
 #pragma once
 
-#include <iostream>
 #include <subttxrend/gfx/ColorArgb.hpp>
 #include <subttxrend/gfx/Types.hpp>
+#include <subttxrend/gfx/FontStrip.hpp>
 #include <subttxrend/gfx/PrerenderedFont.hpp>
 
 namespace subttxrend
@@ -30,21 +30,41 @@ namespace gfx
 
 class DrawContext {
 public:
-    DrawContext() { std::cout << "DrawContext constr\n"; }
+    virtual ~DrawContext() = default;
 
-    void fillRectangle(ColorArgb color, const Rectangle& rectangle)
+    virtual void fillRectangle(ColorArgb color, const Rectangle& rectangle) = 0;
+
+    virtual void drawUnderline(ColorArgb color,
+                               const Rectangle& rectangle)
     {
-        std::cout << "fillRectangle\n";
     }
 
-    void drawString(PrerenderedFont &m_font,
-                                const Rectangle &rectangle,
-                                const std::vector<GlyphData> &glyphs,
-                                const ColorArgb fgColor,
-                                const ColorArgb bgColor)
+    virtual void drawPixmap(const ClutBitmap& bitmap,
+                            const Rectangle& srcRect,
+                            const Rectangle& dstRect)
     {
-        std::cout << "drawString\n";
     }
+
+    virtual void drawBitmap(const Bitmap& bitmap,
+                            const Rectangle& dstRect)
+    {
+    }
+
+    virtual void drawGlyph(const FontStripPtr& fontStrip,
+                           std::int32_t glyphIndex,
+                           const Rectangle& rect,
+                           ColorArgb fgColor,
+                           ColorArgb bgColor)
+    {
+    }
+
+    virtual void drawString(PrerenderedFont &m_font,
+                            const Rectangle &rectangle,
+                            const std::vector<GlyphData> &glyphs,
+                            const ColorArgb fgColor,
+                            const ColorArgb bgColor,
+                            int outlineSize = 0,
+                            int verticalOffset = 0) = 0;
 };
 }
 }

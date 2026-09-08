@@ -32,6 +32,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/../cmake
 find_package(LibCppUnit REQUIRED)
 find_package(LibSubTtxRendCommon REQUIRED)
 find_package(LibSubTtxRendGfx REQUIRED)
+find_package(LibXml2 REQUIRED)
 
 #
 # Include directories
@@ -42,6 +43,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../src)
 include_directories(${LIBCPPUNIT_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDGFX_INCLUDE_DIRS})
 include_directories(${LIBSUBTTXRENDCOMMON_INCLUDE_DIRS})
+include_directories(${LIBXML2_INCLUDE_DIRS})
 
 #
 # Macros
@@ -54,6 +56,7 @@ macro (add_cppunit_test _name)
 
     target_link_libraries(${_name} ${LIBSUBTTXRENDGFX_LIBRARIES})
     target_link_libraries(${_name} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
+    target_link_libraries(${_name} ${LIBXML2_LIBRARIES})
     target_link_libraries(${_name} ${LIBCPPUNIT_LIBRARIES})
 
     add_test(NAME ${_name} COMMAND ${_name} )
@@ -95,8 +98,69 @@ add_cppunit_test(DocumentInstance_Test
                  TestRunner.cpp
                  )
 
+add_cppunit_test(Parser_Test
+                 Parser_test.cpp
+                 TestRunner.cpp
+                 ../src/Parser/AttributeHandlers.cpp
+                 ../src/Parser/DocumentInstance.cpp
+                 ../src/Parser/Outline.cpp
+                 ../src/Parser/Parser.cpp
+                 ../src/Parser/StyleSet.cpp
+                 ../src/Parser/Utils.cpp
+                 ../src/Parser/XmlLibSaxParserWrapper.cpp
+                 )
+
 add_cppunit_test(AttributeHandlers_test
                  AttributeHandlers_test.cpp
                  TestRunner.cpp
                  ../src/Parser/AttributeHandlers.cpp
+                 )
+
+add_cppunit_test(ValueConverter_Test
+                 ValueConverter_test.cpp
+                 TestRunner.cpp
+                 ../src/ValueConverter.cpp
+                 ../src/Parser/AttributeHandlers.cpp
+                 )
+
+add_cppunit_test(IntermediateDocDrawer_Test
+                 IntermediateDocDrawer_test.cpp
+                 TestRunner.cpp
+                 ../src/IntermediateDocDrawer.cpp
+                 ../src/ValueConverter.cpp
+                 ../src/Parser/AttributeHandlers.cpp
+                 ../src/Parser/Outline.cpp
+                 ../src/Parser/StyleSet.cpp
+                 ../src/Parser/Utils.cpp
+                 )
+
+add_cppunit_test(TtmlRenderer_Test
+                 TtmlRenderer_test.cpp
+                 TestRunner.cpp
+                 ../src/DataDumper.cpp
+                 ../src/TtmlRenderer.cpp
+                 ../src/IntermediateDocDrawer.cpp
+                 ../src/ValueConverter.cpp
+                 ../src/Parser/AttributeHandlers.cpp
+                 ../src/Parser/Outline.cpp
+                 ../src/Parser/StyleSet.cpp
+                 ../src/Parser/Utils.cpp
+                 )
+
+add_cppunit_test(TtmlEngineImpl_Test
+                 TtmlEngineImpl_test.cpp
+                 TestRunner.cpp
+                 ../src/DataDumper.cpp
+                 ../src/TtmlEngineImpl.cpp
+                 ../src/TtmlRenderer.cpp
+                 ../src/IntermediateDocDrawer.cpp
+                 ../src/ValueConverter.cpp
+                 ../src/Parser/AttributeHandlers.cpp
+                 ../src/Parser/DocumentInstance.cpp
+                 ../src/Parser/Outline.cpp
+                 ../src/Parser/Parser.cpp
+                 ../src/Parser/StyleSet.cpp
+                 ../src/Parser/Utils.cpp
+                 ../src/Parser/XmlLibSaxParserWrapper.cpp
+                 ../src/transform/TtmlTransformer.cpp
                  )

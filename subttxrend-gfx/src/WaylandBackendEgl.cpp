@@ -542,10 +542,14 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
 #if defined(WESTEROS)
    if(visibleChanged)
    {
-        g_logger.info("%s - %s", __func__, visible ? "Something to draw, make surface visible" : "Nothing to draw, hide surface");
+        g_logger.info("%s - %s", __func__, visible ? "Something to draw, make surface visible" : "Nothing to draw, no hide surface");
         if(getSimpleShell())
         {
-            wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId, visible ? 1 : 0);
+            if (visible)
+            {
+                wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId, 1);
+            }
+            //wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId, visible ? 1 : 0);
         }
    }
 #endif

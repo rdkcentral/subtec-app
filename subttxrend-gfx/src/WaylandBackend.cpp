@@ -448,6 +448,10 @@ void WaylandBackend::surfaceId(waylandcpp::SimpleShellPtr /*simpleShell*/,
 
             const char* env_name = ::getenv("SUBTEC_SURFACE_NAME");
             wl_simple_shell_set_name(m_simpleShell->getNativeObject(), surfaceId, env_name==NULL ? "subtitles-subtec" : env_name);
+			g_logger.info("%s - setting surface geometry to %dx%d", __func__,
+                m_outputSize.m_w, m_outputSize.m_h);
+			wl_simple_shell_set_geometry(m_simpleShell->getNativeObject(),
+                surfaceId, 0, 0, m_outputSize.m_w, m_outputSize.m_h);
         }
     }
 }
@@ -461,8 +465,8 @@ void WaylandBackend::surfaceCreated(waylandcpp::SimpleShellPtr /*simpleShell*/,
     /* Start with the surface invisible */
     if (m_simpleShell && (m_currentSurfaceId == surfaceId))
     {
-        g_logger.info("%s - Hiding surface with id %u on creation", __func__, surfaceId);
-        wl_simple_shell_set_visible(m_simpleShell->getNativeObject(), surfaceId, 0);
+        g_logger.info("%s - not Hiding surface with id %u on creation", __func__, surfaceId);
+        //wl_simple_shell_set_visible(m_simpleShell->getNativeObject(), surfaceId, 0);
     }
 }
 
@@ -522,6 +526,7 @@ void WaylandBackend::mode(waylandcpp::OutputPtr owner,
 
     if ((flags & OUTPUT_MODE_FLAG_CURRENT) != 0)
     {
+		m_outputSize = Size{ width, height };
         currentOutputModeChanged(Size
         { width, height });
     }

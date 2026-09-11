@@ -465,8 +465,8 @@ void WaylandBackend::surfaceCreated(waylandcpp::SimpleShellPtr /*simpleShell*/,
     /* Start with the surface invisible */
     if (m_simpleShell && (m_currentSurfaceId == surfaceId))
     {
-        g_logger.info("%s - Hiding surface with id %u on creation", __func__, surfaceId);
-        wl_simple_shell_set_visible(m_simpleShell->getNativeObject(), surfaceId, 0);
+        g_logger.info("%s - not Hiding surface with id %u on creation", __func__, surfaceId);
+        //wl_simple_shell_set_visible(m_simpleShell->getNativeObject(), surfaceId, 0);
     }
 }
 

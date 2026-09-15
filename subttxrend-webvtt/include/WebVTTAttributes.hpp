@@ -122,9 +122,15 @@ public:
      * @param attributes
      *      Initial attributes.
      */
-    WebVTTAttributes operator=(const WebVTTAttributes &attributes)
+    WebVTTAttributes& operator=(const WebVTTAttributes &attributes)
     {
-        return WebVTTAttributes(attributes);
+        if (this != &attributes)
+        {
+            std::scoped_lock lock(m_mutex, attributes.m_mutex);
+            // coverity[missing_lock : FALSE] - both m_mutex and attributes.m_mutex are held via scoped_lock above
+            m_attributes = attributes.m_attributes;
+        }
+        return *this;
     }
 
     /**

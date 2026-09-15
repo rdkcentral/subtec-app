@@ -17,7 +17,7 @@
 
 project(subttxrend-app)
 
-cmake_minimum_required (VERSION 3.2)
+cmake_minimum_required (VERSION 3.22)
 
 #
 # Directory with modules
@@ -120,7 +120,8 @@ set(SUBTTXREND_APP_SOURCES
 #
 set(APP_NAME "subttxrend-app")
 add_executable(${APP_NAME} ${SUBTTXREND_APP_SOURCES})
-set_property(TARGET ${APP_NAME} PROPERTY CXX_STANDARD 14)
+set_property(TARGET ${APP_NAME} PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${APP_NAME} PROPERTY CXX_EXTENSIONS OFF)
 target_link_libraries(${APP_NAME} ${LIBGLIB_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDCTRL_LIBRARIES})
 target_link_libraries(${APP_NAME} ${LIBSUBTTXRENDCOMMON_LIBRARIES})

@@ -17,7 +17,7 @@
 
 project(subttxrend-protocol)
 
-cmake_minimum_required (VERSION 3.2)
+cmake_minimum_required (VERSION 3.22)
 
 #
 # Directory with modules
@@ -127,7 +127,8 @@ set(SUBTTXREND_PROTOCOL_SOURCES
 #
 set(LIBRARY_NAME "subttxrend-protocol")
 add_library(${LIBRARY_NAME} SHARED ${SUBTTXREND_PROTOCOL_SOURCES})
-set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD 14)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_EXTENSIONS OFF)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY VERSION 0.0.0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY SOVERSION 0)
 set_property(TARGET ${LIBRARY_NAME} PROPERTY PUBLIC_HEADER ${SUBTTXREND_PROTOCOL_PUBLIC_HEADERS})

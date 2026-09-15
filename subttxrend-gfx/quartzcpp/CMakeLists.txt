@@ -21,7 +21,7 @@
 
 project(quartzcpp)
 
-cmake_minimum_required (VERSION 3.2)
+cmake_minimum_required (VERSION 3.22)
 
 #
 # Directory with modules
@@ -52,7 +52,8 @@ set(DVBGRAPHICSENGINE_SOURCES
 # Targets
 #
 add_library(quartzcpp STATIC ${DVBGRAPHICSENGINE_SOURCES})
-set_property(TARGET quartzcpp PROPERTY CXX_STANDARD 14)
+set_property(TARGET quartzcpp PROPERTY CXX_STANDARD 17)
+set_property(TARGET quartzcpp PROPERTY CXX_EXTENSIONS OFF)
 target_link_libraries(quartzcpp PRIVATE ${APPKIT_LIB})
 target_link_libraries(quartzcpp PRIVATE ${GLUT_LIB})
 target_link_libraries(quartzcpp PRIVATE ${OPENGL_LIB})

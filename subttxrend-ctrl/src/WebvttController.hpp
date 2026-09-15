@@ -67,6 +67,8 @@ class WebvttController final : public ControllerInterface
 
     void processSetCCAttributesPacket(const protocol::PacketSetCCAttributes& packet) override;
 
+    void setCustomAttributes(const subttxrend::webvttengine::WebVTTAttributes& attributes);
+
   private:
     bool wantsData(std::uint32_t channelId) const;
     void select(std::uint32_t channelId, std::uint32_t width, std::uint32_t height);

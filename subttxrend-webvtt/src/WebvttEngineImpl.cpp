@@ -144,6 +144,12 @@ void WebvttEngineImpl::setAttributes(const WebVTTAttributes &attributes)
     m_renderer->setAttributes(attributes);
 }
 
+void WebvttEngineImpl::setCustomAttributes(const WebVTTAttributes &attributes) {
+  g_logger.osinfo(__LOGGER_FUNC__);
+  m_customAttributes = attributes;
+  m_renderer->setCustomAttributes(m_customAttributes);
+}
+
 /**
  * @brief Simple string helper method
  * 

@@ -96,6 +96,15 @@ public:
      */
     void setAttributes(const WebVTTAttributes &attributes);
 
+  /**
+   * Set custom attribute overrides.
+   * Applied on top of CC-sourced attributes at render time.
+   *
+   * @param attrs
+   *      Custom WebVTT attribute overrides.
+   */
+  void setCustomAttributes(const WebVTTAttributes &attrs);
+
 private:
     void resizeWindow();
 
@@ -107,6 +116,10 @@ private:
 
     std::atomic<bool>   m_reset;
     WebVTTAttributes    m_attributes;
+    WebVTTAttributes    m_customAttributes;
+    WebVTTAttributes    m_effectiveAttributes;
+
+    void updateEffectiveAttributes();
 };
 
 }   // namespace webvttengine

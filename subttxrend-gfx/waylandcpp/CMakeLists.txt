@@ -103,7 +103,8 @@ endif(WITH_WESTEROS)
 # Targets
 #
 add_library(waylandcpp STATIC ${DVBGRAPHICSENGINE_SOURCES})
-set_property(TARGET waylandcpp PROPERTY CXX_STANDARD 14)
+set_property(TARGET waylandcpp PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD_EXTENSION OFF)
 target_link_libraries(waylandcpp ${LIBSUBTTXRENDCOMMON_LIBRARIES})
 target_link_libraries(waylandcpp ${LIBWAYLANDCLIENT_LIBRARIES})
 target_link_libraries(waylandcpp ${LIBXKBCOMMON_LIBRARIES})

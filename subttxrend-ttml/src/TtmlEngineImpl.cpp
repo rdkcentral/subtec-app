@@ -267,7 +267,7 @@ void TtmlEngineImpl::setSubtitleInfo(const std::string& contentType, const std::
 
 void TtmlEngineImpl::setCustomTtmlStyling(const std::string& styling)
 {
-    m_logger.osinfo(__LOGGER_F UNC__, " styling = ", styling);
+    m_logger.osinfo(__LOGGER_FUNC__, " styling = ", styling);
     assert(m_parser);
     // Input has the form "key:value;key:value"
     // We parse this out to be a set of properties, then pass those to the parser to keep in its DocumentInstance

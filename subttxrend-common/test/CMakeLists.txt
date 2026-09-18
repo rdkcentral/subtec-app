@@ -126,7 +126,8 @@ add_cppunit_test(JsonData_Test
                  ../src/StringUtils.cpp)
 
 # Upgrade C++ standard for JsonData_Test only (JsonData.cpp uses std::make_unique)
-set_property(TARGET JsonData_Test PROPERTY CXX_STANDARD 14)
+set_property(TARGET JsonData_Test PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD_EXTENSION OFF)
 
 #
 # Properties Tests
@@ -144,4 +145,5 @@ add_cppunit_test(Properties_Test
                  ../src/ConfigProvider.cpp
                  ../src/ConfigProviderStorage.cpp
                  ../src/StringUtils.cpp)
-set_property(TARGET Properties_Test PROPERTY CXX_STANDARD 14)
+set_property(TARGET Properties_Test PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD_EXTENSION OFF)

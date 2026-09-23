@@ -61,6 +61,37 @@ const ResizeMode g_resizeMode = ResizeMode::MAX_WINDOW_SIZE;
 
 subttxrend::common::Logger g_logger("Gfx", "WaylandBackendShm");
 
+/**
+ * Converts pixmap contents from straight to premultiplied alpha in place.
+ *
+ * @param pixmap
+ *      Pixmap to convert.
+ */
+void premultiplyAlpha(Pixmap& pixmap)
+{
+    const auto width = pixmap.getWidth();
+    const auto height = pixmap.getHeight();
+
+    for (std::int32_t y = 0; y < height; ++y)
+    {
+        auto line = pixmap.getLine(y);
+
+        for (std::int32_t x = 0; x < width; ++x, ++line)
+        {
+            auto pixel = *line;
+
+            if (pixel.m_a != 255)
+            {
+                pixel.m_r = static_cast<std::uint8_t>((pixel.m_r * pixel.m_a) / 255);
+                pixel.m_g = static_cast<std::uint8_t>((pixel.m_g * pixel.m_a) / 255);
+                pixel.m_b = static_cast<std::uint8_t>((pixel.m_b * pixel.m_a) / 255);
+
+                *line = pixel;
+            }
+        }
+    }
+}
+
 } // namespace <anonymous>
 
 //------------------------------------------
@@ -251,6 +282,9 @@ void WaylandBackendShm::paintPixels(const WaylandBuffer::Ptr& buffer)
     RenderEnumerator enumerator(screenPixmap);
 
     getListener()->enumerateVisibleWindows(enumerator);
+
+    // window pixmaps use straight alpha, wl_shm ARGB8888 is premultiplied
+    premultiplyAlpha(screenPixmap);
 
     g_logger.trace("%s - complete", __func__);
 }

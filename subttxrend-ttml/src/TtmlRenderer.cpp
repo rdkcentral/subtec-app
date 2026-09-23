@@ -87,7 +87,8 @@ void TtmlRenderer::decodeImages(IntermediateDocument &doc)
             auto b64 = entity.m_imageChunk.m_image->getBase64Data();
             auto pngCallback = preparePngCallback(entity.m_imageChunk.m_image->getId(), doc.m_timing.toStr());
 
-            entity.m_imageChunk.m_bmp = gfx::base64toPixmap(*b64, true, pngCallback);
+            // straight (non-premultiplied) alpha, as expected by Blitter and the backends
+            entity.m_imageChunk.m_bmp = gfx::base64toPixmap(*b64, false, std::move(pngCallback));
         }
     }
 }

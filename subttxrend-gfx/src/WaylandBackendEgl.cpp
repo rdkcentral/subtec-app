@@ -58,6 +58,8 @@ GLchar FRAGMENT_SHADER_SOURCE[] = ""
         "{ \n"
         " vec4 textColor = texture2D( uTexture, vTexCoordinate ).bgra; \n"
         " vec4 backgroundColor = texture2D( uBgTexture, vTexCoordinate ).bgra; \n"
+        " textColor.rgb *= textColor.a; \n"
+        " backgroundColor.rgb *= backgroundColor.a; \n"
         " gl_FragColor = textColor + backgroundColor*(1.0-textColor.a); \n"
         "} \n";
 

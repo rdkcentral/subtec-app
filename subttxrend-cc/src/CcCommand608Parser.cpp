@@ -1312,7 +1312,7 @@ void CommandParser::set608WindowPosition(int state, unsigned char baseRow, unsig
     }
 
     update608WindowDefinitionPosition(wd, baseRow, windowColumn);
-    m_proc->defineWindow(wd);
+    m_proc->updateWindowDefinition(wd);
 
     set608WindowCursor(cursorRow, cursorColumn);
 

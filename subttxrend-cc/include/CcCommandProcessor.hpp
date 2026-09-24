@@ -66,6 +66,7 @@ public:
     virtual void updateWindowRowCount(uint32_t id, int rowCount, bool adjust) = 0;
     virtual void enable608(bool enabled) = 0;
     virtual bool isWindowTimedout() = 0;
+    virtual void updateWindowDefinition(const WindowDefinition &wd) { defineWindow(wd); }
 };
 
 } // namespace cc

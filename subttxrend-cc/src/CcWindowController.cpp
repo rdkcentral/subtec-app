@@ -175,6 +175,20 @@ void WindowController::defineWindow(const WindowDefinition &wd)
     m_userSettingsCtrl.onEmbeddedPenAttributes(wd.pen_style);
     m_userSettingsCtrl.onEmbeddedWindowAttributes(wd.win_style);
 
+    applyWindowDefinition(wd);
+}
+
+void WindowController::updateWindowDefinition(const WindowDefinition &wd)
+{
+    if (wd.id >= MAX_WINDOWS or wd.priority >= MAX_WINDOWS)
+        return;
+
+    applyWindowDefinition(wd);
+}
+
+void WindowController::applyWindowDefinition(const WindowDefinition &wd)
+{
+
     auto windowDef = wd;
 
     windowDef.win_style = m_userSettingsCtrl.getWindowAttributes();

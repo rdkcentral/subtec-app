@@ -52,7 +52,8 @@ set(DVBGRAPHICSENGINE_SOURCES
 # Targets
 #
 add_library(quartzcpp STATIC ${DVBGRAPHICSENGINE_SOURCES})
-set_property(TARGET quartzcpp PROPERTY CXX_STANDARD 14)
+set_property(TARGET quartzcpp PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD_EXTENSION OFF)
 target_link_libraries(quartzcpp PRIVATE ${APPKIT_LIB})
 target_link_libraries(quartzcpp PRIVATE ${GLUT_LIB})
 target_link_libraries(quartzcpp PRIVATE ${OPENGL_LIB})

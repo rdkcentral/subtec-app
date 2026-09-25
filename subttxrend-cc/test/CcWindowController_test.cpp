@@ -176,6 +176,9 @@ class CcWindowControllerTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testEnable608True);
     CPPUNIT_TEST(testEnable608False);
     CPPUNIT_TEST(testProcessSetCCAttributesPacketFontColor);
+    CPPUNIT_TEST(testUseEmbeddedColorAfterWindowRedefinition);
+    CPPUNIT_TEST(testUseEmbeddedColorAfterMidRowStyleOverride);
+    CPPUNIT_TEST(testUseEmbeddedWindowFillColorAfterBackgroundFill);
     CPPUNIT_TEST(testUpdateWindowRowCountNonExistent);
     CPPUNIT_TEST(testResetDeletesAllWindows);
 
@@ -263,6 +266,29 @@ public:
             static_cast<std::uint8_t>((color >> 24) & 0xFF)
         };
         packet.insert(packet.end(), 13 * 4, 0x00);
+        return packet;
+    }
+
+    // slotIndex must match the attribute's position in PacketSetCCAttributes's internal
+    // attributMasks order (FONT_COLOR=0, ..., WIN_COLOR=10, WIN_OPACITY=11, ...).
+    std::vector<std::uint8_t> createAttributePacket(std::uint32_t attribTypeMask, std::size_t slotIndex, std::uint32_t value) {
+        std::vector<std::uint8_t> packet = {
+            0x12, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00,
+            0x44, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            static_cast<std::uint8_t>(attribTypeMask & 0xFF),
+            static_cast<std::uint8_t>((attribTypeMask >> 8) & 0xFF),
+            static_cast<std::uint8_t>((attribTypeMask >> 16) & 0xFF),
+            static_cast<std::uint8_t>((attribTypeMask >> 24) & 0xFF)
+        };
+        packet.insert(packet.end(), slotIndex * 4, 0x00);
+        packet.push_back(static_cast<std::uint8_t>(value & 0xFF));
+        packet.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFF));
+        packet.push_back(static_cast<std::uint8_t>((value >> 16) & 0xFF));
+        packet.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFF));
+        packet.insert(packet.end(), (13 - slotIndex) * 4, 0x00);
         return packet;
     }
 
@@ -1139,6 +1165,91 @@ public:
         CPPUNIT_ASSERT(controller->getWindowDefinition(retrieved));
         CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xFF102030),
                              retrieved.pen_style.pen_color.fg_color);
+    }
+
+    void testUseEmbeddedColorAfterWindowRedefinition()
+    {
+        controller->defineWindow(createDefaultWindowDefinition());
+
+        PacketSetCCAttributes userColorPacket;
+        auto packetData = createFontColorPacket(0xFF11EE11);
+        auto buffer = std::make_unique<subttxrend::common::DataBuffer>(packetData.begin(), packetData.end());
+        CPPUNIT_ASSERT(userColorPacket.parse(std::move(buffer)));
+        controller->processSetCCAttributesPacket(userColorPacket);
+
+        WindowDefinition effectiveDefinition;
+        CPPUNIT_ASSERT(controller->getWindowDefinition(effectiveDefinition));
+        controller->updateWindowDefinition(effectiveDefinition);
+
+        PacketSetCCAttributes embeddedColorPacket;
+        packetData = createFontColorPacket(0xFF000000);
+        buffer = std::make_unique<subttxrend::common::DataBuffer>(packetData.begin(), packetData.end());
+        CPPUNIT_ASSERT(embeddedColorPacket.parse(std::move(buffer)));
+        controller->processSetCCAttributesPacket(embeddedColorPacket);
+
+        WindowDefinition restoredDefinition;
+        CPPUNIT_ASSERT(controller->getWindowDefinition(restoredDefinition));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xFFFFFFFF),
+                             restoredDefinition.pen_style.pen_color.fg_color);
+    }
+
+    void testUseEmbeddedColorAfterMidRowStyleOverride()
+    {
+        controller->defineWindow(createDefaultWindowDefinition());
+
+        PacketSetCCAttributes userColorPacket;
+        auto packetData = createFontColorPacket(0xFF11EE11);
+        auto buffer = std::make_unique<subttxrend::common::DataBuffer>(packetData.begin(), packetData.end());
+        CPPUNIT_ASSERT(userColorPacket.parse(std::move(buffer)));
+        controller->processSetCCAttributesPacket(userColorPacket);
+
+        // Simulate a CEA-608 mid-row/PAC style change (e.g. flashing or underline toggle)
+        // that fetches the current *effective* colour and passes it through unchanged.
+        PenAttributes effectiveAttrs;
+        CPPUNIT_ASSERT(controller->activePenAttributes(effectiveAttrs));
+        effectiveAttrs.underline = true;
+        controller->overridePenAttributes(effectiveAttrs, true);
+
+        PacketSetCCAttributes embeddedColorPacket;
+        packetData = createFontColorPacket(0xFF000000);
+        buffer = std::make_unique<subttxrend::common::DataBuffer>(packetData.begin(), packetData.end());
+        CPPUNIT_ASSERT(embeddedColorPacket.parse(std::move(buffer)));
+        controller->processSetCCAttributesPacket(embeddedColorPacket);
+
+        WindowDefinition restoredDefinition;
+        CPPUNIT_ASSERT(controller->getWindowDefinition(restoredDefinition));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xFFFFFFFF),
+                             restoredDefinition.pen_style.pen_color.fg_color);
+    }
+
+    void testUseEmbeddedWindowFillColorAfterBackgroundFill()
+    {
+        controller->defineWindow(createDefaultWindowDefinition());
+
+        PacketSetCCAttributes winColorPacket;
+        auto packetData = createAttributePacket(0x0400, 10, 0xFF11EE11);
+        auto buffer = std::make_unique<subttxrend::common::DataBuffer>(packetData.begin(), packetData.end());
+        CPPUNIT_ASSERT(winColorPacket.parse(std::move(buffer)));
+        controller->processSetCCAttributesPacket(winColorPacket);
+
+        // Simulate a CEA-608 background-fill change (set608WindowFill) that fetches the
+        // current effective window attributes and only tweaks fill_color.
+        WindowDefinition current;
+        CPPUNIT_ASSERT(controller->getWindowDefinition(current));
+        WindowAttributes wattrs = current.win_style;
+        wattrs.fill_color = 0xFF000000;
+        controller->updateWindowAttributes(wattrs);
+
+        PacketSetCCAttributes embeddedWinColorPacket;
+        packetData = createAttributePacket(0x0400, 10, 0xFF000000);
+        buffer = std::make_unique<subttxrend::common::DataBuffer>(packetData.begin(), packetData.end());
+        CPPUNIT_ASSERT(embeddedWinColorPacket.parse(std::move(buffer)));
+        controller->processSetCCAttributesPacket(embeddedWinColorPacket);
+
+        WindowDefinition restored;
+        CPPUNIT_ASSERT(controller->getWindowDefinition(restored));
+        CPPUNIT_ASSERT_EQUAL(static_cast<std::uint32_t>(0xFF000000),
+                             restored.win_style.fill_color);
     }
 
     void testUpdateWindowRowCountNonExistent()

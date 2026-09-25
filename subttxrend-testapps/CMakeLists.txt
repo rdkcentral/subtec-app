@@ -81,10 +81,12 @@ set(SUBTTXREND_TESTAPPS_DATAPROXY_SOURCES
 # Targets
 #
 add_library(subttxrend-testapps-common STATIC ${SUBTTXREND_TESTAPPS_COMMON_SOURCES})
-set_property(TARGET subttxrend-testapps-common PROPERTY CXX_STANDARD 14)
+set_property(TARGET subttxrend-testapps-common PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD_EXTENSION OFF)
 
 add_executable(subttxrend-dataproxy ${SUBTTXREND_TESTAPPS_DATAPROXY_SOURCES})
-set_property(TARGET subttxrend-dataproxy PROPERTY CXX_STANDARD 14)
+set_property(TARGET subttxrend-dataproxy PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CXX_STANDARD_EXTENSION OFF)
 target_link_libraries(subttxrend-dataproxy subttxrend-testapps-common)
 target_link_libraries(subttxrend-dataproxy ${LIBSUBTTXRENDPROTOCOL_LIBRARIES})
 

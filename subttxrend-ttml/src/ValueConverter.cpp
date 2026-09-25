@@ -131,10 +131,11 @@ int ValueConverter::sizeToPixels(DomainValue value, int relativeSizeInPixels) co
     }
 
     //Set a max text height at 1.5 times the TTML default for badly formed Viper TTML content
-    if (pixelSize > static_cast<int>(PixelDefault * 1.5))
+    const int pixelSizeMax = std::lround(PixelDefault * 1.5);
+    if (pixelSize > pixelSizeMax)
     {
-        logger.debug("%s pixelSize %d trimmed to %d", __LOGGER_FUNC__, pixelSize, PixelDefault);
-        pixelSize = PixelDefault;
+        logger.debug("%s pixelSize %d trimmed to %d", __LOGGER_FUNC__, pixelSize, pixelSizeMax);
+        pixelSize = pixelSizeMax;
     }
 
     logger.debug("%s size %d (from %d)", __LOGGER_FUNC__, pixelSize, static_cast<int>(value.getValue()));

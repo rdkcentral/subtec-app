@@ -137,6 +137,17 @@ public:
         }
     }
 
+    void updateWindowDefinition(const WindowDefinition &wd) override {
+        CallRecord rec;
+        rec.method = "updateWindowDefinition";
+        rec.windowDef = wd;
+        calls.push_back(rec);
+        currentWindowDef = wd;
+        if (wd.id < definedWindows.size()) {
+            windowDefs[wd.id] = wd;
+        }
+    }
+
     bool activePenAttributes(PenAttributes &penAttributes) override {
         penAttributes = currentPenAttrs;
         return true;
@@ -921,6 +932,8 @@ public:
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("defineWindow"));
         CPPUNIT_ASSERT(mock->wasMethodCalled("setCurrentWindow"));
+
+        CPPUNIT_ASSERT(mock->wasMethodCalled("updateWindowDefinition"));
     }
 
     void testStateTransition_IdleToPopOn1()

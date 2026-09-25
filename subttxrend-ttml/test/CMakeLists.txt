@@ -101,3 +101,10 @@ add_cppunit_test(AttributeHandlers_test
                  TestRunner.cpp
                  ../src/Parser/AttributeHandlers.cpp
                  )
+
+add_cppunit_test(ValueConverter_test
+                 ValueConverter_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/ValueConverter.cpp
+                 )

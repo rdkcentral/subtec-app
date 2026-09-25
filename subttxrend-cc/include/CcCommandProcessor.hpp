@@ -67,6 +67,7 @@ public:
     virtual void enable608(bool enabled) = 0;
     virtual bool isWindowTimedout() = 0;
     virtual void updateWindowDefinition(const WindowDefinition &wd) { defineWindow(wd); }
+    virtual void updateWindowAttributes(const WindowAttributes &attrs) { setWindowAttributes(attrs); }
 };
 
 } // namespace cc

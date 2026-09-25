@@ -59,6 +59,7 @@ public:
     void displayWindows(WindowsMap wm) override;
     void toggleWindows(WindowsMap wm) override;
     void setWindowAttributes(WindowAttributes attr) override;
+    void updateWindowAttributes(const WindowAttributes &attr) override;
     void report(std::string str) override;
     void hideWindows(WindowsMap wm) override;
     void reset() override;

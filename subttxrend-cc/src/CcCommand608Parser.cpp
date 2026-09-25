@@ -579,7 +579,7 @@ void CommandParser::set608WindowFill(uint32_t colour, uint32_t opacity)
         WindowAttributes wattrs = wd.win_style;
         wattrs.fill_color = colour & 0x00FFFFFF;
         wattrs.fill_color |= (opacity << 24);
-        m_proc->setWindowAttributes(wattrs);
+        m_proc->updateWindowAttributes(wattrs);
     }
 }
 

@@ -253,6 +253,17 @@ void WindowController::setWindowAttributes(WindowAttributes attr)
         m_selectedWindow->setWindowAttributes(m_userSettingsCtrl.getWindowAttributes());
 }
 
+void WindowController::updateWindowAttributes(const WindowAttributes &attr)
+{
+    // attr here reflects the current *effective* window styling (e.g. a CEA-608
+    // background-fill change that fetched the existing definition to tweak one field),
+    // not new embedded/default styling - only merge active overrides, never re-embed.
+    const auto finalAttributes = m_userSettingsCtrl.applyWindowAttributesOverride(attr);
+
+    if (m_selectedWindow)
+        m_selectedWindow->setWindowAttributes(finalAttributes);
+}
+
 void WindowController::report(std::string str)
 {
     logger.trace("ses ");
@@ -341,12 +352,15 @@ bool WindowController::activePenAttributes(PenAttributes &penAttributes)
 // updated by changes from setPenAttributes() which other wise affect all text drawers.
 void WindowController::overridePenAttributes(PenAttributes penAttributes, bool midRow)
 {
-    m_userSettingsCtrl.onEmbeddedPenAttributes(penAttributes);
-    m_userSettingsCtrl.onEmbeddedPenColor(penAttributes.pen_color);
-    const auto newPenAttributes = m_userSettingsCtrl.getPenAttributes();
+    // penAttributes here reflects the current *effective* on-screen styling (e.g. a
+    // CEA-608 mid-row/PAC style change carrying most fields forward unchanged), not
+    // new embedded/default styling. Baking it in would permanently replace the real
+    // defaults with whatever happened to be active (possibly a user override), so only
+    // active user overrides are merged on top for rendering.
+    const auto finalAttributes = m_userSettingsCtrl.applyPenAttributesOverride(penAttributes);
 
     if (m_selectedWindow)
-        m_selectedWindow->overridePenAttributes(newPenAttributes, midRow);
+        m_selectedWindow->overridePenAttributes(finalAttributes, midRow);
 }
 
 void WindowController::setPenColor(PenColor color)

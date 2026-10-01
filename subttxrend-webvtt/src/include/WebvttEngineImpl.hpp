@@ -95,6 +95,9 @@ public:
     /** @copydoc WebvttEnging::currentMediatime */
     virtual void currentMediatime(const std::uint64_t mediatimeMs) override;
 
+  /** @copydoc WebvttEngine::setCustomAttributes */
+  virtual void setCustomAttributes(const WebVTTAttributes &attributes) override;
+
 private:
 
     void clear();
@@ -136,6 +139,9 @@ private:
     const gfx::Size                         DEFAULT_SURFACE_SIZE{1280, 720};
     gfx::Size                               m_surfaceSize{DEFAULT_SURFACE_SIZE};
 
+  /** Custom WebVTTAttributes overrides set via setCustomAttributes().
+   *  Applied on top of per-cue and CC-sourced attributes at render time. */
+  WebVTTAttributes m_customAttributes;
 };
 
 } // namespace subttxrend

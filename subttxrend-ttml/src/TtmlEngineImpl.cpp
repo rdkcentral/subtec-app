@@ -294,7 +294,14 @@ void TtmlEngineImpl::process()
     std::list<IntermediateDocument> shownDocuments;
     {
         std::lock_guard<std::mutex> lock{m_mutex};
-        if ((m_lastMediatimeMs != -1) && (!m_paused)) {
+        // While paused media time is frozen, so the screen must be left as it is.
+        // Returning here also suppresses the display timeout above, which would
+        // otherwise clear the currently visible document.
+        if (m_paused) {
+            return;
+        }
+
+        if (m_lastMediatimeMs != -1) {
 
             assert(m_renderer);
 

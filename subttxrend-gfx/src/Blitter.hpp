@@ -422,25 +422,39 @@ inline void Blitter::fillRectangle(DstPixmapType& dstPixmap,
                                    const Rectangle& dstRect,
                                    DstPixelType value)
 {
-    int width = dstRect.m_w;
-    int safeX = dstPixmap.getWidth()/10;
+    const int pixmapWidth = dstPixmap.getWidth();
+    const int pixmapHeight = dstPixmap.getHeight();
+    const int safeX = pixmapWidth / 10;
+
+    int lx = dstRect.m_x + dstRect.m_w;
 
     if (!checkRectangle(dstPixmap, dstRect))
     {
-	if ((dstRect.m_w > dstPixmap.getWidth()) || (dstRect.m_x > (dstPixmap.getWidth() - dstRect.m_w)))
-	    width = dstPixmap.getWidth() - safeX - dstRect.m_x;
-        else
-            return;
+        // Check if the width would overrun the pixmap's right edge
+        if ((dstRect.m_w > pixmapWidth) || (dstRect.m_x > (pixmapWidth - dstRect.m_w)))
+        {
+            lx = pixmapWidth - safeX;
+        }
+        // other invalid cases (left/top start, bottom overrun, etc.) are
+        // handled by the clipping below, which clamps to the pixmap bounds
     }
 
-    const int lx = dstRect.m_x + width;
-    const int ly = dstRect.m_y + dstRect.m_h;
+    // clip to the pixmap, the rectangle may still start above/left of it
+    const int cx0 = std::max(0, dstRect.m_x);
+    const int cy0 = std::max(0, dstRect.m_y);
+    const int cx1 = std::min(lx, pixmapWidth);
+    const int cy1 = std::min(dstRect.m_y + dstRect.m_h, pixmapHeight);
 
-    for (int cy = dstRect.m_y; cy < ly; ++cy)
+    if ((cx0 >= cx1) || (cy0 >= cy1))
     {
-        auto line = dstPixmap.getLine(cy) + dstRect.m_x;
+        return;
+    }
 
-        for (int cx = dstRect.m_x; cx < lx; ++cx)
+    for (int cy = cy0; cy < cy1; ++cy)
+    {
+        auto line = dstPixmap.getLine(cy) + cx0;
+
+        for (int cx = cx0; cx < cx1; ++cx)
         {
             *line = value;
             ++line;

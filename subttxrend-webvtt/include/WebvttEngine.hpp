@@ -135,7 +135,20 @@ public:
      */
     virtual void currentMediatime(const std::uint64_t mediatimeMs) = 0;
 
+    /**
+     * Set custom WebVTT attribute overrides.
+     * Applied on top of any per-cue styling from the stream.
+     * Pass an empty (reset) WebVTTAttributes to clear the override.
+     *
+     * The override is session-scoped, not persistent: it is discarded by
+     * init(), start() and stop(), so clients must re-apply it after each
+     * start() for it to take effect.
+     *
+     * @param attributes
+     *      WebVTT attribute overrides.
+     */
+    virtual void setCustomAttributes(const WebVTTAttributes &attributes) = 0;
 };
 
-} // namespace webvttlengine
+} // namespace webvttengine
 } // namespace subttxrend

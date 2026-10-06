@@ -95,6 +95,9 @@ public:
     /** @copydoc WebvttEnging::currentMediatime */
     virtual void currentMediatime(const std::uint64_t mediatimeMs) override;
 
+    /** @copydoc WebvttEngine::setCustomAttributes */
+    virtual void setCustomAttributes(const WebVTTAttributes &attributes) override;
+
 private:
 
     void clear();

@@ -251,8 +251,8 @@ void WebVTTRenderer::renderDocument(const CueSharedList &webvtt_list, const Regi
     g_logger.osinfo(__LOGGER_FUNC__, " - preferred size ", preferred_size.m_w, "x", preferred_size.m_h);
     resizeWindow();
     
-    linebuilder::LineBuilder builder {preferred_size.m_w, preferred_size.m_h, m_config, m_attributes};
-    RenderCues(builder.buildOutputLines(webvtt_list, regions), gfxPtr->getDrawContext(), m_attributes);
+    linebuilder::LineBuilder builder {preferred_size.m_w, preferred_size.m_h, m_config, m_effectiveAttributes};
+    RenderCues(builder.buildOutputLines(webvtt_list, regions), gfxPtr->getDrawContext(), m_effectiveAttributes);
     
     if (m_reset) {
         g_logger.osinfo(__LOGGER_FUNC__, " - calling clearscreen after render");
@@ -275,10 +275,23 @@ void WebVTTRenderer::clearState() {
     g_logger.osdebug(__LOGGER_FUNC__);
     m_reset.exchange(true);
     m_attributes.reset();
+    m_customAttributes.reset();
+    m_effectiveAttributes.reset();
 }
 
 void WebVTTRenderer::setAttributes(const WebVTTAttributes &attributes) {
     m_attributes.update(attributes);
+    updateEffectiveAttributes();
+}
+
+void WebVTTRenderer::setCustomAttributes(const WebVTTAttributes &attributes) {
+    m_customAttributes = attributes;
+    updateEffectiveAttributes();
+}
+
+void WebVTTRenderer::updateEffectiveAttributes() {
+    m_effectiveAttributes = m_attributes;
+    m_effectiveAttributes.update(m_customAttributes);
 }
 
 }   // namespace webvttengine

@@ -409,7 +409,7 @@ void Controller::displayPreviewText(const std::string& text, float verOffset, fl
     
     const float clampedVer = std::min(std::max(verOffset, 0.0f), 1.0f);
     const float clampedHor = std::min(std::max(horOffset, 0.0f), 1.0f);
-    const int   columns    = std::max(1, std::min(static_cast<int>(text.size()), MAX_PREVIEW_COLUMNS));
+    const int   columns    = std::max(1, std::min(static_cast<int>(utf8GlyphCount(text)), MAX_PREVIEW_COLUMNS));
         
     // With relative_pos == true, the anchor points are a percentage of screen dimensions
     WindowDefinition wd{5, 1, false, false, true, /*relative_pos*/ true, static_cast<int>(clampedVer * 100.0f), static_cast<int>(clampedHor * 100.0f), 1, anchorPoint, columns, {}, {}};

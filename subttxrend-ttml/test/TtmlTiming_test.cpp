@@ -25,21 +25,21 @@ using namespace subttxrend::ttmlengine;
 class TtmlTimingTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE( TtmlTimingTest );
-    CPPUNIT_TEST(timing);
+    CPPUNIT_TEST(testTimePointBasicOperations);
+    CPPUNIT_TEST(testTimePointComparisonOperators);
+    CPPUNIT_TEST(testTimePointMsCtor);
+    CPPUNIT_TEST(testTimePointToStrAndToMilliseconds);
+    CPPUNIT_TEST(testTimePointInvalidInput);
+    CPPUNIT_TEST(testTimingDefaults);
+    CPPUNIT_TEST(testTimingIsOverlappingAndIsContinuous);
+    CPPUNIT_TEST(testTimingMerge);
+    CPPUNIT_TEST(testTimingOperators);
+    CPPUNIT_TEST(testTimingApplyOffset);
+    CPPUNIT_TEST(testTimingToStr);
 CPPUNIT_TEST_SUITE_END();
 
 public:
-    void setUp()
-    {
-        // noop
-    }
-
-    void tearDown()
-    {
-        // noop
-    }
-
-    void timing()
+    void testTimePointBasicOperations()
     {
         using namespace std::chrono;
 
@@ -72,8 +72,129 @@ public:
         auto hourMinus = TimePoint{-1h, 0min, 0s, 0ms};
         CPPUNIT_ASSERT(hourTp == hourMinus);
     }
+
+    void testTimePointComparisonOperators()
+    {
+        TimePoint t1(1h, 2min, 3s, 4ms);
+        TimePoint t2(1h, 2min, 3s, 4ms);
+        TimePoint t3(1h, 2min, 3s, 5ms);
+        CPPUNIT_ASSERT(t1 == t2);
+        CPPUNIT_ASSERT(t1 != t3);
+        CPPUNIT_ASSERT(t1 < t3);
+        CPPUNIT_ASSERT(t3 > t2);
+        CPPUNIT_ASSERT(t1 <= t2);
+        CPPUNIT_ASSERT(t1 <= t3);
+        CPPUNIT_ASSERT(t3 >= t2);
+    }
+
+    void testTimePointMsCtor()
+    {
+        TimePoint t(3723004);
+        CPPUNIT_ASSERT_EQUAL(std::string("01:02:03.004"), t.toStr());
+        CPPUNIT_ASSERT_EQUAL(static_cast<long long>(3723004), static_cast<long long>(t.toMilliseconds().count()));
+    }
+
+    void testTimePointToStrAndToMilliseconds()
+    {
+        TimePoint t(1h, 2min, 3s, 4ms);
+        std::string str = t.toStr();
+        CPPUNIT_ASSERT_EQUAL(std::string("01:02:03.004"), str);
+        CPPUNIT_ASSERT(t.toMilliseconds().count() == ((1*3600+2*60+3)*1000+4));
+    }
+
+    void testTimePointInvalidInput()
+    {
+        TimePoint invalidMinutes(1h, 61min, 0s);
+        TimePoint invalidSeconds(1h, 2min, 61s);
+        TimePoint defaultTp;
+
+        CPPUNIT_ASSERT(invalidMinutes == defaultTp);
+        CPPUNIT_ASSERT(invalidSeconds == defaultTp);
+        CPPUNIT_ASSERT_EQUAL(static_cast<long long>(0), static_cast<long long>(invalidMinutes.toMilliseconds().count()));
+        CPPUNIT_ASSERT_EQUAL(static_cast<long long>(0), static_cast<long long>(invalidSeconds.toMilliseconds().count()));
+
+        TimePoint validMinutes(1h, 59min, 0s);
+        TimePoint validLeapSecond(1h, 0min, 60s);
+        CPPUNIT_ASSERT_EQUAL(std::string("01:59:00.000"), validMinutes.toStr());
+        CPPUNIT_ASSERT_EQUAL(std::string("01:01:00.000"), validLeapSecond.toStr());
+    }
+
+    void testTimingDefaults()
+    {
+        const Timing timing;
+
+        CPPUNIT_ASSERT(timing.getStartTimeRef() == TimePoint{});
+        CPPUNIT_ASSERT(timing.getEndTimeRef() == TimePoint{});
+        CPPUNIT_ASSERT_EQUAL(std::string("00:00:00.000-00:00:00.000"), timing.toStr());
+    }
+
+    void testTimingIsOverlappingAndIsContinuous()
+    {
+        Timing t1(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,1s,0ms));
+        Timing t2(TimePoint(0h,0min,0s,500ms), TimePoint(0h,0min,1s,500ms));
+        Timing t3(TimePoint(0h,0min,1s,0ms), TimePoint(0h,0min,2s,0ms));
+        Timing t4(TimePoint(0h,0min,2s,0ms), TimePoint(0h,0min,3s,0ms));
+        CPPUNIT_ASSERT(t1.isOverlapping(t2));
+        CPPUNIT_ASSERT(t2.isOverlapping(t1));
+        CPPUNIT_ASSERT(!t1.isOverlapping(t3));
+        CPPUNIT_ASSERT(!t1.isOverlapping(t4));
+        CPPUNIT_ASSERT(t1.isContinous(t3));
+        CPPUNIT_ASSERT(t3.isContinous(t1));
+        CPPUNIT_ASSERT(!t1.isContinous(t4));
+    }
+
+    void testTimingMerge()
+    {
+        Timing t1(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,1s,0ms));
+        Timing t2(TimePoint(0h,0min,0s,500ms), TimePoint(0h,0min,1s,500ms));
+        Timing t3(TimePoint(0h,0min,2s,0ms), TimePoint(0h,0min,3s,0ms));
+        Timing t4(TimePoint(0h,0min,2s,500ms), TimePoint(0h,0min,2s,800ms));
+
+        t1.merge(t2);
+        CPPUNIT_ASSERT(t1.getStartTimeRef() == TimePoint(0h,0min,0s,0ms));
+        CPPUNIT_ASSERT(t1.getEndTimeRef() == TimePoint(0h,0min,1s,500ms));
+
+        t1.merge(t3);
+        CPPUNIT_ASSERT(t1.getStartTimeRef() == TimePoint(0h,0min,0s,0ms));
+        CPPUNIT_ASSERT(t1.getEndTimeRef() == TimePoint(0h,0min,3s,0ms));
+
+        t1.merge(t4);
+        CPPUNIT_ASSERT(t1.getStartTimeRef() == TimePoint(0h,0min,0s,0ms));
+        CPPUNIT_ASSERT(t1.getEndTimeRef() == TimePoint(0h,0min,3s,0ms));
+    }
+
+    void testTimingOperators()
+    {
+        Timing t1(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,1s,0ms));
+        Timing t2(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,1s,0ms));
+        Timing t3(TimePoint(0h,0min,0s,0ms), TimePoint(0h,0min,2s,0ms));
+        Timing t4(TimePoint(0h,0min,1s,0ms), TimePoint(0h,0min,2s,0ms));
+        CPPUNIT_ASSERT(t1 == t2);
+        CPPUNIT_ASSERT(!(t1 == t3));
+        CPPUNIT_ASSERT(t1 < t3);
+        CPPUNIT_ASSERT(t1 < t4);
+        CPPUNIT_ASSERT(!(t3 < t1));
+    }
+
+    void testTimingApplyOffset()
+    {
+        Timing t(TimePoint(0h,0min,1s,0ms), TimePoint(0h,0min,2s,0ms));
+        t.applyOffset(500);
+        CPPUNIT_ASSERT(t.getStartTimeRef() == TimePoint(0h,0min,1s,500ms));
+        CPPUNIT_ASSERT(t.getEndTimeRef() == TimePoint(0h,0min,2s,500ms));
+
+        t.applyOffset(-1000);
+        CPPUNIT_ASSERT(t.getStartTimeRef() == TimePoint(0h,0min,0s,500ms));
+        CPPUNIT_ASSERT(t.getEndTimeRef() == TimePoint(0h,0min,1s,500ms));
+    }
+
+    void testTimingToStr()
+    {
+        Timing t(TimePoint(1h, 2min, 3s, 4ms), TimePoint(1h, 3min, 4s, 5ms));
+        std::string str = t.toStr();
+        CPPUNIT_ASSERT_EQUAL(std::string("01:02:03.004-01:03:04.005"), str);
+    }
 };
 
 // Registers the fixture into the 'registry'
 CPPUNIT_TEST_SUITE_REGISTRATION( TtmlTimingTest );
-

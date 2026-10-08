@@ -105,25 +105,25 @@ public:
 private:
     void fillFields(const uint8_t *data, std::size_t size);
 
-    BackgroundStyle     backgroundStyle;
-    OutlineStyle        outlineStyle;
-    Color               charColor;
-    Coords              charTop;
-    Coords              charBottom;
+    BackgroundStyle     backgroundStyle  = BackgroundStyle::TRANSPARENT;
+    OutlineStyle        outlineStyle     = OutlineStyle::NONE;
+    Color               charColor        = {0, false, 0, 0};
+    Coords              charTop          = {0, 0};
+    Coords              charBottom       = {0, 0};
 
     // Valid if background style is "framed"
-    Coords              frameTop;
-    Coords              frameBottom;
-    Color               frameColor;
+    Coords              frameTop         = {0, 0};
+    Coords              frameBottom      = {0, 0};
+    Color               frameColor       = {0, false, 0, 0};
 
     // Valid if outline style is "outline"
-    uint8_t             outlineThickness;
-    Color               outlineColor;
+    uint8_t             outlineThickness = 0;
+    Color               outlineColor     = {0, false, 0, 0};
 
     // Valid if outline style is "drop shadow"
-    uint8_t             shadowRight;
-    uint8_t             shadowBottom;
-    Color               shadowColor;
+    uint8_t             shadowRight      = 0;
+    uint8_t             shadowBottom     = 0;
+    Color               shadowColor      = {0, false, 0, 0};
 
     RawBitmap           bitmap;
 };

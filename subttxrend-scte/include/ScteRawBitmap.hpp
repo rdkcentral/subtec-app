@@ -56,7 +56,7 @@ private:
      * Uncompressed bitmap will have one bit per pixel format
      */
     Data rawData;
-    bool compressed;
+    bool compressed = false;
 };
 
 } // namespace scte

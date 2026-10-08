@@ -25,6 +25,8 @@
 
 #include <subttxrend/common/Logger.hpp>
 
+#include <utility>
+
 namespace subttxrend
 {
 namespace ttmlengine
@@ -87,7 +89,7 @@ void TtmlRenderer::decodeImages(IntermediateDocument &doc)
             auto b64 = entity.m_imageChunk.m_image->getBase64Data();
             auto pngCallback = preparePngCallback(entity.m_imageChunk.m_image->getId(), doc.m_timing.toStr());
 
-            entity.m_imageChunk.m_bmp = gfx::base64toPixmap(*b64, true, pngCallback);
+            entity.m_imageChunk.m_bmp = gfx::base64toPixmap(*b64, true, std::move(pngCallback));
         }
     }
 }
@@ -163,7 +165,7 @@ gfx::PngCallback TtmlRenderer::preparePngCallback(const std::string &id,
         dumpFileName.append(".png");
 
         const DataDumper &dataDumper = m_dataDumper;
-        pngCallback = [dumpFileName, &dataDumper](const std::uint8_t* buffer, std::size_t bufferSize) -> void {
+        pngCallback = [dumpFileName = std::move(dumpFileName), &dataDumper](const std::uint8_t* buffer, std::size_t bufferSize) -> void {
             dataDumper.toFile(dumpFileName, buffer, bufferSize);
         };
     }

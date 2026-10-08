@@ -48,7 +48,7 @@ public:
 
     void reset();
     void setOffset(uint32_t offset);
-    void setData(const std::vector<uint8_t> stream);
+    void setData(std::vector<uint8_t> stream);
 
 private:
     std::vector<uint8_t> bits;

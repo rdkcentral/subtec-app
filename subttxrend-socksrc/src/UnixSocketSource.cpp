@@ -40,7 +40,7 @@ UnixSocketSource::UnixSocketSource(std::string const& socketPath) :
 
 UnixSocketSource::~UnixSocketSource()
 {
-    if (m_socket) {
+    if (m_recvThread.joinable() || m_socket || m_sourceRunning.load(std::memory_order_relaxed)) {
         m_logger.oswarning(__LOGGER_FUNC__, " Source not stopped before destruction");
         stop();
     }
@@ -51,6 +51,8 @@ void UnixSocketSource::start(PacketReceiver* receiver)
     m_logger.osinfo(__LOGGER_FUNC__);
 
     assert(receiver);
+    assert(!m_recvThread.joinable());
+    assert(!m_sourceRunning.load(std::memory_order_relaxed));
     m_receiver = receiver;
 
     m_logger.osinfo(__LOGGER_FUNC__, " starting receiver thread");
@@ -68,8 +70,9 @@ void UnixSocketSource::stop()
 
     m_sourceRunning.store(false, std::memory_order_relaxed);
 
-    assert(m_socket);
-    m_socket->shutdown();
+    if (m_socket) {
+        m_socket->shutdown();
+    }
 
     m_logger.osinfo(__LOGGER_FUNC__, " socket stopped, waiting for recv thread to finish...");
 
@@ -114,6 +117,11 @@ void UnixSocketSource::sourceLoop()
     createSocket();
     while(m_sourceRunning.load(std::memory_order_relaxed)) {
 
+        if (!m_socket) {
+            m_logger.oswarning(__LOGGER_FUNC__, " socket creation aborted, source stopping");
+            break;
+        }
+
         auto socketRestartNeeded = false;
 
         try {
@@ -139,6 +147,11 @@ void UnixSocketSource::sourceLoop()
             m_logger.oserror(__LOGGER_FUNC__, " restarting socket");
             m_socket.reset();
             createSocket();
+
+            if (!m_socket) {
+                m_logger.oswarning(__LOGGER_FUNC__, " socket recreation aborted during stop, leaving source loop");
+                break;
+            }
         }
     }
 }

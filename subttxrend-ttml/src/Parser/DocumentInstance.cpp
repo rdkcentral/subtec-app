@@ -107,7 +107,8 @@ std::shared_ptr<Element> DocumentInstance::startElement(const std::string& name)
             auto& currentBodyElement = m_parsedBodyElementsStack.top();
             currentBodyElement->appendNewline();
         }
-        m_parsedBodyElementsStack.push(nullptr);
+        // <br/> is empty, so use a non-null stack placeholder.
+        m_parsedBodyElementsStack.push(std::make_shared<BodyElement>());
         return nullptr;
     }
     else
@@ -156,7 +157,7 @@ void DocumentInstance::endElement(bool copyTopElement)
         auto copyElement = std::make_shared<BodyElement>(m_parsedBodyElementsStack.top());
         endElement(false);
         m_parsedBodyElementsStack.push(copyElement);
-        m_content.push_back(copyElement);
+        m_content.push_back(std::move(copyElement));
     }
 
     m_currentImageElement = std::shared_ptr<ImageElement>();

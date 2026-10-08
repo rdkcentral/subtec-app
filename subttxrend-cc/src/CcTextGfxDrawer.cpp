@@ -138,14 +138,7 @@ bool TextGfxDrawer::drawable()
 
 size_t TextGfxDrawer::textLength()
 {
-    size_t len = 0;
-    auto s = m_text.begin();
-    while (s != m_text.end())
-    {
-        len += (*s & NUL_CHAR_MASK) != NUL_CHAR;
-        s++;
-    }
-    return len;
+    return utf8GlyphCount(m_text);
 }
 
 void TextGfxDrawer::setColumn(int column)

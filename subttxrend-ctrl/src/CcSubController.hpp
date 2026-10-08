@@ -56,6 +56,7 @@ class CcSubController final : public ControllerInterface
     bool wantsData(protocol::PacketChannelSpecific const& packet) const override;
     void processSetCCAttributesPacket(const protocol::PacketSetCCAttributes& packet) override;
     void setTextForPreview(const std::string& text);
+    void displayPreviewText(const std::string& text, float verOffset, float horOffset, cc::PenAnchorPoint anchorPoint);
 
   private:
 

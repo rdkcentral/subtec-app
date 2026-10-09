@@ -186,12 +186,19 @@ public:
 
     void testTransparentBackgroundColor()
     {
-        StyleSet styleSet;
-        Attributes attrs = {
+        StyleSet rgbaStyleSet;
+        Attributes rgbaAttrs = {
             {"backgroundColor", "rgba(0,0,0,0)"}
         };
-        styleSet.merge(attrs);
-        CPPUNIT_ASSERT(styleSet.getBackgroundColor() == subttxrend::gfx::ColorArgb::BLACK);
+        rgbaStyleSet.merge(rgbaAttrs);
+        CPPUNIT_ASSERT(rgbaStyleSet.getBackgroundColor() == subttxrend::gfx::ColorArgb::TRANSPARENT);
+
+        StyleSet hashStyleSet;
+        Attributes hashAttrs = {
+            {"backgroundColor", "#00000000"}
+        };
+        hashStyleSet.merge(hashAttrs);
+        CPPUNIT_ASSERT(hashStyleSet.getBackgroundColor() == subttxrend::gfx::ColorArgb::TRANSPARENT);
     }
 
     void testInvalidFontSizeAndLineHeight()

@@ -19,7 +19,7 @@ project(subttxrend-protocol-test)
 
 enable_testing()
 
-cmake_minimum_required (VERSION 3.2)
+cmake_minimum_required (VERSION 3.22)
 
 #
 # Directory with modules
@@ -50,7 +50,8 @@ macro (add_cppunit_test _name)
     # invoke built-in add_executable
     add_executable(${ARGV})
 
-    set_property(TARGET ${_name} PROPERTY CXX_STANDARD 14)
+    set_property(TARGET ${_name} PROPERTY CXX_STANDARD 17)
+    set_property(TARGET ${_name} PROPERTY CXX_EXTENSIONS OFF)
 
     target_link_libraries(${_name} ${LIBSUBTTXRENDGFX_LIBRARIES})
     target_link_libraries(${_name} ${LIBSUBTTXRENDCOMMON_LIBRARIES})
@@ -99,4 +100,11 @@ add_cppunit_test(AttributeHandlers_test
                  AttributeHandlers_test.cpp
                  TestRunner.cpp
                  ../src/Parser/AttributeHandlers.cpp
+                 )
+
+add_cppunit_test(ValueConverter_test
+                 ValueConverter_test.cpp
+                 TestRunner.cpp
+                 Logger.cpp
+                 ../src/ValueConverter.cpp
                  )

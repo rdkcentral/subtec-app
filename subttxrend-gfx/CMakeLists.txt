@@ -32,6 +32,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/mo
 # Configuration variables
 #
 option(WITH_OPENGL      "Include the OpenGL support" OFF)
+option(WITH_WESTEROS    "Include the Westeros support" OFF)
 
 #
 # Extra compiler / linker options

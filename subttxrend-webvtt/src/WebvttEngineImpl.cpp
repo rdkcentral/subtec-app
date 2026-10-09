@@ -226,7 +226,7 @@ void WebvttEngineImpl::addData(const std::uint8_t* buffer,
                 ReplaceAll(buffer_string, "\r", "");
             }
             //Trim padding NULLs from end
-            while (buffer_string.back() == '\0') 
+            while (!buffer_string.empty() && buffer_string.back() == '\0')
                 buffer_string.pop_back();
 
             std::istringstream ss(buffer_string);

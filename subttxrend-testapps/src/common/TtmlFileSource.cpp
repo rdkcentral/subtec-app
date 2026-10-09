@@ -145,6 +145,8 @@ bool TtmlFileSource::readPacket(DataPacket& packet)
     packet.appendLeUint32(size);
     packet.appendLeUint32(channelId);
 
+    packet.appendLeUint64(static_cast<std::uint64_t>(0));
+
     int dataBytesRead = ::read(fileHandle, packet.getBuffer() + TTML_DATA_HEADER_SIZE,
             packetDataSize);
     if (dataBytesRead == 0)

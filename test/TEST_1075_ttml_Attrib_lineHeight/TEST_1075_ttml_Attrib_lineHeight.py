@@ -39,7 +39,7 @@ def test_1075():
     run_test_prereq(script_dir)
 
     # wait for end of test
-    wait_for_log_string(subtec_log_path, "drawLine font size: 54 line text length: 351 line height: 81", 20)
+    wait_for_log_string(subtec_log_path, "drawLine font size: 36 line text length: 236 line height: 54", 20)
     copy_log_file(subtec_log_path, subtec_copy_path)
 
     sequence = [
@@ -62,8 +62,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=0.25c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [0.25c] [ ]',
-        'sizeToPixels size 18 (from 25)',
-        'drawLine font size: 18 line text length: 115 line height: 18']
+        'sizeToPixels size 12 (from 25)',
+        'drawLine font size: 12 line text length: 76 line height: 12']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -82,8 +82,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=0.25c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [0.5c] [ ] ',
-        'sizeToPixels size 36 (from 50)',
-        'drawLine font size: 18 line text length: 115 line height: 36']
+        'sizeToPixels size 24 (from 50)',
+        'drawLine font size: 12 line text length: 76 line height: 24']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -102,8 +102,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=0.5c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [0.75c] [ ] ',
-        'sizeToPixels size 54 (from 75)',
-        'drawLine font size: 36 line text length: 236 line height: 54']
+        'sizeToPixels size 36 (from 75)',
+        'drawLine font size: 24 line text length: 160 line height: 36']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -122,8 +122,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=0.5c',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [1.2c] [ ] ',
-        'sizeToPixels size 86 (from 120)',
-        'drawLine font size: 36 line text length: 236 line height: 86']
+        'sizeToPixels size 58 (from 120)',
+        'drawLine font size: 24 line text length: 160 line height: 58']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -142,8 +142,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=20px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [20px] [ ] ',
-        'sizeToPixels size 20 (from 20)',
-        'drawLine font size: 20 line text length: 128 line height: 20']
+        'sizeToPixels size 13 (from 20)',
+        'drawLine font size: 13 line text length: 85 line height: 13']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -162,8 +162,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=20px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [36px] [ ] ',
-        'sizeToPixels size 36 (from 36)',
-        'drawLine font size: 20 line text length: 128 line height: 36']
+        'sizeToPixels size 24 (from 36)',
+        'drawLine font size: 13 line text length: 85 line height: 24']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -182,8 +182,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=20px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [54px] [ ] ',
-        'sizeToPixels size 54 (from 54)',
-        'drawLine font size: 20 line text length: 128 line height: 54']
+        'sizeToPixels size 36 (from 54)',
+        'drawLine font size: 13 line text length: 85 line height: 36']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -202,8 +202,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=20px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [75px] [ ] ',
-        'sizeToPixels size 75 (from 75)',
-        'drawLine font size: 20 line text length: 128 line height: 75']
+        'sizeToPixels size 50 (from 75)',
+        'drawLine font size: 13 line text length: 85 line height: 50']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -222,8 +222,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [25%] [ ] ',
-        'sizeToPixels size 14 (from 2500)',
-        'drawLine font size: 54 line text length: 351 line height: 14']
+        'sizeToPixels size 9 (from 2500)',
+        'drawLine font size: 36 line text length: 236 line height: 9']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -242,8 +242,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [50%] [ ] ',
-        'sizeToPixels size 27 (from 5000)',
-        'drawLine font size: 54 line text length: 351 line height: 27']
+        'sizeToPixels size 18 (from 5000)',
+        'drawLine font size: 36 line text length: 236 line height: 18']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [      
@@ -262,8 +262,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [75%] [ ] ',
-        'sizeToPixels size 41 (from 7500)',
-        'drawLine font size: 54 line text length: 351 line height: 41']
+        'sizeToPixels size 27 (from 7500)',
+        'drawLine font size: 36 line text length: 236 line height: 27']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [
@@ -282,8 +282,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [106.78%] [ ] ',
-        'sizeToPixels size 54 (from 54)',
-        'drawLine font size: 54 line text length: 351 line height: 58']
+        'sizeToPixels size 38 (from 10678)',
+        'drawLine font size: 36 line text length: 236 line height: 38']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [
@@ -302,8 +302,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [118%] [ ] ',
-        'sizeToPixels size 54 (from 54)',
-        'drawLine font size: 54 line text length: 351 line height: 64']
+        'sizeToPixels size 42 (from 11800)',
+        'drawLine font size: 36 line text length: 236 line height: 42']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [
@@ -322,8 +322,8 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [124%] [ ] ',
-        'sizeToPixels size 54 (from 54)',
-        'drawLine font size: 54 line text length: 351 line height: 67']
+        'sizeToPixels size 45 (from 12400)',
+        'drawLine font size: 36 line text length: 236 line height: 45']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     sequence = [
@@ -342,8 +342,9 @@ def test_1075():
         'parseAttributes adding tts:fontSize=54px',
         'parseAttributes adding tts:fontFamily=proportionalSansSerif',
         'displaying: [00:00:00.000-00:00:05.000]: [ ] [Test line height] [ ] [ ] [150%] [ ] ',
-        'sizeToPixels size 81 (from 15000)',
-        'drawLine font size: 54 line text length: 351 line height: 81']
+        'sizeToPixels size 54 (from 15000)',
+        'drawLine font size: 36 line text length: 236 line height: 54']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1075 missing"
 
     print("test_1075".ljust(50), "Test Passed")
+

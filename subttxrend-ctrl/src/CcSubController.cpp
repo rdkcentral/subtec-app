@@ -23,6 +23,7 @@
 #include <subttxrend/protocol/PacketData.hpp>
 
 #include <cassert>
+#include <utility>
 
 namespace subttxrend {
 namespace ctrl {
@@ -56,7 +57,7 @@ void CcSubController::select(protocol::PacketChannelSpecific const& packet)
 CcSubController::CcSubController(protocol::PacketChannelSpecific const& packet, gfx::WindowPtr const& gfxWindow, std::shared_ptr<gfx::PrerenderedFontCache> fontCache)
     : m_controller()
     , m_logger("App", "CcSubController")
-    , m_fontCache{fontCache}
+    , m_fontCache{std::move(fontCache)}
 {
     m_logger.oswarning(__LOGGER_FUNC__, " created");
     if (!m_controller.init(gfxWindow.get(), m_fontCache)) {

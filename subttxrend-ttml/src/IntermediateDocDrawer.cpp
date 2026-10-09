@@ -21,6 +21,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "IntermediateDocDrawer.hpp"
 
@@ -53,7 +54,7 @@ IntermediateDocDrawer::IntermediateDocDrawer(const common::ConfigProvider *confi
     if (configProvider) {
         std::string forcedFont = configProvider->get("FORCE_FONT");
         if (! forcedFont.empty()) {
-            m_forcedFont = forcedFont;
+            m_forcedFont = std::move(forcedFont);
             m_logger.osinfo(__LOGGER_FUNC__, " using forced font: ", m_forcedFont);
         }
 
@@ -98,11 +99,7 @@ void IntermediateDocDrawer::drawEntity(const IntermediateDocument::Entity& entit
 {
     if (entity.m_region)
     {
-        auto region = *entity.m_region;
-        drawingState.m_regionRect = m_valueConverter.toTargetRectangle(region.getX(),
-            region.getY(),
-            region.getWidth(),
-            region.getHeight());
+        drawingState.m_regionRect = m_valueConverter.toTargetRectangle(*entity.m_region);
 
         drawingState.m_penX = 0;
         drawingState.m_penY = 0;
@@ -264,7 +261,7 @@ std::shared_ptr<gfx::PrerenderedFont> IntermediateDocDrawer::getFont(std::string
                                                                      int fontSize)
 {
     std::shared_ptr<gfx::PrerenderedFont> font;
-    auto const fontFamily = m_forcedFont.empty() ? requestedfontFamily : m_forcedFont;
+    auto const& fontFamily = m_forcedFont.empty() ? requestedfontFamily : m_forcedFont;
     try
     {
         font = m_fontCache.getFont(fontFamily, fontSize, true);

@@ -100,7 +100,7 @@ std::vector<std::string> ConfigProvider::getArray(const std::string& key,
                     itemValue = valueString.substr(pos);
                     if (itemValue.length() > 0)
                     {
-                        values.push_back(itemValue);
+                        values.push_back(std::move(itemValue));
                     }
                     break;
                 }
@@ -109,7 +109,7 @@ std::vector<std::string> ConfigProvider::getArray(const std::string& key,
                     itemValue = valueString.substr(pos, nextPos - pos);
                     if (itemValue.length() > 0)
                     {
-                        values.push_back(itemValue);
+                        values.push_back(std::move(itemValue));
                     }
 
                     pos = nextPos + separator.length();

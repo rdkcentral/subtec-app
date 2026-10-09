@@ -295,6 +295,7 @@ CPPUNIT_TEST_SUITE( WindowImplTest );
     CPPUNIT_TEST(testFillRectangleWithOpaqueColor);
     CPPUNIT_TEST(testFillRectangleWithZeroSizeRectangle);
     CPPUNIT_TEST(testFillRectangleWithNegativeCoordinates);
+    CPPUNIT_TEST(testFillRectangleCrossingBottomEdge);
     CPPUNIT_TEST(testFillRectangleWithLargeRectangle);
     CPPUNIT_TEST(testFillRectangleMultipleTimes);
     CPPUNIT_TEST(testFillRectangleAfterSetSize);
@@ -1588,8 +1589,25 @@ public:
         context.fillRectangle(baseColor, Rectangle{0, 0, 20, 20});
         context.fillRectangle(color, rect);
         window.update();
-        assert_pixel_equals(window.getPixmap(), 5, 5, PixelArgb8888(baseColor),
-            "fillRectangle should ignore negative coordinates");
+        assert_pixel_equals(window.getPixmap(), 5, 5, PixelArgb8888(color),
+            "fillRectangle should clip rectangles starting left/above the pixmap");
+    }
+
+    void testFillRectangleCrossingBottomEdge()
+    {
+        WindowImpl window;
+        window.setSize(Size{200, 200});
+
+        DrawContext& context = window.getDrawContext();
+        ColorArgb baseColor(255, 10, 20, 30);
+        ColorArgb color(255, 255, 0, 0);
+        Rectangle rect{10, 180, 50, 50};
+
+        context.fillRectangle(baseColor, Rectangle{0, 0, 200, 200});
+        context.fillRectangle(color, rect);
+        window.update();
+        assert_pixel_equals(window.getPixmap(), 15, 185, PixelArgb8888(color),
+            "fillRectangle should clip rectangles crossing only the bottom edge");
     }
 
     void testFillRectangleWithLargeRectangle()

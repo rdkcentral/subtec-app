@@ -17,7 +17,7 @@
 
 project(waylandcpp)
 
-cmake_minimum_required (VERSION 3.2)
+cmake_minimum_required (VERSION 3.22)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -103,7 +103,8 @@ endif(WITH_WESTEROS)
 # Targets
 #
 add_library(waylandcpp STATIC ${DVBGRAPHICSENGINE_SOURCES})
-set_property(TARGET waylandcpp PROPERTY CXX_STANDARD 14)
+set_property(TARGET waylandcpp PROPERTY CXX_STANDARD 17)
+set_property(TARGET waylandcpp PROPERTY CXX_EXTENSIONS OFF)
 target_link_libraries(waylandcpp ${LIBSUBTTXRENDCOMMON_LIBRARIES})
 target_link_libraries(waylandcpp ${LIBWAYLANDCLIENT_LIBRARIES})
 target_link_libraries(waylandcpp ${LIBXKBCOMMON_LIBRARIES})

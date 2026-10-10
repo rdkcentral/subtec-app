@@ -124,6 +124,11 @@ void WindowController::drawWindows()
                     window->draw();
                 }
             }
+            else if(window && window->windowVisibilityChanged())
+            {
+                clearAndUpdate = true;
+                window->draw();
+            }
         }
     }
 

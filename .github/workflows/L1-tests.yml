@@ -1,0 +1,85 @@
+name: L1-tests
+
+on:
+  workflow_call:
+    inputs:
+      caller_source:
+        description: "Specifies the source type (e.g., local or test framework) for the workflow."
+        required: true
+        type: string
+
+env:
+  L1_ARTIFACT_DIR: ${{ github.workspace }}/artifacts-L1-subtec-app
+  SUBTEC_COVERAGE: '1'
+
+jobs:
+  L1-tests:
+    name: Run L1 tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/rdkcentral/docker-rdk-ci:latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install build and L1 test dependencies
+        run: |
+          chmod +x test/install_subtec_dependencies.sh subttxrend-app/x86_builder/build.sh
+          bash -e test/install_subtec_dependencies.sh
+          apt install -y libcppunit-dev lcov
+
+      - name: Set up CMake
+        uses: jwlawson/actions-setup-cmake@v1.13
+        with:
+          cmake-version: '3.22.6'
+
+      - name: Show CTest version
+        run: ctest --version
+
+      - name: Build subtec-app
+        working-directory: subttxrend-app/x86_builder
+        run: |
+          mkdir -p "$L1_ARTIFACT_DIR"
+          set -o pipefail
+          ./build.sh build 2>&1 | tee "$L1_ARTIFACT_DIR/l1-build.log"
+
+      - name: Run L1 tests
+        working-directory: subttxrend-app/x86_builder
+        run: |
+          set -o pipefail
+          ./build.sh dotest 2>&1 | tee "$L1_ARTIFACT_DIR/l1-tests.log"
+
+      - name: Generate aggregate L1 coverage report
+        working-directory: subttxrend-app/x86_builder
+        run: |
+          set -o pipefail
+          ./build.sh coveragereport 2>&1 | tee "$L1_ARTIFACT_DIR/l1-coverage.log"
+
+      - name: Collect L1 test reports
+        if: always()
+        working-directory: subttxrend-app/x86_builder
+        run: |
+          mkdir -p "$L1_ARTIFACT_DIR"
+          for report in build/tests-*/junit.xml; do
+            if [[ -f "$report" ]]; then
+              component="$(basename "$(dirname "$report")")"
+              cp "$report" "$L1_ARTIFACT_DIR/junit-${component#tests-}.xml"
+            fi
+          done
+          if [[ -d build/coverage ]]; then
+            cp -a build/coverage "$L1_ARTIFACT_DIR/coverage"
+          fi
+
+      - name: Upload L1 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-L1-subtec-app
+          if-no-files-found: warn
+          path: ${{ env.L1_ARTIFACT_DIR }}

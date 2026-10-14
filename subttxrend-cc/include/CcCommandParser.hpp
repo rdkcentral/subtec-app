@@ -27,12 +27,14 @@
 #include "CcServiceBlock.hpp"
 #include <subttxrend/common/Logger.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <chrono>
 #include <queue>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #define MAX_SERVICE_BLOCK_LENGTH 32
 
@@ -40,6 +42,8 @@ namespace subttxrend
 {
 namespace cc
 {
+
+constexpr int MAX_608_WINDOWS = 8;
 
 class Clock
 {
@@ -129,6 +133,24 @@ private:
     static bool m_isLastPairControl;
     static int m_lastBaseRow;
 
+    struct WindowInfo
+    {
+        int32_t baseRow = -1;
+        int32_t indent = 0;
+        int32_t assignedRow = -1;
+
+        void reset()
+        {
+            baseRow = -1;
+            indent = 0;
+            assignedRow = -1;
+        }
+    };
+
+    /** Per-window row assignments; must stay in sync with m_608Windowlist. */
+    std::array<WindowInfo, MAX_608_WINDOWS> windowInfo;
+
+    /** Windows with an assigned row, oldest first. */
     std::vector<int> m_608Windowlist;
 
     uint32_t currentChannel(uint8_t data1, uint8_t data2);
@@ -179,6 +201,7 @@ private:
     int32_t get608WindowFromRow(int32_t row);
     WindowsMap windowIdTo608WindowMap(int windowId);
     void removeFrom608WindowList(int window);
+    void rebuild608WindowList();
     int active608Window();
     void clear608Window(uint32_t window);
 };

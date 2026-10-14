@@ -317,6 +317,7 @@ class CcCommand608ParserTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testStateTransition_TextToCaptionMode);
     CPPUNIT_TEST(testWindowManagement_RowAllocation);
     CPPUNIT_TEST(testWindowManagement_LRUReplacement);
+    CPPUNIT_TEST(testWindowManagement_LRUReplacementAfterBufferSwap);
     CPPUNIT_TEST(testWindowManagement_VisibilityToggle);
     CPPUNIT_TEST(testWindowManagement_PositionConstraints);
     CPPUNIT_TEST(testStyleAttributes_MidrowColorChange);
@@ -1246,6 +1247,64 @@ public:
         CPPUNIT_ASSERT(mock->wasMethodCalled("deleteWindows"));
 
         CPPUNIT_ASSERT(mock->getCallCount() > callsBefore);
+    }
+
+    // The window list used to be cleared on every state change while the row
+    // assignments were kept, so the LRU fallback indexed an empty vector.
+    void testWindowManagement_LRUReplacementAfterBufferSwap()
+    {
+        parser->set608();
+
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x14), addParity(0x20)); // RCL -> PopOn1 (back buffer 4..7)
+
+        fillBackBufferRows();
+
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x14), addParity(0x2F)); // EOC -> PopOn2 (back buffer 0..3)
+
+        fillBackBufferRows();
+
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x14), addParity(0x2F)); // EOC -> PopOn1, all 8 windows assigned
+
+        mock->clearCalls();
+
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x15), addParity(0x40)); // PAC row 5, no window owns it
+
+        CPPUNIT_ASSERT(mock->wasMethodCalled("setCurrentWindow"));
+
+        int window = lastSelectedWindow();
+        CPPUNIT_ASSERT(window >= 4);
+        CPPUNIT_ASSERT(window <= 7);
+    }
+
+private:
+    // PACs for rows 1..4, filling all four windows of the current back buffer
+    void fillBackBufferRows()
+    {
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x11), addParity(0x40)); // row 1
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x11), addParity(0x60)); // row 2
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x12), addParity(0x40)); // row 3
+        parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
+                              addParity(0x12), addParity(0x60)); // row 4
+    }
+
+    int lastSelectedWindow() const
+    {
+        int window = -1;
+        for (const auto& call : mock->calls)
+        {
+            if ((call.method == "setCurrentWindow") && !call.intParams.empty())
+            {
+                window = call.intParams[0];
+            }
+        }
+        return window;
     }
 };
 

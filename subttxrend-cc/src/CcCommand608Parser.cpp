@@ -579,7 +579,7 @@ void CommandParser::set608WindowFill(uint32_t colour, uint32_t opacity)
         WindowAttributes wattrs = wd.win_style;
         wattrs.fill_color = colour & 0x00FFFFFF;
         wattrs.fill_color |= (opacity << 24);
-        m_proc->setWindowAttributes(wattrs);
+        m_proc->updateWindowAttributes(wattrs);
     }
 }
 
@@ -1312,7 +1312,7 @@ void CommandParser::set608WindowPosition(int state, unsigned char baseRow, unsig
     }
 
     update608WindowDefinitionPosition(wd, baseRow, windowColumn);
-    m_proc->defineWindow(wd);
+    m_proc->updateWindowDefinition(wd);
 
     set608WindowCursor(cursorRow, cursorColumn);
 

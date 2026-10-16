@@ -88,6 +88,20 @@ public:
 
         return resultColor;
     }
+    // Merges the active user override onto a caller-supplied colour without touching
+    // embeddedColor. Used for transient/mid-row styling that must not become the new
+    // embedded default (unlike onEmbeddedValue()).
+    uint32_t applyOverride(uint32_t streamColor) const
+    {
+        uint32_t resultColor = usingUserDefinedColor ? (userDefinedColor & 0x00ffffff) : (streamColor & 0x00ffffff);
+
+        if(usingUserDefinedOpacity)
+            setOpacity(resultColor, userDefinedOpacity);
+        else
+            resultColor |= (streamColor & 0xff000000);
+
+        return resultColor;
+    }
 private:
     uint32_t embeddedColor{};
     uint32_t userDefinedColor{};
@@ -127,6 +141,17 @@ public:
             return static_cast<EmbeddedType>(userDefinedValue);
         else
             return embeddedValue;
+    }
+
+    // Merges the active user override onto a caller-supplied value without touching
+    // embeddedValue. Used for transient/mid-row styling that must not become the new
+    // embedded default (unlike onEmbeddedValue()).
+    EmbeddedType applyOverride(EmbeddedType streamValue) const
+    {
+        if(usingUserDefinedValue)
+            return static_cast<EmbeddedType>(userDefinedValue);
+        else
+            return streamValue;
     }
 
 private:
@@ -218,6 +243,20 @@ public:
         return color;
     }
 
+    // Applies any active user colour override onto transient/stream-provided styling
+    // (e.g. CEA-608 mid-row/PAC style codes) without recording it as the new embedded
+    // default colour.
+    PenColor applyPenColorOverride(PenColor streamColor) const
+    {
+        PenColor color;
+
+        color.fg_color = textColorSettings.applyOverride(streamColor.fg_color);
+        color.bg_color = textBgColorSettings.applyOverride(streamColor.bg_color);
+        color.edge_color = textEdgeColorSettings.applyOverride(streamColor.edge_color);
+
+        return color;
+    }
+
     PenAttributes getPenAttributes() const
     {
         PenAttributes base = embeddedPenAttributes;
@@ -233,6 +272,23 @@ public:
         return base;
     }
 
+    // Applies any active user overrides onto transient/stream-provided pen attributes
+    // (e.g. CEA-608 mid-row/PAC style codes) without recording them as the new embedded
+    // defaults - only the fields tracked by *Settings below are ever overridable.
+    PenAttributes applyPenAttributesOverride(PenAttributes streamAttrs) const
+    {
+        PenAttributes result = streamAttrs;
+
+        result.pen_color = applyPenColorOverride(streamAttrs.pen_color);
+        result.pen_size = penSizeSettings.applyOverride(streamAttrs.pen_size);
+        result.edge_type = penEdgeSettings.applyOverride(streamAttrs.edge_type);
+        result.italics = fontItalicsSettings.applyOverride(streamAttrs.italics);
+        result.underline = fontUnderlineSettings.applyOverride(streamAttrs.underline);
+        result.font_tag = fontStyleSettings.applyOverride(streamAttrs.font_tag);
+
+        return result;
+    }
+
     WindowAttributes getWindowAttributes() const
     {
         WindowAttributes base = embeddedWindowAttributes;
@@ -242,6 +298,20 @@ public:
         base.fill_color = windowFillColorSettings.getValue();
 
         return base;
+    }
+
+    // Applies any active user overrides onto transient/stream-provided window attributes
+    // (e.g. CEA-608 background fill changes) without recording them as the new embedded
+    // defaults.
+    WindowAttributes applyWindowAttributesOverride(WindowAttributes streamAttrs) const
+    {
+        WindowAttributes result = streamAttrs;
+
+        result.border_type = windowBorderTypeSettings.applyOverride(streamAttrs.border_type);
+        result.border_color = windowBorderColorSettings.applyOverride(streamAttrs.border_color);
+        result.fill_color = windowFillColorSettings.applyOverride(streamAttrs.fill_color);
+
+        return result;
     }
 
     ColorUserSettings textColorSettings;

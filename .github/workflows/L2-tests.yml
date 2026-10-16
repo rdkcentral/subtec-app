@@ -37,6 +37,7 @@ jobs:
           apt install -y python3-pip python3-venv weston
 
       - name: Run L2 tests
+        id: run_l2_tests
         working-directory: test
         run: |
           mkdir -p "$L2_ARTIFACT_DIR"
@@ -83,6 +84,9 @@ jobs:
               cp "$artifact" "$L2_ARTIFACT_DIR/"
             fi
           done
+          if [[ "${{ steps.run_l2_tests.outcome }}" != "success" && -f subtec_console_common.log ]]; then
+            cp subtec_console_common.log "$L2_ARTIFACT_DIR/"
+          fi
           python3 - "$L2_ARTIFACT_DIR" <<'PY'
           import re
           import shutil

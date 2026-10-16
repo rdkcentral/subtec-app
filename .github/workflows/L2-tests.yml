@@ -1,0 +1,137 @@
+name: L2-tests
+
+on:
+  workflow_call:
+    inputs:
+      caller_source:
+        description: "Specifies the source type (e.g., local or test framework) for the workflow."
+        required: true
+        type: string
+
+env:
+  L2_ARTIFACT_DIR: ${{ github.workspace }}/artifacts-L2-subtec-app
+  XDG_RUNTIME_DIR: /tmp/subtec-runtime
+  WAYLAND_DISPLAY: wayland-0
+  LIBGL_ALWAYS_SOFTWARE: '1'
+
+jobs:
+  L2-tests:
+    name: Run L2 tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: ghcr.io/rdkcentral/docker-rdk-ci:latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install build and L2 test dependencies
+        run: |
+          chmod +x test/install_subtec_dependencies.sh subttxrend-app/x86_builder/build.sh
+          bash -e test/install_subtec_dependencies.sh
+          apt install -y python3-pip python3-venv weston
+
+      - name: Run L2 tests
+        id: run_l2_tests
+        working-directory: test
+        run: |
+          mkdir -p "$L2_ARTIFACT_DIR"
+          install -d -m 0700 "$XDG_RUNTIME_DIR"
+          weston --backend=headless-backend.so \
+            --socket="$WAYLAND_DISPLAY" \
+            --idle-time=0 \
+            --width=1280 \
+            --height=720 \
+            > "$L2_ARTIFACT_DIR/weston.log" 2>&1 &
+          weston_pid=$!
+          trap 'kill "$weston_pid" 2>/dev/null || true' EXIT
+
+          for attempt in {1..50}; do
+            if [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
+              break
+            fi
+            if ! kill -0 "$weston_pid" 2>/dev/null; then
+              cat "$L2_ARTIFACT_DIR/weston.log"
+              exit 1
+            fi
+            sleep 0.2
+          done
+          if [[ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
+            echo "Weston did not create $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+            exit 1
+          fi
+
+          python3 -m venv l2venv
+          source l2venv/bin/activate
+          python3 -m pip install -r requirements.txt
+          set -o pipefail
+          # Cinecav-dependent tests are excluded until cpc-fonts can be accessed from CI
+          python3 run_l2_tests.py -e 1023 1034 1056 \
+            2>&1 | tee "$L2_ARTIFACT_DIR/l2-tests.log"
+
+      - name: Collect L2 test artifacts
+        if: always()
+        working-directory: test
+        run: |
+          mkdir -p "$L2_ARTIFACT_DIR"
+          for artifact in junit_results.xml run_l2_subtec_*.log; do
+            if [[ -f "$artifact" ]]; then
+              cp "$artifact" "$L2_ARTIFACT_DIR/"
+            fi
+          done
+          if [[ "${{ steps.run_l2_tests.outcome }}" != "success" && -f subtec_console_common.log ]]; then
+            cp subtec_console_common.log "$L2_ARTIFACT_DIR/"
+          fi
+          python3 - "$L2_ARTIFACT_DIR" <<'PY'
+          import re
+          import shutil
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          artifact_dir = Path(sys.argv[1])
+          junit_file = Path("junit_results.xml")
+          output_dirs = []
+
+          try:
+              root = ET.parse(junit_file).getroot()
+          except (FileNotFoundError, ET.ParseError) as error:
+              print(f"JUnit results unavailable ({error}); collecting all available test outputs")
+              output_dirs = list(Path(".").glob("TEST_*/output_files"))
+          else:
+              failed_suites = set()
+              for test_case in root.iter("testcase"):
+                  if test_case.find("failure") is None and test_case.find("error") is None:
+                      continue
+                  identity = " ".join(filter(None, (
+                      test_case.get("classname"),
+                      test_case.get("file"),
+                      test_case.get("name"),
+                  )))
+                  match = re.search(r"TEST_\d{4}[^./\\\s]*", identity)
+                  if match:
+                      failed_suites.add(match.group(0))
+                  else:
+                      print(f"Unable to map failed test case to an output directory: {identity}")
+
+              output_dirs = [Path(test_name) / "output_files" for test_name in sorted(failed_suites)]
+
+          for output_dir in output_dirs:
+              if output_dir.is_dir():
+                  destination = artifact_dir / f"{output_dir.parent.name}-output_files"
+                  shutil.copytree(output_dir, destination, dirs_exist_ok=True)
+                  print(f"Collected failed test output: {output_dir}")
+          PY
+
+      - name: Upload L2 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-L2-subtec-app
+          if-no-files-found: warn
+          path: ${{ env.L2_ARTIFACT_DIR }}

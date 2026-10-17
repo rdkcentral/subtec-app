@@ -1325,8 +1325,11 @@ void CommandParser::set608WindowPosition(int state, unsigned char baseRow, unsig
 
 void CommandParser::process608CaptionControl(uint8_t c1, uint8_t control)
 {
-    uint32_t last608CaptionState = m_608CaptionState;
     bool windowTimedout = m_proc->isWindowTimedout();
+    if(windowTimedout)
+        m_608CaptionState = CaptionState_Idle;
+
+    uint32_t last608CaptionState = m_608CaptionState;
     bool defineWindowOnTimeout = false;
 
     LOG_CURRENT_WINDOW("Window for control %d");

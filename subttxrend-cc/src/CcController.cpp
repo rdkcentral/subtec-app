@@ -375,10 +375,62 @@ void Controller::setTextForPreview(const std::string& text)
 {
     logger.info("%s", __func__);
     // We're using window 5 (just because) for the preview
-    WindowsMap wm = toWindowsMap(255 /*1<<(5-1)*/);
+    WindowsMap wm = toWindowsMap(1 << 5);
     logger.trace("deleteWindows");
     winCtrl->deleteWindows(wm);
     WindowDefinition wd{5, 1, false, false, true, false, 0, 0, 1, {}, 32, {}, {}};
+    logger.trace("defineWindow");
+    winCtrl->defineWindow(wd);
+    PenAttributes pa;
+    logger.trace("setPenAttributes");
+    winCtrl->setPenAttributes(pa);
+    PenColor pc;
+    logger.trace("setPenColor + setPenLocation");
+    winCtrl->setPenColor(pc);
+    winCtrl->setPenLocation(0, 0);
+    logger.trace("report");
+    winCtrl->report(text);
+    logger.trace("displayWindows");
+    winCtrl->displayWindows(wm);
+    logger.trace("drawWindows");
+    winCtrl->drawWindows();
+    logger.info("%s ends", __func__);
+}
+
+void Controller::displayPreviewText(const std::string& text, float verOffset, float horOffset, PenAnchorPoint anchorPoint)
+{
+    logger.info("%s", __func__);
+    // We're using window 5 (just because) for the preview
+    WindowsMap wm = toWindowsMap(1 << 5);
+    logger.trace("deleteWindows");
+    winCtrl->deleteWindows(wm);
+    // CEA-708 window geometry limits
+    static constexpr int MAX_PREVIEW_COLUMNS = 42;
+    
+    const float clampedVer = std::min(std::max(verOffset, 0.0f), 1.0f);
+    const float clampedHor = std::min(std::max(horOffset, 0.0f), 1.0f);
+    const int   columns    = std::max(1, std::min(static_cast<int>(utf8GlyphCount(text)), MAX_PREVIEW_COLUMNS));
+        
+    // With relative_pos == true, the anchor points are a percentage of screen dimensions
+    WindowDefinition wd{5, 1, false, false, true, /*relative_pos*/ true, static_cast<int>(clampedVer * 100.0f), static_cast<int>(clampedHor * 100.0f), 1, anchorPoint, columns, {}, {}};
+    switch (anchorPoint)
+    {
+        case PenAnchorPoint::TOP_LEFT:
+        case PenAnchorPoint::MIDDLE_LEFT:
+        case PenAnchorPoint::BOTTOM_LEFT:
+            wd.win_style.justify = WindowJustify::LEFT;
+            break;
+        case PenAnchorPoint::TOP_CENTER:
+        case PenAnchorPoint::MIDDLE_CENTER:
+        case PenAnchorPoint::BOTTOM_CENTER:
+            wd.win_style.justify = WindowJustify::CENTER;
+            break;
+        case PenAnchorPoint::TOP_RIGHT:
+        case PenAnchorPoint::MIDDLE_RIGHT:
+        case PenAnchorPoint::BOTTOM_RIGHT:
+            wd.win_style.justify = WindowJustify::RIGHT;
+            break;
+    }
     logger.trace("defineWindow");
     winCtrl->defineWindow(wd);
     PenAttributes pa;

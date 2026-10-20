@@ -145,7 +145,10 @@ void TtmlEngineImpl::resume()
     if (m_paused)
     {
         using namespace std::chrono;
-        m_pauseTimeMs += duration_cast<milliseconds>(system_clock::now() - m_pauseEnteredTime).count();
+        const auto pausedFor = system_clock::now() - m_pauseEnteredTime;
+        m_pauseTimeMs += duration_cast<milliseconds>(pausedFor).count();
+        // keep the display timeout frozen across the pause
+        m_displayTime += duration_cast<steady_clock::duration>(pausedFor);
         m_logger.osdebug("pauseTimeMs: ", m_pauseTimeMs);
     }
     m_paused = false;
@@ -284,16 +287,25 @@ void TtmlEngineImpl::process()
     bool needUpdate = false;
     bool newDocumentAdded = false;
     TimePoint startOfTheNewDoc;
-    std::chrono::steady_clock::time_point currentTime = std::chrono::steady_clock::now();
-    auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - m_displayTime).count();
-    if(m_startTimer && (elapsedTime > DISPLAY_TIMEOUT))
-    {
-        needUpdate = true;
-    }
     std::list<IntermediateDocument> shownDocuments;
     {
         std::lock_guard<std::mutex> lock{m_mutex};
-        if ((m_lastMediatimeMs != -1) && (!m_paused)) {
+        // While paused media time is frozen, so the screen must be left as it is.
+        // Returning here also suppresses the display timeout below, which would
+        // otherwise clear the currently visible document.
+        if (m_paused) {
+            return;
+        }
+
+        // Evaluated under the lock so a concurrent resume() cannot be missed.
+        std::chrono::steady_clock::time_point currentTime = std::chrono::steady_clock::now();
+        auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - m_displayTime).count();
+        if(m_startTimer && (elapsedTime > DISPLAY_TIMEOUT))
+        {
+            needUpdate = true;
+        }
+
+        if (m_lastMediatimeMs != -1) {
 
             assert(m_renderer);
 
@@ -367,21 +379,22 @@ void TtmlEngineImpl::process()
         {
             auto t = m_logger.timing("renderer->clearscreen");
             m_renderer->clearscreen();
-            m_displayTime = std::chrono::steady_clock::now();
-            m_startTimer = false;
         }
         {
             auto t = m_logger.timing("renderer->renderDocument");
             for (auto& doc : shownDocuments) {
                 m_renderer->renderDocument(doc);
-                m_startTimer = true;
-                m_displayTime = std::chrono::steady_clock::now();
             }
             if (newDocumentAdded) {
                 auto start = startOfTheNewDoc.toMilliseconds();
                 auto now = getCurrentMediatime().toMilliseconds();
                 m_logger.ostrace(__LOGGER_FUNC__, " display real diff: ", (now - start).count(), " shown count: ", shownDocuments.size());
             }
+        }
+        {
+            std::lock_guard<std::mutex> lock{m_mutex};
+            m_startTimer = !shownDocuments.empty();
+            m_displayTime = std::chrono::steady_clock::now();
         }
 
         if (m_showMediatime) {
@@ -399,11 +412,12 @@ std::chrono::milliseconds TtmlEngineImpl::getWaitTime() const
 {
     auto waitTime = std::chrono::milliseconds::zero();
 
-    auto anythingToDraw = !m_timeline.empty();
-    auto anythingToHide = !m_shownDocuments.empty() || m_startTimer;
-
     {
         std::lock_guard<std::mutex> lock{m_mutex};
+
+        auto anythingToDraw = !m_timeline.empty();
+        auto anythingToHide = !m_shownDocuments.empty() || m_startTimer;
+
         if ((m_lastMediatimeMs != -1) && (anythingToDraw || anythingToHide)) {
             // TimePoint const currentMediaTime = getCurrentMediatime();
 

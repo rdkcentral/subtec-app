@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<tt xml:lang="en" xmlns="http://www.w3.org/ns/ttml" xmlns:tt="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" ttp:timeBase="media">
+<head>
+  <styling>
+    <style xml:id="s0" tts:backgroundColor="#000000FF" tts:textAlign="left" tts:color="#FFFF00FF" tts:fontSize="1c" tts:fontFamily="proportionalSansSerif" />
+    <style xml:id="transparentspace" tts:backgroundColor="#000000FF" tts:textAlign="left" tts:color="#FFFF00FF" tts:fontSize="1c" tts:fontFamily="proportionalSansSerif" />
+  </styling>
+  <layout>
+    <region xml:id="_br_r0" tts:origin="17.50% 6.32%" tts:extent="82.50% 17.01%" />
+  </layout>
+</head>
+<body>
+  <div xml:lang="en">
+    <p xml:id="br_case_01" style="s0" begin="00:00:00.000" end="00:00:05.000" region="_br_r0">BR01 direct before br<br/>BR01 validate direct after br</p>
+    <p xml:id="br_case_02" style="s0" begin="00:00:06.000" end="00:00:10.000" region="_br_r0">
+      BR02 pretty print before br
+      <br/>
+      BR02 validate trimmed indent after br
+    </p>
+    <p xml:id="br_case_03" style="s0" begin="00:00:11.000" end="00:00:15.000" region="_br_r0"><span style="s0">BR03 span before br</span><br/>BR03 validate plain text after br</p>
+    <p xml:id="br_case_04" style="s0" begin="00:00:16.000" end="00:00:20.000" region="_br_r0">BR04 plain text before br<br/><span style="s0">BR04 validate span after br</span></p>
+    <p xml:id="br_case_05" style="s0" begin="00:00:21.000" end="00:00:25.000" region="_br_r0"><span style="s0">BR05 first break line</span><br/><span style="s0">BR05 middle line survives</span><br/><span style="s0">BR05 second break line</span></p>
+    <p xml:id="br_case_06" style="s0" begin="00:00:26.000" end="00:00:30.000" region="_br_r0"><span style="s0">BR06 trailing br keeps prior text</span><br/></p>
+  </div>
+</body>
+</tt>

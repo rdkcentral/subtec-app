@@ -109,37 +109,9 @@ typedef enum
 
 const int MAX_608_COLS = 32;
 const int MAX_608_ROWS = 15;
-const int MAX_608_WINDOWS = 8;
 #define VALID_WINDOW_ID(w) ((w >= 0) && (w < MAX_608_WINDOWS))
 
 int CommandParser::m_lastBaseRow = MAX_608_ROWS;
-
-
-typedef struct
-{
-    int32_t baseRow;
-    int32_t indent;
-    int32_t assignedRow;
-
-    void reset()
-    {
-        baseRow = -1;
-        indent = 0;
-        assignedRow = -1;
-    }
-} WindowInfo;
-
-static WindowInfo windowInfo[MAX_608_WINDOWS] =
-{
-    {-1,0,-1},
-    {-1,0,-1},
-    {-1,0,-1},
-    {-1,0,-1},
-    {-1,0,-1},
-    {-1,0,-1},
-    {-1,0,-1},
-    {-1,0,-1}
-};
 
 
 typedef struct
@@ -1138,6 +1110,19 @@ void CommandParser::removeFrom608WindowList(int window)
     }
 }
 
+void CommandParser::rebuild608WindowList()
+{
+    m_608Windowlist.clear();
+
+    for (int window = 0; window < MAX_608_WINDOWS; window++)
+    {
+        if (windowInfo[window].assignedRow != -1)
+        {
+            m_608Windowlist.emplace_back(window);
+        }
+    }
+}
+
 int CommandParser::active608Window()
 {
     WindowDefinition wd;
@@ -1217,9 +1202,19 @@ int32_t CommandParser::get608WindowFromRow(int32_t row)
         }
     }
 
-    // Replace oldest assigned window
-    window = m_608Windowlist[0];
-    m_608Windowlist.erase(m_608Windowlist.begin());
+    // Replace the oldest assigned window belonging to this state's window group
+    auto iter = std::find_if(m_608Windowlist.begin(), m_608Windowlist.end(),
+                             [offset](int w) { return (w >= offset) && (w < offset + 4); });
+    if (iter != m_608Windowlist.end())
+    {
+        window = *iter;
+        m_608Windowlist.erase(iter);
+    }
+    else
+    {
+        logger.warning("%s, no window in list for row %d, using window %d", __func__, row, offset);
+        window = offset;
+    }
     m_608Windowlist.emplace_back(window);
 
     windowInfo[window].assignedRow = row;
@@ -1400,7 +1395,7 @@ void CommandParser::process608CaptionControl(uint8_t c1, uint8_t control)
 
     if ((last608CaptionState != m_608CaptionState) || (windowTimedout && defineWindowOnTimeout))
     {
-        m_608Windowlist.clear();
+        rebuild608WindowList();
 
         // Clear the windows if required
         if((control != CaptionControlEOC) &&

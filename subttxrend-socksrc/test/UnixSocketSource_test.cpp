@@ -61,6 +61,9 @@ class UnixSocketSourceTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCreateSocketRetryDelay);
     CPPUNIT_TEST(testCreateSocketSucceedsWhenParentDirAppears);
     CPPUNIT_TEST(testCreateSocketSucceedsAfterLongerDelay);
+    CPPUNIT_TEST(testStopBeforeSocketCreationCompletes);
+    CPPUNIT_TEST(testDestructorDuringPendingSocketCreation);
+    CPPUNIT_TEST(testStartAfterStopBeforeSocketCreationCompletes);
     CPPUNIT_TEST(testMultipleStartStopCycles);
     CPPUNIT_TEST(testStopShortlyAfterStart);
 
@@ -354,6 +357,47 @@ public:
 
         CPPUNIT_ASSERT(created);
     }
+
+    void testStopBeforeSocketCreationCompletes()
+    {
+        std::string path = prepareDeferredSocketPath("stop_before_create.sock");
+
+        CPPUNIT_ASSERT(runStopBeforeSocketCreationIsolated(path, 30));
+
+        cleanupSocketFile(path);
+        removeDirIfExists(parentDir(path));
+    }
+
+    void testDestructorDuringPendingSocketCreation()
+    {
+        std::string path = prepareDeferredSocketPath("destructor_before_create.sock");
+
+        CPPUNIT_ASSERT(runDestructorDuringPendingSocketCreationIsolated(path, 30));
+
+        cleanupSocketFile(path);
+        removeDirIfExists(parentDir(path));
+    }
+
+    void testStartAfterStopBeforeSocketCreationCompletes()
+    {
+        std::string path = prepareDeferredSocketPath("restart_after_failed_create.sock");
+
+        UnixSocketSource source(path);
+        source.start(m_receiver.get());
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        CPPUNIT_ASSERT(!isUnixSocketFile(path));
+
+        source.stop();
+
+        ensureDirExists(parentDir(path));
+        source.start(m_receiver.get());
+        CPPUNIT_ASSERT(waitForUnixSocket(path, 600, 10));
+
+        source.stop();
+        cleanupSocketFile(path);
+        removeDirIfExists(parentDir(path));
+    }
+
     void testMultipleStartStopCycles()
     {
         UnixSocketSource source(m_testSocketPath);
@@ -470,6 +514,46 @@ private:
                     _exit(2);
                 }
                 source.stop();
+            }
+            _exit(0);
+        }
+
+        return childExitedCleanly(pid);
+    }
+
+    bool runStopBeforeSocketCreationIsolated(const std::string& path, int stopDelayMs)
+    {
+        pid_t pid = fork();
+        if (pid == -1) return false;
+        if (pid == 0) {
+            UnixSocketSource source(path);
+            source.start(m_receiver.get());
+            std::this_thread::sleep_for(std::chrono::milliseconds(stopDelayMs));
+
+            if (isUnixSocketFile(path)) {
+                _exit(2);
+            }
+
+            source.stop();
+            _exit(0);
+        }
+
+        return childExitedCleanly(pid);
+    }
+
+    bool runDestructorDuringPendingSocketCreationIsolated(const std::string& path, int destructorDelayMs)
+    {
+        pid_t pid = fork();
+        if (pid == -1) return false;
+        if (pid == 0) {
+            {
+                UnixSocketSource source(path);
+                source.start(m_receiver.get());
+                std::this_thread::sleep_for(std::chrono::milliseconds(destructorDelayMs));
+
+                if (isUnixSocketFile(path)) {
+                    _exit(2);
+                }
             }
             _exit(0);
         }

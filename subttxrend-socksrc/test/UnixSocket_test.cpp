@@ -26,6 +26,7 @@
 #include <thread>
 #include <exception>
 #include <cstring>
+#include <vector>
 
 #include "../src/UnixSocket.hpp"
 
@@ -112,6 +113,8 @@ class UnixSocketTest : public CppUnit::TestFixture
 public:
     void setUp()
     {
+        m_generatedSocketPaths.clear();
+
         // Create unique test socket paths
         m_testSocketPath = generateTestSocketPath();
         m_testSocketPath2 = generateTestSocketPath();
@@ -119,9 +122,11 @@ public:
 
     void tearDown()
     {
-        // Clean up test socket files
-        cleanupSocketFile(m_testSocketPath);
-        cleanupSocketFile(m_testSocketPath2);
+        for (const auto& path : m_generatedSocketPaths) {
+            cleanupSocketFile(path);
+        }
+
+        m_generatedSocketPaths.clear();
     }
 
     void testConstructorWithValidShortPath()
@@ -1534,6 +1539,7 @@ public:
 private:
     std::string m_testSocketPath;
     std::string m_testSocketPath2;
+    std::vector<std::string> m_generatedSocketPaths;
     static int s_testCounter;
     static void enqueueZeroLengthDatagram(const std::string& path)
     {
@@ -1564,8 +1570,10 @@ private:
 
     std::string generateTestSocketPath()
     {
-        return "/tmp/test_unixsocket_" + std::to_string(getpid()) +
-               "_" + std::to_string(s_testCounter++) + ".sock";
+        std::string path = "/tmp/test_unixsocket_" + std::to_string(getpid()) +
+                           "_" + std::to_string(s_testCounter++) + ".sock";
+        m_generatedSocketPaths.push_back(path);
+        return path;
     }
 
     void cleanupSocketFile(const std::string& path)

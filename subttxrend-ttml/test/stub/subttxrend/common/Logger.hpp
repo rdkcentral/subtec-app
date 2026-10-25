@@ -63,9 +63,22 @@ class LoggerExecutor;
 
 struct Timing
 {
-    Timing(const LoggerExecutor* exe, std::string s, void* ctx);
-    Timing(const LoggerExecutor* exe, std::string s, LoggerLevel level, void* ctx);
-    ~Timing();
+    Timing(const LoggerExecutor* exe, std::string s, void* ctx)
+    {
+        (void)exe;
+        (void)s;
+        (void)ctx;
+    }
+
+    Timing(const LoggerExecutor* exe, std::string s, LoggerLevel level, void* ctx)
+    {
+        (void)exe;
+        (void)s;
+        (void)level;
+        (void)ctx;
+    }
+
+    ~Timing() = default;
 };
 
 /**
@@ -91,10 +104,27 @@ class Logger : NonCopyable
      */
     virtual ~Logger(){};
 
-    Timing timing(std::string s) const;
-    Timing timing(std::string s, LoggerLevel level) const;
-    bool isEnabled(LoggerLevel level) const;
-    void sendMessage(LoggerLevel level, std::string const& s);
+    Timing timing(std::string s) const
+    {
+        return Timing(nullptr, std::move(s), nullptr);
+    }
+
+    Timing timing(std::string s, LoggerLevel level) const
+    {
+        return Timing(nullptr, std::move(s), level, nullptr);
+    }
+
+    bool isEnabled(LoggerLevel level) const
+    {
+        (void)level;
+        return false;
+    }
+
+    void sendMessage(LoggerLevel level, std::string const& s)
+    {
+        (void)level;
+        (void)s;
+    }
 
     template <class... Args>
     void makeMessage(LoggerLevel level, Args&&... args)
@@ -138,14 +168,20 @@ class Logger : NonCopyable
      * @param format
      *      Printf-like format string.
      */
-    void fatal(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS;
+    void fatal(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS
+    {
+        (void)format;
+    }
     /**
      * Logs ERROR level message.
      *
      * @param format
      *      Printf-like format string.
      */
-    void error(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS;
+    void error(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS
+    {
+        (void)format;
+    }
 
     /**
      * Logs WARNING level message.
@@ -153,7 +189,10 @@ class Logger : NonCopyable
      * @param format
      *      Printf-like format string.
      */
-    void warning(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS;
+    void warning(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS
+    {
+        (void)format;
+    }
 
     /**
      * Logs INFO level message.
@@ -161,7 +200,10 @@ class Logger : NonCopyable
      * @param format
      *      Printf-like format string.
      */
-    void info(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS;
+    void info(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS
+    {
+        (void)format;
+    }
 
     /**
      * Logs INFO level message.
@@ -169,7 +211,10 @@ class Logger : NonCopyable
      * @param format
      *      Printf-like format string.
      */
-    void debug(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS;
+    void debug(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS
+    {
+        (void)format;
+    }
 
     /**
      * Logs TRACE level message.
@@ -177,7 +222,10 @@ class Logger : NonCopyable
      * @param format
      *      Printf-like format string.
      */
-    void trace(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS;
+    void trace(const char* format, ...) LOGGER_CHECK_PRINTF_LIKE_ARGUMENTS
+    {
+        (void)format;
+    }
 
   private:
     void makeMessage(std::ostream&) {}

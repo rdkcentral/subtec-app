@@ -73,6 +73,7 @@ WaylandBackendEgl::WaylandBackendEgl(BackendListener* listener) :
         WaylandBackend(listener),
         m_eglContext(nullptr),
         m_eglDisplay(nullptr),
+        m_eglConfig(nullptr),
         m_eglWindow(nullptr),
         m_eglSurface(nullptr),
         m_textureUniformHandle(-1),
@@ -86,28 +87,25 @@ WaylandBackendEgl::WaylandBackendEgl(BackendListener* listener) :
 
 WaylandBackendEgl::~WaylandBackendEgl()
 {
-    if (!eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT))
+    destroyWindowSurface(false);
+
+    if (m_eglDisplay && m_eglContext)
     {
-        g_logger.error("%s - cannot set current EGL context (%d)", __func__,
-                eglGetError());
-    }
-    if(m_eglContext)
-    {
+        eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                EGL_NO_CONTEXT);
         eglDestroyContext(m_eglDisplay, m_eglContext);
+        m_eglContext = EGL_NO_CONTEXT;
     }
-    if(m_eglSurface)
+
+    if (m_eglDisplay)
     {
-        eglDestroySurface(m_eglDisplay, m_eglSurface);
+        if (eglTerminate(m_eglDisplay) == EGL_FALSE)
+        {
+            g_logger.error("%s - Failed to terminate egl display (%d)",
+                    __func__, eglGetError());
+        }
     }
-    if(m_eglWindow)
-    {
-        wl_egl_window_destroy(m_eglWindow);
-    }
-    if(eglTerminate(m_eglDisplay) == EGL_FALSE)
-    {
-         g_logger.error("%s - Failed to terminate egl display (%d)", __func__,
-                eglGetError());
-    }
+        
     eglReleaseThread();
 }
 
@@ -134,7 +132,6 @@ bool WaylandBackendEgl::initRendering()
     EGL_CONTEXT_CLIENT_VERSION, 2,
     EGL_NONE };
 
-    EGLConfig config = nullptr;
     EGLint numConfig = 0;
 
     g_logger.trace("%s", __func__);
@@ -178,7 +175,7 @@ bool WaylandBackendEgl::initRendering()
         return false;
     }
 
-    if (!eglChooseConfig(m_eglDisplay, configAttributes, &config, 1,
+    if (!eglChooseConfig(m_eglDisplay, configAttributes, &m_eglConfig, 1,
             &numConfig))
     {
         g_logger.error("%s - cannot choose EGL config (%d)", __func__,
@@ -186,7 +183,7 @@ bool WaylandBackendEgl::initRendering()
         return false;
     }
 
-    m_eglContext = eglCreateContext(m_eglDisplay, config, EGL_NO_CONTEXT,
+    m_eglContext = eglCreateContext(m_eglDisplay, m_eglConfig, EGL_NO_CONTEXT,
             contextAttributes);
     if (!m_eglContext)
     {
@@ -209,9 +206,18 @@ bool WaylandBackendEgl::initRendering()
     {
         m_initialSize = DEFAULT_SIZE;
     }
+ 
+    g_logger.error("%s - The EGL window and EGL surface are created when content is visible", __func__);
 
-    g_logger.trace("%s - creating EGL wayland window of size 720, actual size %dx%d", __func__,
-            m_initialSize.m_w, m_initialSize.m_h);
+    return true;
+}
+
+bool WaylandBackendEgl::createWindowSurface()
+{
+    if (m_eglSurface)
+    {
+        return true;
+    }
 
     m_eglWindow = wl_egl_window_create(getSurface()->getNativeObject(),
             1280, 720);
@@ -221,47 +227,77 @@ bool WaylandBackendEgl::initRendering()
         return false;
     }
 
-    m_eglSurface = eglCreateWindowSurface(m_eglDisplay, config, m_eglWindow,
-    NULL);
+    m_eglSurface = eglCreateWindowSurface(m_eglDisplay, m_eglConfig,
+            m_eglWindow, nullptr);
     if (!m_eglSurface)
     {
         g_logger.error("%s - cannot create EGL window surface (%d)", __func__,
                 eglGetError());
+        wl_egl_window_destroy(m_eglWindow);
+        m_eglWindow = nullptr;
         return false;
     }
 
-    if (!eglMakeCurrent(m_eglDisplay, m_eglSurface, m_eglSurface, m_eglContext))
+    if (!eglMakeCurrent(m_eglDisplay, m_eglSurface, m_eglSurface,
+            m_eglContext))
     {
         g_logger.error("%s - cannot set current EGL context (%d)", __func__,
                 eglGetError());
+        destroyWindowSurface(false);
         return false;
     }
 
-    m_program = std::move(linkShaderProgram());
     if (!m_program)
     {
-        g_logger.error("%s - cannot init GL program", __func__);
-        return false;
+        m_program = std::move(linkShaderProgram());
+        if (!m_program)
+        {
+            g_logger.error("%s - cannot init GL program", __func__);
+            destroyWindowSurface(false);
+            return false;
+        }
+
+        glUseProgram(m_program.get());
+
+        m_textureUniformHandle = glGetUniformLocation(
+                m_program.get(), "uTexture");
+        m_textureBgUniformHandle = glGetUniformLocation(
+                m_program.get(), "uBgTexture");
+        m_positionAttribHandle = glGetAttribLocation(
+                m_program.get(), "aPosition");
+        m_textureCoordinateHandle = glGetAttribLocation(
+                m_program.get(), "aTexCoordinate");
+
+        glDisable(GL_DEPTH_TEST);
     }
-
-    glUseProgram(m_program.get());
-
-    m_textureUniformHandle = glGetUniformLocation(m_program.get(), "uTexture");
-    m_textureBgUniformHandle = glGetUniformLocation(m_program.get(), "uBgTexture");
-    m_positionAttribHandle = glGetAttribLocation(m_program.get(), "aPosition");
-    m_textureCoordinateHandle = glGetAttribLocation(m_program.get(),
-            "aTexCoordinate");
-
-    g_logger.trace("%s - Handles: texsampler=%d position=%d texcoords=%d",
-            __func__, m_textureUniformHandle, m_positionAttribHandle,
-            m_textureCoordinateHandle);
-
-    glDisable(GL_DEPTH_TEST);
-
-    g_logger.trace("%s - finished with success", __func__);
 
     return true;
 }
+
+void WaylandBackendEgl::destroyWindowSurface(bool unmapSurface)
+{
+    if (m_eglDisplay && m_eglSurface)
+    {
+        eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                EGL_NO_CONTEXT);
+        eglDestroySurface(m_eglDisplay, m_eglSurface);
+        m_eglSurface = EGL_NO_SURFACE;
+    }
+
+    if (m_eglWindow)
+    {
+        wl_egl_window_destroy(m_eglWindow);
+        m_eglWindow = nullptr;
+    }
+
+    if (unmapSurface && getSurface())
+    {
+        getSurface()->attach(nullptr);
+        getSurface()->commit();
+        m_frameReady = true;
+    }
+}
+
 
 bool WaylandBackendEgl::checkRequiredInterfaces() const
 {
@@ -470,29 +506,25 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
 
     g_logger.trace("%s", __func__);
 
-    if (!m_eglDisplay)
-    {
-        g_logger.trace("%s - no display", __func__);
-        return;
-    }
-    if (!m_eglSurface)
-    {
-        g_logger.trace("%s - no surface", __func__);
-        return;
-    }
-
-    if (!m_program)
-    {
-        g_logger.trace("%s - no program", __func__);
-        return;
-    }
-
     const bool renderRequested = m_renderRequested.exchange(false);
 
     auto contentSize = calculateContentSize();
 
-    const bool anythingToDraw = (contentSize.m_w > 0) || (contentSize.m_h > 0);
+    const bool anythingToDraw = (contentSize.m_w > 0) && (contentSize.m_h > 0);
 
+    if (!anythingToDraw)
+    {
+        g_logger.error("%s - distroy EGL window surface", __func__);
+        destroyWindowSurface(true);
+        return;
+    }
+    const bool surfaceCreated = !m_eglSurface;
+    if (!createWindowSurface())
+    {
+        g_logger.error("%s - cannot create EGL window surface", __func__);
+        return;
+    }
+        
     // clear with transparent color
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -506,7 +538,7 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
             visibleChanged = true;
         }
 
-        if (renderRequested)
+        if (renderRequested || surfaceCreated)
         {
             if (!prepareTexture(contentSize, TEXT_TEXTURE))
             {

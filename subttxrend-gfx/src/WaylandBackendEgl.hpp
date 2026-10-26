@@ -83,6 +83,18 @@ protected:
 
 private:
     /**
+     * Creates the EGL window surface when content becomes visible.
+     */
+    bool createWindowSurface();
+
+    /**
+     * Destroys the EGL window surface.
+     *
+     * If requested, also unmaps the Wayland surface.
+     */
+    void destroyWindowSurface(bool unmapSurface);
+
+    /**
      * Prepares texture of given size.
      *
      * @param contentSize
@@ -150,6 +162,10 @@ private:
 
     /** EGL display object. */
     EGLDisplay m_eglDisplay;
+
+    /** EGL configuration used to create the window surface. */
+    EGLConfig m_eglConfig;
+
 
     /** Wayland GL window. */
     wl_egl_window* m_eglWindow;

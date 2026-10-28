@@ -82,6 +82,18 @@ protected:
                                   uint32_t name) override;
 
 private:
+    /** Initializes the EGL display, configuration, and context. */
+    bool initializeEgl();
+
+    /** Creates the Wayland EGL window and EGL window surface. */
+    bool createWindowSurface();
+
+    /** Releases all EGL and OpenGL resources. */
+    void terminateEgl();
+
+    /** Detaches and commits a null buffer to the Wayland surface. */
+    void unmapSurface();
+
     /**
      * Prepares texture of given size.
      *
@@ -150,6 +162,12 @@ private:
 
     /** EGL display object. */
     EGLDisplay m_eglDisplay;
+
+    /** EGL configuration used by the context and window surface. */
+    EGLConfig m_eglConfig;
+
+    /** Whether EGL has been initialized. */
+    bool m_eglInitialized;
 
     /** Wayland GL window. */
     wl_egl_window* m_eglWindow;

@@ -252,12 +252,21 @@ void WaylandBackend::loopStarted()
         return;
     }
 
+    // Create the native surface at startup, as before lazy EGL init, so the
+    // compositor assigns the same stacking order as earlier builds.
+    if (!createSurface())
+    {
+        g_logger.fatal("%s - Cannot create surface", __func__);
+        m_renderingFailed = true;
+        return;
+    }
+
     m_frameReady = true;
     m_renderRequested = true;
 
     if (deferRendering())
     {
-        g_logger.info("%s - Rendering deferred until content is visible", __func__);
+        g_logger.info("%s - Surface created; EGL initialization deferred until content is visible", __func__);
     }
     else if (!initializeRendering())
     {
@@ -269,14 +278,10 @@ void WaylandBackend::loopStarted()
 
 bool WaylandBackend::initializeRendering()
 {
-    if (!createSurface() || !initRendering())
+    if (!initRendering())
     {
         g_logger.fatal("%s - Cannot initialize rendering; backend restart required", __func__);
         shutdownRendering();
-        m_xdgToplevel.reset();
-        m_xdgSurface.reset();
-        m_shellSurface.reset();
-        m_surface.reset();
         m_renderingFailed = true;
         return false;
     }
@@ -808,7 +813,7 @@ void WaylandBackend::redraw(uint32_t /*time*/)
         const auto size = calculateContentSize();
         if (size.m_w <= 0 || size.m_h <= 0)
         {
-            g_logger.trace("%s - No visible content (%dx%d); surface and rendering initialization skipped",
+            g_logger.trace("%s - No visible content (%dx%d); EGL initialization skipped",
                     __func__, size.m_w, size.m_h);
             return;
         }

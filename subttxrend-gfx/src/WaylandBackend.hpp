@@ -122,7 +122,7 @@ protected:
      */
     virtual bool initRendering() = 0;
 
-    /** Whether surface creation and rendering initialization wait for visible content. */
+    /** Whether rendering initialization waits for visible content; the surface is always created at startup. */
     virtual bool deferRendering() const { return false; }
 
     /** Releases rendering resources on the display-loop thread. */

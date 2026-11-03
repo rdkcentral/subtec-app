@@ -39,9 +39,10 @@ class PixelArgb8888;
 /**
  * Rendering backend using wayland-egl.
  *
- * The native surface and EGL resources are created on first visible content and
- * retained across mute/unmute. Hiding clears the last frame once; subsequent
- * empty redraws submit no GL work. Resources are released on loop shutdown.
+ * The native Wayland surface is created at startup (preserving compositor stacking
+ * order); EGL resources are created on first visible content and retained across
+ * mute/unmute. Hiding clears the last frame once; subsequent empty redraws submit
+ * no GL work. Resources are released on loop shutdown.
  */
 class WaylandBackendEgl : public WaylandBackend
 {

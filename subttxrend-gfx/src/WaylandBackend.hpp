@@ -122,6 +122,12 @@ protected:
      */
     virtual bool initRendering() = 0;
 
+    /** Whether surface creation and rendering initialization wait for visible content. */
+    virtual bool deferRendering() const { return false; }
+
+    /** Releases rendering resources on the display-loop thread. */
+    virtual void shutdownRendering() {}
+
     /**
      * Checks if required wayland interfaces are present.
      *
@@ -240,6 +246,11 @@ protected:
     uint32_t m_currentSurfaceId;
 
 private:
+    bool initializeRendering();
+
+    bool m_renderingInitialized = false;
+    bool m_renderingFailed = false;
+
     /**
      * Seat related data.
      */

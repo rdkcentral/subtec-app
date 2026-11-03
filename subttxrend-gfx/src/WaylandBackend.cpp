@@ -248,32 +248,50 @@ void WaylandBackend::loopStarted()
     if (!checkRequiredBaseInterfaces() || !checkRequiredInterfaces())
     {
         g_logger.fatal("%s - Required wayland interfaces missing", __func__);
+        m_renderingFailed = true;
         return;
     }
-
-    if (!createSurface())
-    {
-        g_logger.fatal("%s - Cannot create surface", __func__);
-        return;
-    }
-
-    if (!initRendering())
-    {
-        g_logger.fatal("%s - Cannot init rendering", __func__);
-        return;
-    }
-
-    m_surface->addFrameListener(this);
 
     m_frameReady = true;
     m_renderRequested = true;
 
+    if (deferRendering())
+    {
+        g_logger.info("%s - Rendering deferred until content is visible", __func__);
+    }
+    else if (!initializeRendering())
+    {
+        return;
+    }
+
     redraw(0);
+}
+
+bool WaylandBackend::initializeRendering()
+{
+    if (!createSurface() || !initRendering())
+    {
+        g_logger.fatal("%s - Cannot initialize rendering; backend restart required", __func__);
+        shutdownRendering();
+        m_xdgToplevel.reset();
+        m_xdgSurface.reset();
+        m_shellSurface.reset();
+        m_surface.reset();
+        m_renderingFailed = true;
+        return false;
+    }
+
+    m_surface->addFrameListener(this);
+
+    m_renderingInitialized = true;
+    g_logger.info("%s - Rendering initialized; resources retained until shutdown", __func__);
+    return true;
 }
 
 void WaylandBackend::loopFinished()
 {
     g_logger.trace("%s", __func__);
+    shutdownRendering();
 }
 
 void WaylandBackend::loopWakeupReceived()
@@ -776,6 +794,34 @@ void WaylandBackend::redraw(uint32_t /*time*/)
     g_logger.debug("%s - Redrawing", __func__);
 
     m_forceRender.store(false, std::memory_order_relaxed);
+
+    if (m_renderingFailed)
+    {
+        m_renderRequested = false;
+        return;
+    }
+
+    if (!m_renderingInitialized)
+    {
+        // Consume this request before sampling visibility so concurrent requests survive.
+        m_renderRequested.exchange(false);
+        const auto size = calculateContentSize();
+        if (size.m_w <= 0 || size.m_h <= 0)
+        {
+            g_logger.trace("%s - No visible content (%dx%d); surface and rendering initialization skipped",
+                    __func__, size.m_w, size.m_h);
+            return;
+        }
+
+        g_logger.info("%s - First visible content (%dx%d); initializing rendering",
+                __func__, size.m_w, size.m_h);
+        if (!initializeRendering())
+        {
+            return;
+        }
+        m_renderRequested = true;
+    }
+
     redraw(m_surface);
 }
 

@@ -86,29 +86,69 @@ WaylandBackendEgl::WaylandBackendEgl(BackendListener* listener) :
 
 WaylandBackendEgl::~WaylandBackendEgl()
 {
-    if (!eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT))
+    shutdownRendering();
+}
+
+void WaylandBackendEgl::shutdownRendering()
+{
+    if (!m_eglDisplay)
     {
-        g_logger.error("%s - cannot set current EGL context (%d)", __func__,
-                eglGetError());
+        return;
     }
-    if(m_eglContext)
+
+    g_logger.info("%s - Releasing EGL resources", __func__);
+
+    if (m_program || m_textures[0] || m_textures[1])
     {
-        eglDestroyContext(m_eglDisplay, m_eglContext);
+        if (eglMakeCurrent(m_eglDisplay, m_eglSurface, m_eglSurface, m_eglContext))
+        {
+            m_textures = {};
+            m_program.reset();
+        }
+        else
+        {
+            g_logger.error("%s - cannot make context current for GL cleanup (%d)",
+                    __func__, eglGetError());
+            // Context destruction releases these objects without GL calls on an invalid context.
+            for (auto& texture : m_textures)
+            {
+                texture.release();
+            }
+            m_program.release();
+        }
     }
-    if(m_eglSurface)
+
+    if (m_eglInitialized &&
+            !eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT))
     {
-        eglDestroySurface(m_eglDisplay, m_eglSurface);
+        g_logger.error("%s - cannot release current EGL context (%d)", __func__, eglGetError());
     }
-    if(m_eglWindow)
+    if (m_eglSurface && !eglDestroySurface(m_eglDisplay, m_eglSurface))
+    {
+        g_logger.error("%s - cannot destroy EGL surface (%d)", __func__, eglGetError());
+    }
+    if (m_eglWindow)
     {
         wl_egl_window_destroy(m_eglWindow);
     }
-    if(eglTerminate(m_eglDisplay) == EGL_FALSE)
+    if (m_eglContext && !eglDestroyContext(m_eglDisplay, m_eglContext))
     {
-         g_logger.error("%s - Failed to terminate egl display (%d)", __func__,
+        g_logger.error("%s - cannot destroy EGL context (%d)", __func__, eglGetError());
+    }
+    if (m_eglInitialized && !eglTerminate(m_eglDisplay))
+    {
+        g_logger.error("%s - Failed to terminate egl display (%d)", __func__,
                 eglGetError());
     }
-    eglReleaseThread();
+    if (m_eglInitialized && !eglReleaseThread())
+    {
+        g_logger.error("%s - cannot release EGL thread (%d)", __func__, eglGetError());
+    }
+    m_eglSurface = EGL_NO_SURFACE;
+    m_eglWindow = nullptr;
+    m_eglContext = EGL_NO_CONTEXT;
+    m_eglDisplay = EGL_NO_DISPLAY;
+    m_eglInitialized = false;
 }
 
 bool WaylandBackendEgl::initRendering()
@@ -168,6 +208,8 @@ bool WaylandBackendEgl::initRendering()
         return false;
     }
 
+    m_eglInitialized = true;
+
     g_logger.trace("%s - EGL initialized %d.%d", __func__, eglVersionMajor,
             eglVersionMinor);
 
@@ -179,7 +221,7 @@ bool WaylandBackendEgl::initRendering()
     }
 
     if (!eglChooseConfig(m_eglDisplay, configAttributes, &config, 1,
-            &numConfig))
+            &numConfig) || numConfig == 0)
     {
         g_logger.error("%s - cannot choose EGL config (%d)", __func__,
                 eglGetError());
@@ -465,7 +507,6 @@ void WaylandBackendEgl::drawTexturedObject(const Size& contentSize)
 
 void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
 {
-    static bool visible = false;
     bool visibleChanged = false;
 
     g_logger.trace("%s", __func__);
@@ -491,7 +532,14 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
 
     auto contentSize = calculateContentSize();
 
-    const bool anythingToDraw = (contentSize.m_w > 0) || (contentSize.m_h > 0);
+    const bool anythingToDraw = (contentSize.m_w > 0) && (contentSize.m_h > 0);
+
+    if (!anythingToDraw && !m_contentVisible)
+    {
+        g_logger.trace("%s - No visible content; skipping GL clear, draw and EGL swap; resources retained",
+                __func__);
+        return;
+    }
 
     // clear with transparent color
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -500,9 +548,9 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
     // render windows
     if (anythingToDraw)
     {
-        if(!visible)
+        if(!m_contentVisible)
         {
-            visible = true;
+            m_contentVisible = true;
             visibleChanged = true;
         }
 
@@ -532,27 +580,33 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
     }
     else
     {
-        if(visible)
+        if(m_contentVisible)
         {
-            visible = false;
+            m_contentVisible = false;
             visibleChanged = true;
         }
     }
 
-#if defined(WESTEROS)
    if(visibleChanged)
    {
-        g_logger.info("%s - %s", __func__, visible ? "Something to draw, make surface visible" : "Nothing to draw");
-        if(visible && getSimpleShell())
+        g_logger.info("%s - %s", __func__, m_contentVisible ?
+                "Visible content; rendering with retained EGL resources" :
+                "No visible content; clearing last frame once; EGL resources retained");
+#if defined(WESTEROS)
+        g_logger.info("%s - %s", __func__, m_contentVisible ? "Something to draw, make surface visible" : "Nothing to draw");
+        if(m_contentVisible && getSimpleShell())
         {
             wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId, 1);
         }
-   }
 #endif
+   }
 
     m_frameReady = false;
 
-    eglSwapBuffers(m_eglDisplay, m_eglSurface);
+    if (!eglSwapBuffers(m_eglDisplay, m_eglSurface))
+    {
+        g_logger.error("%s - EGL swap failed (%d)", __func__, eglGetError());
+    }
 }
 
 void WaylandBackendEgl::interfaceAdded(waylandcpp::Registry1::Ptr registry,

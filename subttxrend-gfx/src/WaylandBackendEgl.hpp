@@ -38,6 +38,10 @@ class PixelArgb8888;
 
 /**
  * Rendering backend using wayland-egl.
+ *
+ * The native surface and EGL resources are created on first visible content and
+ * retained across mute/unmute. Hiding clears the last frame once; subsequent
+ * empty redraws submit no GL work. Resources are released on loop shutdown.
  */
 class WaylandBackendEgl : public WaylandBackend
 {
@@ -56,6 +60,10 @@ public:
     virtual ~WaylandBackendEgl();
 
 protected:
+    bool deferRendering() const override { return true; }
+
+    void shutdownRendering() override;
+
     /** @copydoc WaylandBackend::initRendering */
     virtual bool initRendering() override;
 
@@ -150,6 +158,9 @@ private:
 
     /** EGL display object. */
     EGLDisplay m_eglDisplay;
+
+    bool m_eglInitialized = false;
+    bool m_contentVisible = false;
 
     /** Wayland GL window. */
     wl_egl_window* m_eglWindow;

@@ -54,10 +54,12 @@ public:
     void setCurrentWindow(uint8_t id) override;
     void clearWindows(WindowsMap wm) override;
     void defineWindow(const WindowDefinition &wd) override;
+    void updateWindowDefinition(const WindowDefinition &wd) override;
     void deleteWindows(WindowsMap wm) override;
     void displayWindows(WindowsMap wm) override;
     void toggleWindows(WindowsMap wm) override;
     void setWindowAttributes(WindowAttributes attr) override;
+    void updateWindowAttributes(const WindowAttributes &attr) override;
     void report(std::string str) override;
     void hideWindows(WindowsMap wm) override;
     void reset() override;
@@ -87,6 +89,7 @@ protected:
     Window* createWindow(std::shared_ptr<Gfx> gfx, WindowDefinition windef);
 
 private:
+    void applyWindowDefinition(const WindowDefinition &wd);
     std::unique_ptr<Window>& find(int id);
     void executeOnWindows(const WindowsMap& wm, std::function<void (Window*)>);
     void executeOnAllWindows(std::function<void (Window*)> method);

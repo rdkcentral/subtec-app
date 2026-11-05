@@ -141,6 +141,11 @@ public:
         m_currentMediatime = mediatimeMs;
     }
 
+    void setCustomAttributes(const WebVTTAttributes &attributes) override
+    {
+        m_lastAttributes.update(attributes);
+    }
+
     // Test helpers
     bool isInitialized() const { return m_initialized; }
     bool isStarted() const { return m_started; }

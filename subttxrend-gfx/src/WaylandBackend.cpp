@@ -484,6 +484,11 @@ void WaylandBackend::surfaceCreated(waylandcpp::SimpleShellPtr /*simpleShell*/,
 {
     g_logger.info("%s - simple_shell surfaceCreated - name:%s id:%u", __func__, name, surfaceId);
 
+    if (m_simpleShell && (m_currentSurfaceId == surfaceId))
+    {
+        g_logger.info("%s - Hiding surface with id %u on creation", __func__, surfaceId);
+        wl_simple_shell_set_visible(m_simpleShell->getNativeObject(), surfaceId, 0);
+    }
 }
 
 void WaylandBackend::surfaceDestroyed(waylandcpp::SimpleShellPtr /*simpleShell*/,

@@ -607,6 +607,17 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
     {
         g_logger.error("%s - EGL swap failed (%d)", __func__, eglGetError());
     }
+
+#if defined(WESTEROS)
+    if (visibleChanged && !m_contentVisible && getSimpleShell())
+    {
+        g_logger.info("%s - No visible content; hiding surface after clear; EGL resources retained",
+                __func__);
+        wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId, 0);
+        // Hidden surfaces may not receive a frame callback; allow the next unmute to render.
+        m_frameReady = true;
+    }
+#endif
 }
 
 void WaylandBackendEgl::interfaceAdded(waylandcpp::Registry1::Ptr registry,

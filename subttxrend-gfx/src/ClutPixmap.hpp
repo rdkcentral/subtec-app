@@ -147,13 +147,8 @@ public:
             auto value = *m_pointer;
             if (value < m_clutSize)
             {
-                PixelArgb8888 ret = PixelArgb8888(m_clut[value]);
-                // apply per-pixel alpha-premultiplication
-                ret.m_r = uint8_t(uint32_t(ret.m_r * ret.m_a) / 255);
-                ret.m_g = uint8_t(uint32_t(ret.m_g * ret.m_a) / 255);
-                ret.m_b = uint8_t(uint32_t(ret.m_b * ret.m_a) / 255);
-
-                return ret;
+                // straight (non-premultiplied) alpha, as expected by Blitter and the backends
+                return PixelArgb8888(m_clut[value]);
             }
 
             return PixelArgb8888(TRANSPARENT_BLACK);

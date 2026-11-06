@@ -262,10 +262,6 @@ void StyleSet::parseAttribute(const std::string& name,
     if (name == "backgroundColor") {
         auto parseResult = parseColor(value);
         if (parseResult.result) {
-            if (gfx::ColorArgb::TRANSPARENT == parseResult.color)
-            {
-                parseResult.color = gfx::ColorArgb::BLACK;
-            }
             m_backgroundColor = parseResult.color;
         }
     } else if (name == "color") {

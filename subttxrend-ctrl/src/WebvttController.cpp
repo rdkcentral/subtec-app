@@ -174,6 +174,12 @@ void WebvttController::processSetCCAttributesPacket(const PacketSetCCAttributes&
     m_webvttEngine->setAttributes(attributes);
 }
 
+void WebvttController::setCustomAttributes(const WebVTTAttributes& attributes)
+{
+    m_logger.osinfo(__LOGGER_FUNC__);
+    m_webvttEngine->setCustomAttributes(attributes);
+}
+
 } // namespace ctrl
 } // namespace subttxrend
 

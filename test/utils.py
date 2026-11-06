@@ -92,7 +92,7 @@ def start_subtec(script_path, subtec_log_path = "subtec_console_common.log"):
     """
     Start subtec app using build.sh script
 
-    This function executes build.sh script with "full" argument,
+    This function executes build.sh script with "run" argument,
     redirecting both standard output and standard error to the specified logfile.
     'stdbuf -o0' is used to ensure that the output is unbuffered. This 
     subprocess runs in the background.
@@ -112,13 +112,13 @@ def start_subtec(script_path, subtec_log_path = "subtec_console_common.log"):
     with open(subtec_log_path, 'w+') as logfile:
         os.chdir(script_path)
 
-        run_command = ['stdbuf', '-o0', './build.sh', 'full']
+        run_command = ['stdbuf', '-o0', './build.sh', 'run']
         try:
             result = subprocess.Popen(run_command, stdout=logfile, stderr=subprocess.STDOUT)
             debug_log("Start build.sh and subtec app")
             return True
         except subprocess.CalledProcessError as e:
-            debug_log("Execution failed for build.sh full command")
+            debug_log("Execution failed for build.sh run command")
             debug_log(e.stderr)
             debug_log(e.stdout)
             return False
@@ -216,7 +216,6 @@ def check_and_restart_subtec():
         # wait to be sure subtec has started
         if not wait_for_log_string("../../test/subtec_console_common.log", "subttxrend-app started", 850, 1):
             raise CriticalSubtecError("Subtec not started, check !")
-        validate_unittests_results()
 
 def validate_unittests_results():
     """
@@ -294,11 +293,12 @@ def validate_unittests_results():
         '32/32 Test #32: Coverage_Test ....................   Passed',
         '100% tests passed, 0 tests failed out of',
         'tests-subttxrend-ttml',
-        '1/5 Test #1: Elements_Test ....................   Passed',
-        '2/5 Test #2: TtmlTiming_Test ..................   Passed',
-        '3/5 Test #3: StyleSet_Test ....................   Passed',
-        '4/5 Test #4: DocumentInstance_Test ............   Passed',
-        '5/5 Test #5: AttributeHandlers_test ...........   Passed',
+        '1/6 Test #1: Elements_Test ....................   Passed',
+        '2/6 Test #2: TtmlTiming_Test ..................   Passed',
+        '3/6 Test #3: StyleSet_Test ....................   Passed',
+        '4/6 Test #4: DocumentInstance_Test ............   Passed',
+        '5/6 Test #5: AttributeHandlers_test ...........   Passed',
+        '6/6 Test #6: ValueConverter_test ..............   Passed',
         '100% tests passed, 0 tests failed out of',
         'tests-subttxrend-webvtt',
         '1/6 Test #1: WebVTTCue_test ...................   Passed',

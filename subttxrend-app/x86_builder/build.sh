@@ -45,7 +45,8 @@ function build_project_cmake {
         -DCMAKE_BUILD_TYPE=Debug \
         -DCMAKE_FIND_ROOT_PATH=$3 \
         -DCMAKE_INSTALL_NAME_DIR=$3/usr/local/lib \
-        -DCMAKE_CXX_FLAGS="-DPC_BUILD" \
+        -DCMAKE_CXX_FLAGS="$PROJECT_CXX_FLAGS" \
+        "${PROJECT_COVERAGE_CMAKE_OPTIONS[@]}" \
         $4 \
         $1
     make -k $MAKE_JOBS_OPT VERBOSE=1
@@ -152,6 +153,7 @@ function build_tests {
           -DCMAKE_MODULE_PATH=$3/usr/local/share/cmake/Modules \
           -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_FIND_ROOT_PATH=$3 \
+          "${TEST_COVERAGE_CMAKE_OPTIONS[@]}" \
           $4 \
           $1
     make $PARALLEL_JOBS_OPT
@@ -168,7 +170,7 @@ function build_tests {
 function run_tests {
     pushd $1
 
-    LD_LIBRARY_PATH=$INSTALL_DIR/usr/local/lib ctest --output-on-failure
+    LD_LIBRARY_PATH=$INSTALL_DIR/usr/local/lib ctest --output-on-failure --output-junit junit.xml
 
     popd
 }
@@ -182,6 +184,38 @@ function run_tests_coverage {
     firefox coverage/index.html
 
     popd
+}
+
+function generate_coverage_report {
+    local coverage_dir="$BASE_DIR/build/coverage"
+    local baseline_info="$coverage_dir/coverage-baseline.info"
+    local test_info="$coverage_dir/coverage-tests.info"
+    local combined_info="$coverage_dir/coverage-combined.info"
+    local final_info="$coverage_dir/coverage.info"
+
+    mkdir -p "$coverage_dir"
+
+    lcov --capture --initial --directory "$BASE_DIR/build" --output-file "$baseline_info"
+    lcov --capture --directory "$BASE_DIR/build" --output-file "$test_info"
+    lcov --add-tracefile "$baseline_info" \
+        --add-tracefile "$test_info" \
+        --output-file "$combined_info"
+    lcov --remove "$combined_info" \
+         '/usr/*' \
+         '*/test/*' \
+            "$BASE_DIR/build/*" \
+            "$BASE_DIR/src/rdklogger/*" \
+            --output-file "$final_info"
+
+    lcov --summary "$final_info" > "$coverage_dir/coverage-summary.txt"
+    cat "$coverage_dir/coverage-summary.txt"
+    genhtml "$final_info" \
+        --title "subtec-app L1 coverage" \
+        --output-directory "$coverage_dir/html"
+
+    rm -f "$baseline_info" "$test_info" "$combined_info"
+
+    echo "Coverage report: $coverage_dir/html/index.html"
 }
 
 function build_components {
@@ -226,6 +260,8 @@ if [ "$#" -lt 1 ] ; then
     echo "run:           run the application"
     echo "fast:          build with -j8 (jobs) option"
     echo "dotest:        build, build tests, run tests"
+    echo "coverage:      clean, instrument, run tests, create aggregate LCOV report"
+    echo "coveragereport: create aggregate LCOV report from existing coverage data"
     echo "buildunits $1: build specified unit"
     echo "testunits $1:  build, build tests, run tests for unit"
     echo "doc:           build, build docs, show docs warnings"
@@ -252,6 +288,25 @@ echo "---------------------------------------------"
 echo ""
 
 export PARALLEL_JOBS_OPT=-j8
+
+PROJECT_CXX_FLAGS="-DPC_BUILD"
+PROJECT_COVERAGE_CMAKE_OPTIONS=()
+TEST_COVERAGE_CMAKE_OPTIONS=()
+if [ "${SUBTEC_COVERAGE:-0}" == "1" ] ; then
+    COVERAGE_COMPILE_FLAGS="-g -O0 --coverage -fprofile-arcs -ftest-coverage"
+    PROJECT_CXX_FLAGS="$PROJECT_CXX_FLAGS $COVERAGE_COMPILE_FLAGS"
+    PROJECT_COVERAGE_CMAKE_OPTIONS=(
+        "-DCMAKE_C_FLAGS=$COVERAGE_COMPILE_FLAGS"
+        "-DCMAKE_EXE_LINKER_FLAGS=--coverage"
+        "-DCMAKE_SHARED_LINKER_FLAGS=--coverage"
+    )
+    TEST_COVERAGE_CMAKE_OPTIONS=(
+        "-DCMAKE_C_FLAGS=$COVERAGE_COMPILE_FLAGS"
+        "-DCMAKE_CXX_FLAGS=$COVERAGE_COMPILE_FLAGS"
+        "-DCMAKE_EXE_LINKER_FLAGS=--coverage"
+        "-DCMAKE_SHARED_LINKER_FLAGS=--coverage"
+    )
+fi
 
 if [ "$COMMAND" == "fast" ] ; then
 export MAKE_JOBS_OPT=$PARALLEL_JOBS_OPT
@@ -378,11 +433,30 @@ run_tests       build/tests-subttxrend-ttxt
 run_tests       build/tests-subttxrend-scte
 run_tests       build/tests-subttxrend-testapps
 
+elif [ "$COMMAND" == "coverage" ] ; then
+
+command -v lcov > /dev/null || { echo "lcov is required for coverage"; exit 1; }
+command -v genhtml > /dev/null || { echo "genhtml is required for coverage"; exit 1; }
+
+export SUBTEC_COVERAGE=1
+$0 clean
+$0 build
+$0 dotest
+
+generate_coverage_report
+
 elif [ "$COMMAND" == "testcoverage" ] ; then
 
 $0 $1 buildtest
 
 run_tests_coverage  build/tests-dvbsubdecoder
+
+elif [ "$COMMAND" == "coveragereport" ] ; then
+
+command -v lcov > /dev/null || { echo "lcov is required for coverage"; exit 1; }
+command -v genhtml > /dev/null || { echo "genhtml is required for coverage"; exit 1; }
+
+generate_coverage_report
 
 elif [ "$COMMAND" == "run" ] ; then
 

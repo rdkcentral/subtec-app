@@ -226,9 +226,12 @@ options = ['-s', f"--junitxml={xml_results_file}"]
 options.extend(other_args)
 # Add test suites to the options
 options.extend(test_suite_dirs_to_run)
-ret_code = pytest.main(options)
+try:
+    ret_code = pytest.main(options)
 
-test_data = parse_junit_xml(xml_results_file)
-print_table(test_data)
+    test_data = parse_junit_xml(xml_results_file)
+    print_table(test_data)
+finally:
+    cleanup_subtec()
 
-cleanup_subtec()
+sys.exit(ret_code)

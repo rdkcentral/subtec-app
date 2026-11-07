@@ -118,7 +118,11 @@ void SaxParser::onStartElementNs(void * ctx,
 {
     auto thiz = cast(ctx);
 
-    std::vector<SaxCallbacks::Attribute> attributesVector{static_cast<std::size_t>(nb_attributes)};
+    std::vector<SaxCallbacks::Attribute> attributesVector;
+    if (nb_attributes > 0)
+    {
+        attributesVector.reserve(static_cast<std::size_t>(nb_attributes));
+    }
     unsigned int index = 0;
     for (int indexAttribute = 0; indexAttribute < nb_attributes; ++indexAttribute, index += 5)
     {

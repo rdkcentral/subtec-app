@@ -133,6 +133,8 @@ void CommandParser::processBlock(const ServiceBlock &block)
                 }
                 else
                 {
+                    logger.trace("%s: no handler for buffered command 0x%02x; discarding %zu bytes",
+                            __func__, m_serviceBlock[0], data_len);
                     m_cmdLengthExceeds = false;
                     m_serviceBlockSize = 0;
                     consumed = data_len;
@@ -148,6 +150,13 @@ void CommandParser::processBlock(const ServiceBlock &block)
         else
         {
             m_serviceBlockSize = 0;
+        }
+
+        if (consumed == 0)
+        {
+            logger.trace("%s: command 0x%02x at offset %zu consumed no data; remaining=%zu",
+                    __func__, data[i], i, data_len - i);
+            break;
         }
 
         i += consumed;
@@ -190,6 +199,10 @@ CommandParser::RstOrDlc CommandParser::scanForRSTDLC(const ServiceBlock &block)
         if (data[i] == C0_EXT1)
         {
             i += 2;
+            if (i >= data.size())
+            {
+                break;
+            }
         }
         if (data[i] == C1_RST)
         {
@@ -287,12 +300,18 @@ size_t CommandParser::handleC0(const uint8_t *data, size_t data_length)
     }
     else if (c0 >= 0x18 && c0 <= 0x1F)
     {
+        len = 3;
+        if (len > data_length)
+        {
+            logger.trace("%s: incomplete C0 command 0x%02x; required=%zu available=%zu",
+                    __func__, data[0], len, data_length);
+            return 0;
+        }
+
         if (c0 == C0_P16)
         {
             handleC0P16(data + 1);
         }
-
-        len = 3;
     }
 
     if (len > data_length)
@@ -666,8 +685,14 @@ size_t CommandParser::handleG2G3(const uint8_t *data)
     return 1;
 }
 
-size_t CommandParser::handleExtChar(const uint8_t *data, size_t)
+size_t CommandParser::handleExtChar(const uint8_t *data, size_t data_length)
 {
+    if (data_length < 2)
+    {
+        logger.trace("%s: incomplete EXT1 command; required=2 available=%zu",
+                __func__, data_length);
+        return 0;
+    }
     uint8_t code = data[1];
     size_t used = 0;
 

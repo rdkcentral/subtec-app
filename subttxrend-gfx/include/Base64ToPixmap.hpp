@@ -33,7 +33,11 @@ namespace gfx
 using PngCallback = std::function<void(const std::uint8_t* buffer, std::size_t bufferSize)>;
 
 /**
- * Decodes a base64 encoded PNG image (RGBA or palette with transparency).
+ * Decodes a base64 encoded PNG image.
+ *
+ * All PNG colour types, bit depths and interlacing are supported. Images
+ * without transparency information decode as fully opaque, and 16-bit
+ * samples are reduced to 8 bits.
  *
  * The result is 32-bit ARGB in native (little endian) byte order, i.e. bytes
  * B, G, R, A in memory, as used by Bitmap.

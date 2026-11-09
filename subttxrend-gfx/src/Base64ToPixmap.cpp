@@ -151,38 +151,63 @@ std::unique_ptr<gfx::Bitmap> read_png(unsigned char *pngdata, const size_t pngda
         return ret; // add error handling and cleanup
     }
 
-    if (colorType == PNG_COLOR_TYPE_PALETTE) {
-        // convert to rgba
+    // normalise every supported PNG format to 8-bit RGBA
+    if (bitDepth == 16)
+    {
+#ifdef PNG_READ_SCALE_16_TO_8_SUPPORTED
+        png_set_scale_16(png_ptr);
+#else
+        png_set_strip_16(png_ptr);
+#endif
+    }
+    if (colorType == PNG_COLOR_TYPE_PALETTE)
+    {
         png_set_palette_to_rgb(png_ptr);
-        if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
-        {
-            png_set_tRNS_to_alpha(png_ptr);
-        }
-        else
-        {
-            g_logger.warning("no tRNS in palette image");
-            return ret;
-        }
-
-        png_read_update_info(png_ptr, info_ptr);
+    }
+    if ((colorType == PNG_COLOR_TYPE_GRAY) && (bitDepth < 8))
+    {
+        png_set_expand_gray_1_2_4_to_8(png_ptr);
+    }
+    if ((colorType == PNG_COLOR_TYPE_GRAY) || (colorType == PNG_COLOR_TYPE_GRAY_ALPHA))
+    {
+        png_set_gray_to_rgb(png_ptr);
+    }
+    if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
+    {
+        png_set_tRNS_to_alpha(png_ptr);
+    }
+    else if ((colorType & PNG_COLOR_MASK_ALPHA) == 0)
+    {
+        // no transparency information - fully opaque
+        png_set_filler(png_ptr, 0xFF, PNG_FILLER_AFTER);
     }
 
-    if (colorType == PNG_COLOR_TYPE_PALETTE || colorType == PNG_COLOR_TYPE_RGB_ALPHA) {
-        bytesPerRow = png_get_rowbytes(png_ptr, info_ptr);
-        ret = std::make_unique<gfx::Bitmap>(width, height, bytesPerRow);
-        // setjmp must be called each time after allocating memory and before any libpng function that can return an error, e.g. here
-        // if setjmp was not called and error handler called by png_read_row - we'd have memleaks from gfx::Bitmap allocation
-        if (setjmp(jmpbuf))
-        {
-            return std::unique_ptr<gfx::Bitmap>();
-        }
-        // read single row at the time
+    const int passes = png_set_interlace_handling(png_ptr);
+
+    png_read_update_info(png_ptr, info_ptr);
+
+    bytesPerRow = png_get_rowbytes(png_ptr, info_ptr);
+
+    if ((png_get_bit_depth(png_ptr, info_ptr) != 8) || (bytesPerRow != width * 4))
+    {
+        g_logger.warning("unsupported PNG format: color type %d, bit depth %d", colorType, bitDepth);
+        return ret;
+    }
+
+    ret = std::make_unique<gfx::Bitmap>(width, height, bytesPerRow);
+    // setjmp must be called each time after allocating memory and before any libpng function that can return an error, e.g. here
+    // if setjmp was not called and error handler called by png_read_row - we'd have memleaks from gfx::Bitmap allocation
+    if (setjmp(jmpbuf))
+    {
+        return std::unique_ptr<gfx::Bitmap>();
+    }
+    // read single row at the time; interlaced images need every row once per pass
+    for (int pass = 0; pass < passes; ++pass)
+    {
         for (rowIdx = 0; rowIdx < height; ++rowIdx)
         {
             png_read_row(png_ptr, static_cast<png_bytep>(&ret->m_buffer[rowIdx * bytesPerRow]), nullptr);
         }
-    } else {
-        g_logger.warning("Invalid PNG ColorType enum value given.");
     }
 
     return ret;

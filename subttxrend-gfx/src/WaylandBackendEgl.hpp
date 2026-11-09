@@ -21,6 +21,8 @@
 #ifndef SUBTTXREND_GFX_WAYLAND_BACKEND_EGL_HPP_
 #define SUBTTXREND_GFX_WAYLAND_BACKEND_EGL_HPP_
 
+#include <cstdint>
+
 #include "WaylandBackend.hpp"
 #include "GLcpp.hpp"
 #include "Types.hpp"
@@ -109,8 +111,25 @@ private:
      *
      * @param contentSize
      *      Content size.
+     * @param drawWindows
+     *      True if window contents shall be drawn.
+     * @param drawImage
+     *      True if the background image shall be drawn below the windows.
      */
-    void drawTexturedObject(const Size& contentSize);
+    void drawTexturedObject(const Size& contentSize,
+                            bool drawWindows,
+                            bool drawImage);
+
+    /**
+     * Uploads the background image to its texture if it changed.
+     *
+     * @param background
+     *      Background image state.
+     *
+     * @return
+     *      True if a background image is available for drawing.
+     */
+    bool updateImageTexture(const BackgroundImage& background);
 
     /**
      * Checks if OpenGL error occurred.
@@ -166,6 +185,15 @@ private:
     /** Current textures sizes. */
     std::array<Size, 2> m_textureSizes;
 
+    /** GL texture with the background image. */
+    glcpp::TexturePtr m_imageTexture;
+
+    /** Generation of the background image last uploaded (or attempted). */
+    std::uint64_t m_imageGeneration{0};
+
+    /** True if the background image texture holds a valid image. */
+    bool m_imageValid{false};
+
     /** GL shader program. */
     glcpp::ProgramPtr m_program;
 
@@ -174,6 +202,15 @@ private:
 
     /** GL program handle - Texture with background handle. */
     GLint m_textureBgUniformHandle;
+
+    /** GL program handle - Texture with background image handle. */
+    GLint m_textureImageUniformHandle;
+
+    /** GL program handle - Windows enabled flag. */
+    GLint m_windowsEnabledUniformHandle;
+
+    /** GL program handle - Background image enabled flag. */
+    GLint m_imageEnabledUniformHandle;
 
     /** GL program handle - Position. */
     GLint m_positionAttribHandle;

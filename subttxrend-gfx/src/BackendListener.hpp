@@ -22,6 +22,7 @@
 #define SUBTTXREND_GFX_BACKEND_LISTENER_HPP_
 
 #include <cstdint>
+#include <memory>
 
 #include "KeyEvent.hpp"
 #include "Types.hpp"
@@ -54,6 +55,18 @@ public:
 };
 
 /**
+ * Background image state.
+ */
+struct BackgroundImage
+{
+    /** Image to draw below all windows, nullptr if none. */
+    std::shared_ptr<const Bitmap> m_image;
+
+    /** Incremented every time the image is set, so backends can detect changes. */
+    std::uint64_t m_generation{0};
+};
+
+/**
  * Listener for backend events.
  */
 class BackendListener
@@ -79,6 +92,14 @@ public:
      *      Interface to be called during enumerations.
      */
     virtual void enumerateVisibleWindows(BackendWindowEnumerator& enumerator) = 0;
+
+    /**
+     * Returns the background image state.
+     *
+     * @return
+     *      Background image and its generation.
+     */
+    virtual BackgroundImage getBackgroundImage() = 0;
 
     /**
      * Notifies that focus was gained.

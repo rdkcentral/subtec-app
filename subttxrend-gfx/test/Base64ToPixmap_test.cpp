@@ -24,6 +24,7 @@
 #include "Base64ToPixmap.hpp"
 
 using subttxrend::gfx::base64toPixmap;
+using subttxrend::gfx::base64toPixmapKeepBackground;
 using subttxrend::gfx::Bitmap;
 using subttxrend::gfx::PngCallback;
 
@@ -48,8 +49,8 @@ class Base64ToPixmapTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testPngWithExcessiveWidth);
     CPPUNIT_TEST(testPngWithExcessiveHeight);
     CPPUNIT_TEST(testPngPaletteWithTransparency);
-    CPPUNIT_TEST(testPngPaletteWithoutTransparency);
-    CPPUNIT_TEST(testPngUnsupportedColorType);
+    CPPUNIT_TEST(testPngGrayAlphaFormat);
+    CPPUNIT_TEST(testPngInvalidBitDepthZeroRejected);
     CPPUNIT_TEST(testPngInvalidBitDepthDoesNotCrash);
     CPPUNIT_TEST(testPngTruncatedImageData);
     CPPUNIT_TEST(testNoBrokenBackgroundAllTransparent);
@@ -103,6 +104,20 @@ class Base64ToPixmapTest : public CppUnit::TestFixture
     CPPUNIT_TEST(testCompleteWorkflowPaletteToRgba);
     CPPUNIT_TEST(testCompleteWorkflowWithAllFeatures);
     CPPUNIT_TEST(testRobustnessMultipleErrorConditions);
+    CPPUNIT_TEST(testKeepBackgroundUniformCornersPreserved);
+    CPPUNIT_TEST(testKeepBackgroundOpaqueUniformCornersPreserved);
+    CPPUNIT_TEST(testKeepBackgroundByteOrder);
+    CPPUNIT_TEST(testKeepBackgroundWithPremult);
+    CPPUNIT_TEST(testKeepBackgroundPaletteFormat);
+    CPPUNIT_TEST(testKeepBackgroundInvalidInput);
+    CPPUNIT_TEST(testKeepBackgroundCallbackInvoked);
+    CPPUNIT_TEST(testPngRgbWithoutAlpha);
+    CPPUNIT_TEST(testPngGrayscale8Bit);
+    CPPUNIT_TEST(testPngGrayscale1Bit);
+    CPPUNIT_TEST(testPngGrayscaleWithTrns);
+    CPPUNIT_TEST(testPng16BitRgba);
+    CPPUNIT_TEST(testPngPaletteWithoutTrnsIsOpaque);
+    CPPUNIT_TEST(testPngInterlaced);
 
     CPPUNIT_TEST_SUITE_END();
 
@@ -433,23 +448,23 @@ public:
         }
     }
 
-    void testPngPaletteWithoutTransparency()
+    void testPngGrayAlphaFormat()
     {
-        // Palette PNG without tRNS chunk
-        std::string paletteNoTrans = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-        std::unique_ptr<Bitmap> result = base64toPixmap(paletteNoTrans, false);
+        // 1x1 8-bit grayscale + alpha PNG, fully transparent black
+        std::string grayAlpha = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        std::unique_ptr<Bitmap> result = base64toPixmap(grayAlpha, false);
 
-        CPPUNIT_ASSERT_MESSAGE("Palette PNG without transparency should return nullptr (as per production code)",
-                              result.get() == nullptr);
+        CPPUNIT_ASSERT_MESSAGE("Grayscale + alpha PNG should decode", result.get() != nullptr);
+        assertPixel(*result, 0, 0, 0, 0, 0);
     }
 
-    void testPngUnsupportedColorType()
+    void testPngInvalidBitDepthZeroRejected()
     {
-        // PNG with grayscale color type (unsupported in production code)
-        std::string grayscalePng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAAAAAACKQQKiAAAAC0lEQVR42mNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=";
-        std::unique_ptr<Bitmap> result = base64toPixmap(grayscalePng, false);
+        // grayscale PNG with an invalid bit depth of 0
+        std::string invalidGrayscalePng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAAAAAACKQQKiAAAAC0lEQVR42mNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=";
+        std::unique_ptr<Bitmap> result = base64toPixmap(invalidGrayscalePng, false);
 
-        CPPUNIT_ASSERT_MESSAGE("Unsupported color type should return nullptr", result.get() == nullptr);
+        CPPUNIT_ASSERT_MESSAGE("Invalid bit depth should return nullptr", result.get() == nullptr);
     }
 
     void testPngInvalidBitDepthDoesNotCrash()
@@ -1380,6 +1395,206 @@ public:
         {
             CPPUNIT_ASSERT_MESSAGE("Valid result should have correct dimensions",
                                   validResult->m_width == 1 && validResult->m_height == 1);
+        }
+    }
+
+    void assertAllPixels(const Bitmap& bitmap,
+                         uint8_t blue,
+                         uint8_t green,
+                         uint8_t red,
+                         uint8_t alpha)
+    {
+        for (int32_t y = 0; y < bitmap.m_height; ++y)
+        {
+            for (int32_t x = 0; x < bitmap.m_width; ++x)
+            {
+                assertPixel(bitmap, y * bitmap.m_stride + x * 4, blue, green, red, alpha);
+            }
+        }
+    }
+
+    void testKeepBackgroundUniformCornersPreserved()
+    {
+        // base64toPixmap() would make this whole image transparent
+        std::string uniformCorners = create2x2PngUniformCorners(0, 0, 255, 128);
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(uniformCorners, false);
+
+        CPPUNIT_ASSERT_MESSAGE("Decoding should succeed", result.get() != nullptr);
+        CPPUNIT_ASSERT_EQUAL(2, static_cast<int>(result->m_width));
+        CPPUNIT_ASSERT_EQUAL(2, static_cast<int>(result->m_height));
+        assertAllPixels(*result, 255, 0, 0, 128);
+    }
+
+    void testKeepBackgroundOpaqueUniformCornersPreserved()
+    {
+        std::string uniformCorners = create2x2PngUniformCorners(100, 150, 200, 255);
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(uniformCorners, false);
+
+        CPPUNIT_ASSERT_MESSAGE("Decoding should succeed", result.get() != nullptr);
+        assertAllPixels(*result, 200, 150, 100, 255);
+    }
+
+    void testKeepBackgroundByteOrder()
+    {
+        // corners red, green, blue, yellow; stored as B, G, R, A bytes
+        std::string validPng = create2x2PngDifferentCorners();
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(validPng, false);
+
+        CPPUNIT_ASSERT_MESSAGE("Decoding should succeed", result.get() != nullptr);
+        assertPixel(*result, 0, 0, 0, 255, 255);
+        assertPixel(*result, 4, 0, 255, 0, 255);
+        assertPixel(*result, result->m_stride, 255, 0, 0, 255);
+        assertPixel(*result, result->m_stride + 4, 0, 255, 255, 255);
+
+        // without uniform corners, the result is identical to base64toPixmap()
+        std::unique_ptr<Bitmap> reference = base64toPixmap(validPng, false);
+        CPPUNIT_ASSERT_MESSAGE("Reference decoding should succeed", reference.get() != nullptr);
+        CPPUNIT_ASSERT(result->m_buffer == reference->m_buffer);
+    }
+
+    void testKeepBackgroundWithPremult()
+    {
+        std::string uniformCorners = create2x2PngUniformCorners(0, 0, 255, 128);
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(uniformCorners, true);
+
+        CPPUNIT_ASSERT_MESSAGE("Decoding should succeed", result.get() != nullptr);
+        // (1 + 128) * 255 >> 8 == 128
+        assertAllPixels(*result, 128, 0, 0, 128);
+    }
+
+    void testKeepBackgroundPaletteFormat()
+    {
+        std::string palettePng = createPalettePngWithTransparency();
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(palettePng, false);
+
+        CPPUNIT_ASSERT_MESSAGE("Palette PNG should decode", result.get() != nullptr);
+        CPPUNIT_ASSERT_EQUAL(2, static_cast<int>(result->m_width));
+        CPPUNIT_ASSERT_EQUAL(2, static_cast<int>(result->m_height));
+        CPPUNIT_ASSERT(result->m_stride >= static_cast<uint32_t>(result->m_width * 4));
+    }
+
+    void testKeepBackgroundInvalidInput()
+    {
+        CPPUNIT_ASSERT(!base64toPixmapKeepBackground("", false));
+        CPPUNIT_ASSERT(!base64toPixmapKeepBackground(createInvalidBase64(), false));
+        CPPUNIT_ASSERT(!base64toPixmapKeepBackground(createBase64NonPng(), false));
+        CPPUNIT_ASSERT(!base64toPixmapKeepBackground(createCorruptedPngSignature(), false));
+    }
+
+    void testKeepBackgroundCallbackInvoked()
+    {
+        std::string validPng = createMinimalValidPng();
+        size_t receivedSize = 0;
+
+        PngCallback callback = [&receivedSize](const uint8_t* buffer, size_t size) {
+            CPPUNIT_ASSERT_MESSAGE("Callback buffer should not be null", buffer != nullptr);
+            receivedSize = size;
+        };
+
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(validPng, false, callback);
+
+        CPPUNIT_ASSERT_MESSAGE("Result should be valid", result.get() != nullptr);
+        CPPUNIT_ASSERT_EQUAL(expectedDecodedSize(validPng), receivedSize);
+    }
+
+    // Format fixtures below are generated by a minimal PNG encoder and verified with pngjs.
+    // Expected pixels are given as B, G, R, A bytes.
+
+    void assertSize(const Bitmap& bitmap, int width, int height)
+    {
+        CPPUNIT_ASSERT_EQUAL(width, static_cast<int>(bitmap.m_width));
+        CPPUNIT_ASSERT_EQUAL(height, static_cast<int>(bitmap.m_height));
+        CPPUNIT_ASSERT_EQUAL(static_cast<uint32_t>(width * 4), bitmap.m_stride);
+    }
+
+    void testPngRgbWithoutAlpha()
+    {
+        // 2x2 8-bit RGB: red, green / blue, white
+        std::string png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGP4z8DAAMIM/4EAAB/uBfsL2WiLAAAAAElFTkSuQmCC";
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(png, false);
+
+        CPPUNIT_ASSERT_MESSAGE("RGB PNG should decode", result.get() != nullptr);
+        assertSize(*result, 2, 2);
+        assertPixel(*result, 0, 0, 0, 255, 255);
+        assertPixel(*result, 4, 0, 255, 0, 255);
+        assertPixel(*result, result->m_stride, 255, 0, 0, 255);
+        assertPixel(*result, result->m_stride + 4, 255, 255, 255, 255);
+    }
+
+    void testPngGrayscale8Bit()
+    {
+        // 1x2 8-bit grayscale: 0x40 / 0xC0
+        std::string png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAACCAAAAAC86un7AAAADElEQVR4nGNwYDgAAAGEAQEKf5BQAAAAAElFTkSuQmCC";
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(png, false);
+
+        CPPUNIT_ASSERT_MESSAGE("Grayscale PNG should decode", result.get() != nullptr);
+        assertSize(*result, 1, 2);
+        assertPixel(*result, 0, 0x40, 0x40, 0x40, 255);
+        assertPixel(*result, result->m_stride, 0xC0, 0xC0, 0xC0, 255);
+    }
+
+    void testPngGrayscale1Bit()
+    {
+        // 2x1 1-bit grayscale: white, black
+        std::string png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABAQAAAADcWUInAAAACklEQVR4nGNoAAAAggCBd81ytgAAAABJRU5ErkJggg==";
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(png, false);
+
+        CPPUNIT_ASSERT_MESSAGE("1-bit grayscale PNG should decode", result.get() != nullptr);
+        assertSize(*result, 2, 1);
+        assertPixel(*result, 0, 255, 255, 255, 255);
+        assertPixel(*result, 4, 0, 0, 0, 255);
+    }
+
+    void testPngGrayscaleWithTrns()
+    {
+        // 2x1 8-bit grayscale with tRNS marking 0x00 transparent: 0x00, 0xFF
+        std::string png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAAAAADRSSBWAAAAAnRSTlMAAHaTzTgAAAALSURBVHicY2D4DwABAgEAQr68aAAAAABJRU5ErkJggg==";
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(png, false);
+
+        CPPUNIT_ASSERT_MESSAGE("Grayscale PNG with tRNS should decode", result.get() != nullptr);
+        assertSize(*result, 2, 1);
+        assertPixel(*result, 0, 0, 0, 0, 0);
+        assertPixel(*result, 4, 255, 255, 255, 255);
+    }
+
+    void testPng16BitRgba()
+    {
+        // 1x1 16-bit RGBA: 0xFFFF, 0x8080, 0x0000, 0x4040
+        std::string png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABEAYAAABPhRjKAAAAEUlEQVR4nGP4/7+hgYHBwQEAFToDfyb2k6kAAAAASUVORK5CYII=";
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(png, false);
+
+        CPPUNIT_ASSERT_MESSAGE("16-bit RGBA PNG should decode", result.get() != nullptr);
+        assertSize(*result, 1, 1);
+        assertPixel(*result, 0, 0, 128, 255, 64);
+    }
+
+    void testPngPaletteWithoutTrnsIsOpaque()
+    {
+        // 2x1 palette without tRNS: red, blue
+        std::string png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAMAAADD/I+4AAAABlBMVEX/AAAAAP9sof2OAAAAC0lEQVR4nGNgYAQAAAQAAr96P0oAAAAASUVORK5CYII=";
+        std::unique_ptr<Bitmap> result = base64toPixmap(png, false);
+
+        CPPUNIT_ASSERT_MESSAGE("Palette PNG without tRNS should decode as opaque", result.get() != nullptr);
+        assertSize(*result, 2, 1);
+        assertPixel(*result, 0, 0, 0, 255, 255);
+        assertPixel(*result, 4, 255, 0, 0, 255);
+    }
+
+    void testPngInterlaced()
+    {
+        // 3x3 8-bit RGBA, Adam7 interlaced: pixel (x, y) = RGBA(80x, 80y, 40, 200 + 10x + y)
+        std::string png = "iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAYAAAEhL4UpAAAALUlEQVR4nAXBMQHAIADEwMiJnJf4cihjywjVwh3goLihztaf4Evqgvgkfo3nAhSoDnQbM97RAAAAAElFTkSuQmCC";
+        std::unique_ptr<Bitmap> result = base64toPixmapKeepBackground(png, false);
+
+        CPPUNIT_ASSERT_MESSAGE("Interlaced PNG should decode", result.get() != nullptr);
+        assertSize(*result, 3, 3);
+        for (int y = 0; y < 3; ++y)
+        {
+            for (int x = 0; x < 3; ++x)
+            {
+                assertPixel(*result, y * result->m_stride + x * 4,
+                        40, 80 * y, 80 * x, 200 + 10 * x + y);
+            }
         }
     }
 };

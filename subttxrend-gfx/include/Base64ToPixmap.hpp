@@ -32,9 +32,44 @@ namespace gfx
 
 using PngCallback = std::function<void(const std::uint8_t* buffer, std::size_t bufferSize)>;
 
+/**
+ * Decodes a base64 encoded PNG image.
+ *
+ * All PNG colour types, bit depths and interlacing are supported. Images
+ * without transparency information decode as fully opaque, and 16-bit
+ * samples are reduced to 8 bits.
+ *
+ * The result is 32-bit ARGB in native (little endian) byte order, i.e. bytes
+ * B, G, R, A in memory, as used by Bitmap.
+ *
+ * @note Applies a subtitle workaround: if all four corners have the same
+ *       non-transparent colour, every pixel of that colour is made fully
+ *       transparent. Use base64toPixmapKeepBackground() for images whose
+ *       colours must be kept, such as Engine background images.
+ *
+ * @param base64txt
+ *      Base64 encoded PNG data.
+ * @param applyRGBAlphaPremult
+ *      True to premultiply colour by alpha. Pixmaps use straight alpha, so
+ *      pass false for images drawn through the gfx engine.
+ * @param callback
+ *      Optional callback receiving the decoded (still PNG encoded) data.
+ *
+ * @return
+ *      Decoded bitmap, nullptr on error.
+ */
 std::unique_ptr<gfx::Bitmap> base64toPixmap(const std::string& base64txt,
                                             bool applyRGBAlphaPremult,
                                             PngCallback callback = nullptr);
+
+/**
+ * Decodes a base64 encoded PNG image without the background workaround.
+ *
+ * Same as base64toPixmap(), except all pixels keep their decoded colours.
+ */
+std::unique_ptr<gfx::Bitmap> base64toPixmapKeepBackground(const std::string& base64txt,
+                                                          bool applyRGBAlphaPremult,
+                                                          PngCallback callback = nullptr);
 
 } // namespace gfx
 } // namespace subttxrend

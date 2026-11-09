@@ -151,38 +151,63 @@ std::unique_ptr<gfx::Bitmap> read_png(unsigned char *pngdata, const size_t pngda
         return ret; // add error handling and cleanup
     }
 
-    if (colorType == PNG_COLOR_TYPE_PALETTE) {
-        // convert to rgba
+    // normalise every supported PNG format to 8-bit RGBA
+    if (bitDepth == 16)
+    {
+#ifdef PNG_READ_SCALE_16_TO_8_SUPPORTED
+        png_set_scale_16(png_ptr);
+#else
+        png_set_strip_16(png_ptr);
+#endif
+    }
+    if (colorType == PNG_COLOR_TYPE_PALETTE)
+    {
         png_set_palette_to_rgb(png_ptr);
-        if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
-        {
-            png_set_tRNS_to_alpha(png_ptr);
-        }
-        else
-        {
-            g_logger.warning("no tRNS in palette image");
-            return ret;
-        }
-
-        png_read_update_info(png_ptr, info_ptr);
+    }
+    if ((colorType == PNG_COLOR_TYPE_GRAY) && (bitDepth < 8))
+    {
+        png_set_expand_gray_1_2_4_to_8(png_ptr);
+    }
+    if ((colorType == PNG_COLOR_TYPE_GRAY) || (colorType == PNG_COLOR_TYPE_GRAY_ALPHA))
+    {
+        png_set_gray_to_rgb(png_ptr);
+    }
+    if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
+    {
+        png_set_tRNS_to_alpha(png_ptr);
+    }
+    else if ((colorType & PNG_COLOR_MASK_ALPHA) == 0)
+    {
+        // no transparency information - fully opaque
+        png_set_filler(png_ptr, 0xFF, PNG_FILLER_AFTER);
     }
 
-    if (colorType == PNG_COLOR_TYPE_PALETTE || colorType == PNG_COLOR_TYPE_RGB_ALPHA) {
-        bytesPerRow = png_get_rowbytes(png_ptr, info_ptr);
-        ret = std::make_unique<gfx::Bitmap>(width, height, bytesPerRow);
-        // setjmp must be called each time after allocating memory and before any libpng function that can return an error, e.g. here
-        // if setjmp was not called and error handler called by png_read_row - we'd have memleaks from gfx::Bitmap allocation
-        if (setjmp(jmpbuf))
-        {
-            return std::unique_ptr<gfx::Bitmap>();
-        }
-        // read single row at the time
+    const int passes = png_set_interlace_handling(png_ptr);
+
+    png_read_update_info(png_ptr, info_ptr);
+
+    bytesPerRow = png_get_rowbytes(png_ptr, info_ptr);
+
+    if ((png_get_bit_depth(png_ptr, info_ptr) != 8) || (bytesPerRow != width * 4))
+    {
+        g_logger.warning("unsupported PNG format: color type %d, bit depth %d", colorType, bitDepth);
+        return ret;
+    }
+
+    ret = std::make_unique<gfx::Bitmap>(width, height, bytesPerRow);
+    // setjmp must be called each time after allocating memory and before any libpng function that can return an error, e.g. here
+    // if setjmp was not called and error handler called by png_read_row - we'd have memleaks from gfx::Bitmap allocation
+    if (setjmp(jmpbuf))
+    {
+        return std::unique_ptr<gfx::Bitmap>();
+    }
+    // read single row at the time; interlaced images need every row once per pass
+    for (int pass = 0; pass < passes; ++pass)
+    {
         for (rowIdx = 0; rowIdx < height; ++rowIdx)
         {
             png_read_row(png_ptr, static_cast<png_bytep>(&ret->m_buffer[rowIdx * bytesPerRow]), nullptr);
         }
-    } else {
-        g_logger.warning("Invalid PNG ColorType enum value given.");
     }
 
     return ret;
@@ -244,13 +269,15 @@ bool findBgColorToDisable(std::unique_ptr<gfx::Bitmap>& bmp, std::uint8_t colorT
     }
 }
 
-void convertToTargetFormat(std::unique_ptr<gfx::Bitmap>& bmp, bool applyAlpha)
+void convertToTargetFormat(std::unique_ptr<gfx::Bitmap>& bmp,
+                           bool applyAlpha,
+                           bool fixBrokenBackground)
 {
     const uint32_t stride = bmp->m_stride;
     const uint32_t width = bmp->m_width;
 
     std::uint8_t colorToDisable[4]{};
-    bool disableColor = findBgColorToDisable(bmp, colorToDisable);
+    bool disableColor = fixBrokenBackground && findBgColorToDisable(bmp, colorToDisable);
 
     for (size_t y = 0 ; y < static_cast<size_t>(bmp->m_height); ++y)
     {
@@ -296,9 +323,13 @@ template<typename T, void(*Fn)(T*)> struct Deleter {
    }
 };
 
-std::unique_ptr<gfx::Bitmap> base64toPixmap(const std::string &base64txt,
-                                            bool applyRGBAlphaPremult,
-                                            PngCallback pngCallback)
+namespace
+{
+
+std::unique_ptr<gfx::Bitmap> decodeBase64Png(const std::string &base64txt,
+                                             bool applyRGBAlphaPremult,
+                                             const PngCallback& pngCallback,
+                                             bool fixBrokenBackground)
 {
     size_t outLen = 0;
     std::unique_ptr<uint8_t[], Deleter<void, g_free> > decoded = std::unique_ptr<uint8_t[], Deleter<void, g_free> >(g_base64_decode (base64txt.c_str(), &outLen));
@@ -312,10 +343,26 @@ std::unique_ptr<gfx::Bitmap> base64toPixmap(const std::string &base64txt,
         ret = read_png(decoded.get(), outLen);
         if (ret)
         {
-            convertToTargetFormat(ret, applyRGBAlphaPremult);
+            convertToTargetFormat(ret, applyRGBAlphaPremult, fixBrokenBackground);
         }
     }
     return ret;
+}
+
+} // namespace anonymous
+
+std::unique_ptr<gfx::Bitmap> base64toPixmap(const std::string &base64txt,
+                                            bool applyRGBAlphaPremult,
+                                            PngCallback pngCallback)
+{
+    return decodeBase64Png(base64txt, applyRGBAlphaPremult, pngCallback, true);
+}
+
+std::unique_ptr<gfx::Bitmap> base64toPixmapKeepBackground(const std::string &base64txt,
+                                                          bool applyRGBAlphaPremult,
+                                                          PngCallback pngCallback)
+{
+    return decodeBase64Png(base64txt, applyRGBAlphaPremult, pngCallback, false);
 }
 
 }   // namespace gfx

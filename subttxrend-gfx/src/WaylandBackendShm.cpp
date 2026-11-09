@@ -22,6 +22,8 @@
 
 #include <subttxrend/common/Logger.hpp>
 
+#include <algorithm>
+
 #include "Blitter.hpp"
 #include "Pixel.hpp"
 #include "Pixmap.hpp"
@@ -183,9 +185,26 @@ void WaylandBackendShm::surfaceResizeRequested(const Size& size)
 
 void WaylandBackendShm::redraw(const waylandcpp::Surface1::Ptr& m_surface)
 {
+    const auto background = getListener()->getBackgroundImage();
+
     if (g_resizeMode == ResizeMode::MAX_WINDOW_SIZE)
     {
-        setCurrentSize(calculateContentSize(), false);
+        auto contentSize = calculateContentSize();
+
+        // keep showing the background image while no window is visible
+        if (background.m_image && ((contentSize.m_w == 0) || (contentSize.m_h == 0)))
+        {
+            if ((m_currentSize.m_w > 0) && (m_currentSize.m_h > 0))
+            {
+                contentSize = m_currentSize;
+            }
+            else
+            {
+                contentSize = background.m_image->getSize();
+            }
+        }
+
+        setCurrentSize(contentSize, false);
     }
 
     const auto& size = getCurrentSize();
@@ -208,7 +227,7 @@ void WaylandBackendShm::redraw(const waylandcpp::Surface1::Ptr& m_surface)
 
     if (!buffer->isEmpty())
     {
-        paintPixels(buffer);
+        paintPixels(buffer, background);
     }
 
     m_surface->damage(0, 0, buffer->getParams().m_width,
@@ -242,7 +261,8 @@ void WaylandBackendShm::interfaceRemoved(waylandcpp::Registry1::Ptr registry,
     // noop
 }
 
-void WaylandBackendShm::paintPixels(const WaylandBuffer::Ptr& buffer)
+void WaylandBackendShm::paintPixels(const WaylandBuffer::Ptr& buffer,
+                                    const BackgroundImage& background)
 {
     auto params = buffer->getParams();
 
@@ -253,13 +273,16 @@ void WaylandBackendShm::paintPixels(const WaylandBuffer::Ptr& buffer)
 
     Blitter::clear(screenPixmap);
 
+    const bool hasBackground = drawBackgroundImage(screenPixmap, background);
+
     g_logger.trace("%s - rendering windows", __func__);
 
     class RenderEnumerator : public BackendWindowEnumerator
     {
     public:
-        RenderEnumerator(Pixmap& screenPixmap) :
-                m_screenPixmap(screenPixmap)
+        RenderEnumerator(Pixmap& screenPixmap, bool blend) :
+                m_screenPixmap(screenPixmap),
+                m_blend(blend)
         {
             // noop
         }
@@ -268,6 +291,16 @@ void WaylandBackendShm::paintPixels(const WaylandBuffer::Ptr& buffer)
         {
             g_logger.trace("%s - pixmap=%p size=%dx%d", __func__, &pixmap,
                     pixmap.getWidth(), pixmap.getHeight());
+
+            if (m_blend)
+            {
+                const Rectangle rect{0, 0,
+                        std::min(pixmap.getWidth(), m_screenPixmap.getWidth()),
+                        std::min(pixmap.getHeight(), m_screenPixmap.getHeight())};
+
+                Blitter::writeWithBlend(m_screenPixmap, pixmap, rect, rect);
+                return;
+            }
 
             // TODO: configurable mode
             auto mode = Blitter::DrawPosition::CENTER;
@@ -281,9 +314,10 @@ void WaylandBackendShm::paintPixels(const WaylandBuffer::Ptr& buffer)
 
     private:
         Pixmap& m_screenPixmap;
+        const bool m_blend;
     };
 
-    RenderEnumerator enumerator(screenPixmap);
+    RenderEnumerator enumerator(screenPixmap, hasBackground);
 
     getListener()->enumerateVisibleWindows(enumerator);
 
@@ -291,6 +325,50 @@ void WaylandBackendShm::paintPixels(const WaylandBuffer::Ptr& buffer)
     premultiplyAlpha(screenPixmap);
 
     g_logger.trace("%s - complete", __func__);
+}
+
+bool WaylandBackendShm::drawBackgroundImage(Pixmap& screenPixmap,
+                                            const BackgroundImage& background)
+{
+    if (!background.m_image)
+    {
+        m_scaledBackground.clear();
+        m_scaledBackground.shrink_to_fit();
+        m_scaledBackgroundSize = Size{0, 0};
+        return false;
+    }
+
+    const auto& image = *background.m_image;
+    const Size screenSize{screenPixmap.getWidth(), screenPixmap.getHeight()};
+    const auto scaledStride = static_cast<std::uint32_t>(screenSize.m_w * sizeof(PixelArgb8888));
+
+    // scaling is expensive, so it is only redone when the image or the buffer size changes
+    if ((background.m_generation != m_scaledBackgroundGeneration)
+            || (screenSize != m_scaledBackgroundSize))
+    {
+        g_logger.info("%s - scaling background image %dx%d to %dx%d", __func__,
+                image.m_width, image.m_height, screenSize.m_w, screenSize.m_h);
+
+        m_scaledBackground.assign(static_cast<std::size_t>(scaledStride) * screenSize.m_h, 0);
+
+        const Pixmap imagePixmap(const_cast<std::uint8_t*>(image.m_buffer.data()),
+                image.m_width, image.m_height, image.m_stride);
+        Pixmap scaledPixmap(m_scaledBackground.data(), screenSize.m_w,
+                screenSize.m_h, scaledStride);
+
+        Blitter::write(scaledPixmap, imagePixmap,
+                Rectangle{0, 0, image.m_width, image.m_height},
+                Rectangle{0, 0, screenSize.m_w, screenSize.m_h});
+
+        m_scaledBackgroundGeneration = background.m_generation;
+        m_scaledBackgroundSize = screenSize;
+    }
+
+    const Pixmap scaledPixmap(m_scaledBackground.data(), screenSize.m_w,
+            screenSize.m_h, scaledStride);
+    Blitter::write(screenPixmap, scaledPixmap);
+
+    return true;
 }
 
 void WaylandBackendShm::setCurrentSize(const Size& newSize,

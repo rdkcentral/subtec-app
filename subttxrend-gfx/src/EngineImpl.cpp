@@ -21,6 +21,7 @@
 #include "EngineImpl.hpp"
 
 #include <algorithm>
+#include <stdexcept>
 
 #include <subttxrend/common/Logger.hpp>
 
@@ -183,6 +184,43 @@ void EngineImpl::detach(WindowPtr window)
     }
 
     unlock();
+}
+
+void EngineImpl::setBackgroundImage(std::shared_ptr<const Bitmap> image)
+{
+    if (image)
+    {
+        if ((image->m_width <= 0) || (image->m_height <= 0)
+                || (image->m_stride < static_cast<std::uint32_t>(image->m_width) * 4)
+                || (image->m_buffer.size()
+                        < static_cast<std::size_t>(image->m_stride) * image->m_height))
+        {
+            throw std::invalid_argument("image");
+        }
+
+        g_logger.info("%s - image=%dx%d", __func__, image->m_width,
+                image->m_height);
+    }
+    else
+    {
+        g_logger.info("%s - image removed", __func__);
+    }
+
+    lock();
+    m_backgroundImage.m_image = std::move(image);
+    ++m_backgroundImage.m_generation;
+    unlock();
+
+    requestRedraw();
+}
+
+BackgroundImage EngineImpl::getBackgroundImage()
+{
+    lock();
+    auto backgroundImage = m_backgroundImage;
+    unlock();
+
+    return backgroundImage;
 }
 
 void EngineImpl::requestRedraw()

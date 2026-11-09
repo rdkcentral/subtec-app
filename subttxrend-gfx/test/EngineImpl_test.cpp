@@ -38,6 +38,7 @@ using subttxrend::gfx::KeyEventListener;
 using subttxrend::gfx::WindowImpl;
 using subttxrend::gfx::WindowPtr;
 using subttxrend::gfx::Size;
+using subttxrend::gfx::Bitmap;
 
 /**
  * Mock Backend for testing
@@ -126,6 +127,10 @@ public:
     void enumerateVisibleWindows(BackendWindowEnumerator& enumerator)
     {
         m_listener->enumerateVisibleWindows(enumerator);
+    }
+    subttxrend::gfx::BackgroundImage getBackgroundImage()
+    {
+        return m_listener->getBackgroundImage();
     }
 
     static void resetStaticFlags()
@@ -302,6 +307,12 @@ CPPUNIT_TEST_SUITE( EngineImplTest );
     CPPUNIT_TEST(testStateAfterSuccessfulInit);
     CPPUNIT_TEST(testStateAfterShutdown);
     CPPUNIT_TEST(testStateWithMultipleWindows);
+    CPPUNIT_TEST(testBackgroundImageInitiallyEmpty);
+    CPPUNIT_TEST(testSetBackgroundImageBeforeInit);
+    CPPUNIT_TEST(testSetBackgroundImageRequestsRedraw);
+    CPPUNIT_TEST(testSetBackgroundImageVisibleToBackend);
+    CPPUNIT_TEST(testRemoveBackgroundImage);
+    CPPUNIT_TEST(testSetBackgroundImageWithInvalidImageThrows);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -1563,6 +1574,114 @@ public:
 
         engine.detach(w1);
         engine.detach(w3);
+    }
+
+    static std::shared_ptr<const Bitmap> makeImage(std::int32_t width,
+                                                   std::int32_t height)
+    {
+        return std::make_shared<const Bitmap>(width, height, width * 4);
+    }
+
+    void testBackgroundImageInitiallyEmpty()
+    {
+        auto mockBackend = new MockBackend(nullptr);
+        g_mockBackend = mockBackend;
+
+        EngineImpl engine;
+        engine.init("display");
+
+        auto background = mockBackend->getBackgroundImage();
+        CPPUNIT_ASSERT(!background.m_image);
+    }
+
+    void testSetBackgroundImageBeforeInit()
+    {
+        EngineImpl engine;
+        auto image = makeImage(4, 2);
+
+        CPPUNIT_ASSERT_NO_THROW(engine.setBackgroundImage(image));
+        CPPUNIT_ASSERT_NO_THROW(engine.setBackgroundImage(nullptr));
+    }
+
+    void testSetBackgroundImageRequestsRedraw()
+    {
+        auto mockBackend = new MockBackend(nullptr);
+        g_mockBackend = mockBackend;
+
+        EngineImpl engine;
+        engine.init("display");
+
+        const int before = mockBackend->getRequestRenderCount();
+        engine.setBackgroundImage(makeImage(4, 2));
+        CPPUNIT_ASSERT_EQUAL(before + 1, mockBackend->getRequestRenderCount());
+
+        engine.setBackgroundImage(nullptr);
+        CPPUNIT_ASSERT_EQUAL(before + 2, mockBackend->getRequestRenderCount());
+    }
+
+    void testSetBackgroundImageVisibleToBackend()
+    {
+        auto mockBackend = new MockBackend(nullptr);
+        g_mockBackend = mockBackend;
+
+        EngineImpl engine;
+        engine.init("display");
+
+        auto first = makeImage(4, 2);
+        engine.setBackgroundImage(first);
+        auto background1 = mockBackend->getBackgroundImage();
+        CPPUNIT_ASSERT(background1.m_image == first);
+
+        auto second = makeImage(8, 4);
+        engine.setBackgroundImage(second);
+        auto background2 = mockBackend->getBackgroundImage();
+        CPPUNIT_ASSERT(background2.m_image == second);
+        CPPUNIT_ASSERT(background2.m_generation != background1.m_generation);
+
+        // setting the same image again must still be reported as a change
+        engine.setBackgroundImage(second);
+        auto background3 = mockBackend->getBackgroundImage();
+        CPPUNIT_ASSERT(background3.m_generation != background2.m_generation);
+    }
+
+    void testRemoveBackgroundImage()
+    {
+        auto mockBackend = new MockBackend(nullptr);
+        g_mockBackend = mockBackend;
+
+        EngineImpl engine;
+        engine.init("display");
+
+        engine.setBackgroundImage(makeImage(4, 2));
+        auto withImage = mockBackend->getBackgroundImage();
+
+        engine.setBackgroundImage(nullptr);
+        auto withoutImage = mockBackend->getBackgroundImage();
+
+        CPPUNIT_ASSERT(!withoutImage.m_image);
+        CPPUNIT_ASSERT(withoutImage.m_generation != withImage.m_generation);
+    }
+
+    void testSetBackgroundImageWithInvalidImageThrows()
+    {
+        auto mockBackend = new MockBackend(nullptr);
+        g_mockBackend = mockBackend;
+
+        EngineImpl engine;
+        engine.init("display");
+
+        auto valid = makeImage(4, 2);
+        engine.setBackgroundImage(valid);
+
+        CPPUNIT_ASSERT_THROW(engine.setBackgroundImage(makeImage(0, 2)),
+                std::invalid_argument);
+        CPPUNIT_ASSERT_THROW(engine.setBackgroundImage(makeImage(4, 0)),
+                std::invalid_argument);
+        CPPUNIT_ASSERT_THROW(engine.setBackgroundImage(
+                std::make_shared<const Bitmap>(4, 2, 12)), std::invalid_argument);
+
+        // a rejected image leaves the current one in place
+        CPPUNIT_ASSERT(mockBackend->getBackgroundImage().m_image == valid);
     }
 };
 

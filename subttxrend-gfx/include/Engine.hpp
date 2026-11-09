@@ -109,6 +109,36 @@ public:
      */
     virtual void detach(WindowPtr window) = 0;
 
+    /**
+     * Sets the background image.
+     *
+     * The image is stretched to cover the whole output and the attached
+     * windows are composited on top of it, so transparent and translucent
+     * window content shows the image underneath. The image is shown even
+     * when no window is visible.
+     *
+     * The pixel format is the same as for DrawContext::drawBitmap: 32-bit
+     * ARGB in native (little endian) byte order, with straight
+     * (non-premultiplied) alpha. The image must not be modified while it is
+     * set; set a new image instead.
+     *
+     * @note Do not use base64toPixmap() to decode background images. It
+     *       applies a subtitle-specific workaround that turns the colour of
+     *       the image corners transparent if all four corners are equal.
+     *
+     * @note Only supported by the Wayland backends; other backends ignore it.
+     *
+     * @param image
+     *      Image to show, or nullptr to remove the background image.
+     *
+     * @throws std::invalid_argument
+     *      If the image has an empty size or its stride or buffer is too small.
+     */
+    virtual void setBackgroundImage(std::shared_ptr<const Bitmap> image)
+    {
+        (void) image;
+    }
+
 #ifdef __APPLE__
     /**
      * @brief Start blocking application window (block this thread)

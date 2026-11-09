@@ -125,6 +125,7 @@ public:
      * @note Do not use base64toPixmap() to decode background images. It
      *       applies a subtitle-specific workaround that turns the colour of
      *       the image corners transparent if all four corners are equal.
+     *       Use base64toPixmapKeepBackground(..., false) instead.
      *
      * @note Only supported by the Wayland backends; other backends ignore it.
      *

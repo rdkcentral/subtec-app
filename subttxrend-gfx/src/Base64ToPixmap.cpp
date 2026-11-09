@@ -244,13 +244,15 @@ bool findBgColorToDisable(std::unique_ptr<gfx::Bitmap>& bmp, std::uint8_t colorT
     }
 }
 
-void convertToTargetFormat(std::unique_ptr<gfx::Bitmap>& bmp, bool applyAlpha)
+void convertToTargetFormat(std::unique_ptr<gfx::Bitmap>& bmp,
+                           bool applyAlpha,
+                           bool fixBrokenBackground)
 {
     const uint32_t stride = bmp->m_stride;
     const uint32_t width = bmp->m_width;
 
     std::uint8_t colorToDisable[4]{};
-    bool disableColor = findBgColorToDisable(bmp, colorToDisable);
+    bool disableColor = fixBrokenBackground && findBgColorToDisable(bmp, colorToDisable);
 
     for (size_t y = 0 ; y < static_cast<size_t>(bmp->m_height); ++y)
     {
@@ -296,9 +298,13 @@ template<typename T, void(*Fn)(T*)> struct Deleter {
    }
 };
 
-std::unique_ptr<gfx::Bitmap> base64toPixmap(const std::string &base64txt,
-                                            bool applyRGBAlphaPremult,
-                                            PngCallback pngCallback)
+namespace
+{
+
+std::unique_ptr<gfx::Bitmap> decodeBase64Png(const std::string &base64txt,
+                                             bool applyRGBAlphaPremult,
+                                             const PngCallback& pngCallback,
+                                             bool fixBrokenBackground)
 {
     size_t outLen = 0;
     std::unique_ptr<uint8_t[], Deleter<void, g_free> > decoded = std::unique_ptr<uint8_t[], Deleter<void, g_free> >(g_base64_decode (base64txt.c_str(), &outLen));
@@ -312,10 +318,26 @@ std::unique_ptr<gfx::Bitmap> base64toPixmap(const std::string &base64txt,
         ret = read_png(decoded.get(), outLen);
         if (ret)
         {
-            convertToTargetFormat(ret, applyRGBAlphaPremult);
+            convertToTargetFormat(ret, applyRGBAlphaPremult, fixBrokenBackground);
         }
     }
     return ret;
+}
+
+} // namespace anonymous
+
+std::unique_ptr<gfx::Bitmap> base64toPixmap(const std::string &base64txt,
+                                            bool applyRGBAlphaPremult,
+                                            PngCallback pngCallback)
+{
+    return decodeBase64Png(base64txt, applyRGBAlphaPremult, pngCallback, true);
+}
+
+std::unique_ptr<gfx::Bitmap> base64toPixmapKeepBackground(const std::string &base64txt,
+                                                          bool applyRGBAlphaPremult,
+                                                          PngCallback pngCallback)
+{
+    return decodeBase64Png(base64txt, applyRGBAlphaPremult, pngCallback, false);
 }
 
 }   // namespace gfx

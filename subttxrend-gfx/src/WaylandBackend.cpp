@@ -470,7 +470,10 @@ void WaylandBackend::surfaceId(waylandcpp::SimpleShellPtr /*simpleShell*/,
             m_currentSurfaceId = surfaceId;
 
             const char* env_name = ::getenv("SUBTEC_SURFACE_NAME");
-            wl_simple_shell_set_name(m_simpleShell->getNativeObject(), surfaceId, env_name==NULL ? "subtitles-subtec" : env_name);
+            m_currentSurfaceName = env_name==NULL ? "subtitles-subtec" : env_name;
+            wl_simple_shell_set_name(m_simpleShell->getNativeObject(), surfaceId, m_currentSurfaceName.c_str());
+            g_logger.info("%s - Own surface:%p id:%u requestedName:%s", __func__,
+                          surface, m_currentSurfaceId, m_currentSurfaceName.c_str());
 
             g_logger.info("%s - setting surface geometry to %dx%d", __func__, m_outputSize.m_w, m_outputSize.m_h);
             wl_simple_shell_set_geometry(m_simpleShell->getNativeObject(), surfaceId, 0, 0, m_outputSize.m_w, m_outputSize.m_h);
@@ -486,7 +489,8 @@ void WaylandBackend::surfaceCreated(waylandcpp::SimpleShellPtr /*simpleShell*/,
 
     if (m_simpleShell && (m_currentSurfaceId == surfaceId))
     {
-        g_logger.info("%s - Hiding surface with id %u on creation", __func__, surfaceId);
+        g_logger.info("%s - Hiding surface with id %u on creation; eventName:%s requestedName:%s",
+                      __func__, surfaceId, name, m_currentSurfaceName.c_str());
         wl_simple_shell_set_visible(m_simpleShell->getNativeObject(), surfaceId, 0);
     }
 }
@@ -509,8 +513,8 @@ void WaylandBackend::surfaceStatus(waylandcpp::SimpleShellPtr /*simpleShell*/,
                    wl_fixed_t opacity,
                    wl_fixed_t zorder)
 {
-    g_logger.info("%s - SimpleShell status - name:%s visible:%s position:%u,%u size:%u,%u opacity:%f zorder:%f",
-                  __func__, name, visible ? "Yes" : "No", x, y, width, height, wl_fixed_to_double(opacity),
+    g_logger.info("%s - SimpleShell status - id:%u name:%s visible:%s position:%u,%u size:%u,%u opacity:%f zorder:%f",
+                  __func__, surfaceId, name, visible ? "Yes" : "No", x, y, width, height, wl_fixed_to_double(opacity),
                   wl_fixed_to_double(zorder) );
 }
 

@@ -596,6 +596,8 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
         g_logger.info("%s - %s", __func__, m_contentVisible ? "Something to draw, make surface visible" : "Nothing to draw");
         if(m_contentVisible && getSimpleShell())
         {
+            g_logger.info("%s - Showing surface id:%u requestedName:%s", __func__,
+                          m_currentSurfaceId, m_currentSurfaceName.c_str());
             wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId, 1);
         }
 #endif
@@ -611,8 +613,8 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
 #if defined(WESTEROS)
     if (visibleChanged && !m_contentVisible && getSimpleShell())
     {
-        g_logger.info("%s - No visible content; hiding surface after clear; EGL resources retained",
-                __func__);
+        g_logger.info("%s - No visible content; hiding surface after clear; EGL resources retained; id:%u requestedName:%s",
+                __func__, m_currentSurfaceId, m_currentSurfaceName.c_str());
         wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId, 0);
         // Hidden surfaces may not receive a frame callback; allow the next unmute to render.
         m_frameReady = true;

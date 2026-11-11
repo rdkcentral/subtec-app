@@ -23,6 +23,7 @@
 
 #include <map>
 #include <atomic>
+#include <string>
 
 #include "Types.hpp"
 #include "Backend.hpp"
@@ -244,6 +245,11 @@ protected:
 
     /** Current surface id. */
     uint32_t m_currentSurfaceId;
+
+#if defined(WESTEROS)
+    /** Name requested for our SimpleShell surface. */
+    std::string m_currentSurfaceName;
+#endif
 
 private:
     bool initializeRendering();

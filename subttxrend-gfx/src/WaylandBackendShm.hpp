@@ -21,6 +21,9 @@
 #ifndef SUBTTXREND_GFX_WAYLAND_BACKEND_SHM_HPP_
 #define SUBTTXREND_GFX_WAYLAND_BACKEND_SHM_HPP_
 
+#include <cstdint>
+#include <vector>
+
 #include "WaylandBackend.hpp"
 #include "WaylandBuffer.hpp"
 #include "waylandcpp-client/Shm.hpp"
@@ -80,8 +83,28 @@ private:
      *
      * @param buffer
      *      Buffer to draw on.
+     * @param background
+     *      Background image to draw below the windows.
+     * @param windowsVisible
+     *      True if any window is visible; the background image is only drawn then.
      */
-    void paintPixels(const WaylandBuffer::Ptr& buffer);
+    void paintPixels(const WaylandBuffer::Ptr& buffer,
+                     const BackgroundImage& background,
+                     bool windowsVisible);
+
+    /**
+     * Draws the background image stretched over the whole pixmap.
+     *
+     * @param screenPixmap
+     *      Pixmap to draw on.
+     * @param background
+     *      Background image.
+     *
+     * @return
+     *      True if a background image was drawn.
+     */
+    bool drawBackgroundImage(Pixmap& screenPixmap,
+                             const BackgroundImage& background);
 
     /**
      * Sets current size.
@@ -110,6 +133,15 @@ private:
 
     /** Current size. */
     Size m_currentSize;
+
+    /** Background image scaled to the buffer size (straight alpha). */
+    std::vector<std::uint8_t> m_scaledBackground;
+
+    /** Size of the scaled background image. */
+    Size m_scaledBackgroundSize;
+
+    /** Generation of the background image that was scaled. */
+    std::uint64_t m_scaledBackgroundGeneration{0};
 
     /** Default size. */
     static const Size DEFAULT_SIZE;

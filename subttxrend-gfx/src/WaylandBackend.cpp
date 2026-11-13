@@ -248,32 +248,55 @@ void WaylandBackend::loopStarted()
     if (!checkRequiredBaseInterfaces() || !checkRequiredInterfaces())
     {
         g_logger.fatal("%s - Required wayland interfaces missing", __func__);
+        m_renderingFailed = true;
         return;
     }
 
+    // Create the native surface at startup, as before lazy EGL init, so the
+    // compositor assigns the same stacking order as earlier builds.
     if (!createSurface())
     {
         g_logger.fatal("%s - Cannot create surface", __func__);
+        m_renderingFailed = true;
         return;
     }
-
-    if (!initRendering())
-    {
-        g_logger.fatal("%s - Cannot init rendering", __func__);
-        return;
-    }
-
-    m_surface->addFrameListener(this);
 
     m_frameReady = true;
     m_renderRequested = true;
 
+    if (deferRendering())
+    {
+        g_logger.info("%s - Surface created; EGL initialization deferred until content is visible", __func__);
+    }
+    else if (!initializeRendering())
+    {
+        return;
+    }
+
     redraw(0);
+}
+
+bool WaylandBackend::initializeRendering()
+{
+    if (!initRendering())
+    {
+        g_logger.fatal("%s - Cannot initialize rendering; backend restart required", __func__);
+        shutdownRendering();
+        m_renderingFailed = true;
+        return false;
+    }
+
+    m_surface->addFrameListener(this);
+
+    m_renderingInitialized = true;
+    g_logger.info("%s - Rendering initialized; resources retained until shutdown", __func__);
+    return true;
 }
 
 void WaylandBackend::loopFinished()
 {
     g_logger.trace("%s", __func__);
+    shutdownRendering();
 }
 
 void WaylandBackend::loopWakeupReceived()
@@ -447,7 +470,10 @@ void WaylandBackend::surfaceId(waylandcpp::SimpleShellPtr /*simpleShell*/,
             m_currentSurfaceId = surfaceId;
 
             const char* env_name = ::getenv("SUBTEC_SURFACE_NAME");
-            wl_simple_shell_set_name(m_simpleShell->getNativeObject(), surfaceId, env_name==NULL ? "subtitles-subtec" : env_name);
+            m_currentSurfaceName = env_name==NULL ? "subtitles-subtec" : env_name;
+            wl_simple_shell_set_name(m_simpleShell->getNativeObject(), surfaceId, m_currentSurfaceName.c_str());
+            g_logger.info("%s - Own surface:%p id:%u requestedName:%s", __func__,
+                          surface, m_currentSurfaceId, m_currentSurfaceName.c_str());
 
             g_logger.info("%s - setting surface geometry to %dx%d", __func__, m_outputSize.m_w, m_outputSize.m_h);
             wl_simple_shell_set_geometry(m_simpleShell->getNativeObject(), surfaceId, 0, 0, m_outputSize.m_w, m_outputSize.m_h);
@@ -461,6 +487,12 @@ void WaylandBackend::surfaceCreated(waylandcpp::SimpleShellPtr /*simpleShell*/,
 {
     g_logger.info("%s - simple_shell surfaceCreated - name:%s id:%u", __func__, name, surfaceId);
 
+    if (m_simpleShell && (m_currentSurfaceId == surfaceId))
+    {
+        g_logger.info("%s - Hiding surface with id %u on creation; eventName:%s requestedName:%s",
+                      __func__, surfaceId, name, m_currentSurfaceName.c_str());
+        wl_simple_shell_set_visible(m_simpleShell->getNativeObject(), surfaceId, 0);
+    }
 }
 
 void WaylandBackend::surfaceDestroyed(waylandcpp::SimpleShellPtr /*simpleShell*/,
@@ -481,8 +513,8 @@ void WaylandBackend::surfaceStatus(waylandcpp::SimpleShellPtr /*simpleShell*/,
                    wl_fixed_t opacity,
                    wl_fixed_t zorder)
 {
-    g_logger.info("%s - SimpleShell status - name:%s visible:%s position:%u,%u size:%u,%u opacity:%f zorder:%f",
-                  __func__, name, visible ? "Yes" : "No", x, y, width, height, wl_fixed_to_double(opacity),
+    g_logger.info("%s - SimpleShell status - id:%u name:%s visible:%s position:%u,%u size:%u,%u opacity:%f zorder:%f",
+                  __func__, surfaceId, name, visible ? "Yes" : "No", x, y, width, height, wl_fixed_to_double(opacity),
                   wl_fixed_to_double(zorder) );
 }
 
@@ -776,6 +808,34 @@ void WaylandBackend::redraw(uint32_t /*time*/)
     g_logger.debug("%s - Redrawing", __func__);
 
     m_forceRender.store(false, std::memory_order_relaxed);
+
+    if (m_renderingFailed)
+    {
+        m_renderRequested = false;
+        return;
+    }
+
+    if (!m_renderingInitialized)
+    {
+        // Consume this request before sampling visibility so concurrent requests survive.
+        m_renderRequested.exchange(false);
+        const auto size = calculateContentSize();
+        if (size.m_w <= 0 || size.m_h <= 0)
+        {
+            g_logger.trace("%s - No visible content (%dx%d); EGL initialization skipped",
+                    __func__, size.m_w, size.m_h);
+            return;
+        }
+
+        g_logger.info("%s - First visible content (%dx%d); initializing rendering",
+                __func__, size.m_w, size.m_h);
+        if (!initializeRendering())
+        {
+            return;
+        }
+        m_renderRequested = true;
+    }
+
     redraw(m_surface);
 }
 

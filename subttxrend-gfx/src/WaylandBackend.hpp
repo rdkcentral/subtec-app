@@ -23,6 +23,7 @@
 
 #include <map>
 #include <atomic>
+#include <string>
 
 #include "Types.hpp"
 #include "Backend.hpp"
@@ -121,6 +122,12 @@ protected:
      *      True on success, false on error.
      */
     virtual bool initRendering() = 0;
+
+    /** Whether rendering initialization waits for visible content; the surface is always created at startup. */
+    virtual bool deferRendering() const { return false; }
+
+    /** Releases rendering resources on the display-loop thread. */
+    virtual void shutdownRendering() {}
 
     /**
      * Checks if required wayland interfaces are present.
@@ -239,7 +246,17 @@ protected:
     /** Current surface id. */
     uint32_t m_currentSurfaceId;
 
+#if defined(WESTEROS)
+    /** Name requested for our SimpleShell surface. */
+    std::string m_currentSurfaceName;
+#endif
+
 private:
+    bool initializeRendering();
+
+    bool m_renderingInitialized = false;
+    bool m_renderingFailed = false;
+
     /**
      * Seat related data.
      */

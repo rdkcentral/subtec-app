@@ -151,6 +151,9 @@ private:
     /** Is paused flag. */
     bool m_paused{false};
 
+    /** Is muted flag. */
+    bool m_muted{true};
+
     /** Time when pause was entered. */
     std::chrono::system_clock::time_point m_pauseEnteredTime{};
 

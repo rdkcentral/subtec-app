@@ -88,29 +88,78 @@ WaylandBackendEgl::WaylandBackendEgl(BackendListener* listener) :
 
 WaylandBackendEgl::~WaylandBackendEgl()
 {
-    if (!eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT))
+    shutdownRendering();
+}
+
+void WaylandBackendEgl::shutdownRendering()
+{
+    if (!m_eglDisplay)
     {
-        g_logger.error("%s - cannot set current EGL context (%d)", __func__,
-                eglGetError());
+        return;
     }
-    if(m_eglContext)
+
+    if (m_program || m_textures[0] || m_textures[1])
     {
-        eglDestroyContext(m_eglDisplay, m_eglContext);
+        if (m_eglInitialized && m_eglSurface && m_eglContext &&
+                eglMakeCurrent(m_eglDisplay, m_eglSurface, m_eglSurface, m_eglContext))
+        {
+            m_textures = {};
+            m_program.reset();
+        }
+        else
+        {
+            g_logger.error("%s - cannot make context current for GL cleanup (%d)",
+                    __func__, eglGetError());
+            for (auto& texture : m_textures)
+            {
+                texture.release();
+            }
+            m_program.release();
+        }
     }
-    if(m_eglSurface)
+
+    if (m_eglInitialized &&
+            !eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT))
     {
-        eglDestroySurface(m_eglDisplay, m_eglSurface);
+        g_logger.error("%s - cannot release current EGL context (%d)", __func__, eglGetError());
     }
-    if(m_eglWindow)
+    if (m_eglSurface && !eglDestroySurface(m_eglDisplay, m_eglSurface))
+    {
+        g_logger.error("%s - cannot destroy EGL surface (%d)", __func__, eglGetError());
+    }
+    if (m_eglWindow)
     {
         wl_egl_window_destroy(m_eglWindow);
     }
-    if(eglTerminate(m_eglDisplay) == EGL_FALSE)
+    if (m_eglContext && !eglDestroyContext(m_eglDisplay, m_eglContext))
     {
-         g_logger.error("%s - Failed to terminate egl display (%d)", __func__,
-                eglGetError());
+        g_logger.error("%s - cannot destroy EGL context (%d)", __func__, eglGetError());
     }
-    eglReleaseThread();
+    if (m_eglInitialized && !eglTerminate(m_eglDisplay))
+    {
+        g_logger.error("%s - Failed to terminate egl display (%d)", __func__, eglGetError());
+    }
+    if (m_eglInitialized && !eglReleaseThread())
+    {
+        g_logger.error("%s - cannot release EGL thread (%d)", __func__, eglGetError());
+    }
+
+    m_eglSurface = EGL_NO_SURFACE;
+    m_eglWindow = nullptr;
+    m_eglContext = EGL_NO_CONTEXT;
+    m_eglDisplay = EGL_NO_DISPLAY;
+    m_eglInitialized = false;
+}
+
+void WaylandBackendEgl::simpleShellSurfaceIdAssigned()
+{
+#if defined(WESTEROS)
+    if (getSimpleShell() && m_currentSurfaceIdValid)
+    {
+        wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId,
+                m_contentVisible ? 1 : 0);
+    }
+#endif
 }
 
 bool WaylandBackendEgl::initRendering()
@@ -170,6 +219,8 @@ bool WaylandBackendEgl::initRendering()
         return false;
     }
 
+    m_eglInitialized = true;
+
     g_logger.trace("%s - EGL initialized %d.%d", __func__, eglVersionMajor,
             eglVersionMinor);
 
@@ -181,7 +232,7 @@ bool WaylandBackendEgl::initRendering()
     }
 
     if (!eglChooseConfig(m_eglDisplay, configAttributes, &config, 1,
-            &numConfig))
+            &numConfig) || numConfig == 0)
     {
         g_logger.error("%s - cannot choose EGL config (%d)", __func__,
                 eglGetError());
@@ -467,7 +518,6 @@ void WaylandBackendEgl::drawTexturedObject(const Size& contentSize)
 
 void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
 {
-    static bool visible = false;
     bool visibleChanged = false;
 
     g_logger.trace("%s", __func__);
@@ -493,7 +543,13 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
 
     auto contentSize = calculateContentSize();
 
-    const bool anythingToDraw = (contentSize.m_w > 0) || (contentSize.m_h > 0);
+    const bool anythingToDraw = (contentSize.m_w > 0) && (contentSize.m_h > 0);
+
+    if (!anythingToDraw && !m_contentVisible)
+    {
+        g_logger.trace("%s - No visible content; skipping GL clear, draw and EGL swap", __func__);
+        return;
+    }
 
     // clear with transparent color
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -502,12 +558,6 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
     // render windows
     if (anythingToDraw)
     {
-        if(!visible)
-        {
-            visible = true;
-            visibleChanged = true;
-        }
-
         if (renderRequested)
         {
             if (!prepareTexture(contentSize, TEXT_TEXTURE))
@@ -534,18 +584,20 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
     }
     else
     {
-        if(visible)
-        {
-            visible = false;
-            visibleChanged = true;
-        }
+        visibleChanged = m_contentVisible;
     }
+
+    if (anythingToDraw && !m_contentVisible)
+    {
+        visibleChanged = true;
+    }
+    m_contentVisible = anythingToDraw;
 
 #if defined(WESTEROS)
    if(visibleChanged)
    {
-        g_logger.info("%s - %s", __func__, visible ? "Something to draw, make surface visible" : "Nothing to draw");
-        if(visible && getSimpleShell())
+        g_logger.info("%s - %s", __func__, m_contentVisible ? "Something to draw, make surface visible" : "Nothing to draw");
+        if(m_contentVisible && getSimpleShell() && m_currentSurfaceIdValid)
         {
             wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId, 1);
         }
@@ -554,7 +606,18 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
 
     m_frameReady = false;
 
-    eglSwapBuffers(m_eglDisplay, m_eglSurface);
+    if (!eglSwapBuffers(m_eglDisplay, m_eglSurface))
+    {
+        g_logger.error("%s - EGL swap failed (%d)", __func__, eglGetError());
+    }
+
+#if defined(WESTEROS)
+    if (visibleChanged && !m_contentVisible && getSimpleShell() && m_currentSurfaceIdValid)
+    {
+        wl_simple_shell_set_visible(getSimpleShell()->getNativeObject(), m_currentSurfaceId, 0);
+        m_frameReady = true;
+    }
+#endif
 }
 
 void WaylandBackendEgl::interfaceAdded(waylandcpp::Registry1::Ptr registry,

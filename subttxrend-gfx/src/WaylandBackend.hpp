@@ -122,6 +122,15 @@ protected:
      */
     virtual bool initRendering() = 0;
 
+    /** Whether surface and rendering initialization wait for visible content. */
+    virtual bool deferRendering() const { return false; }
+
+    /** Releases rendering resources on the display-loop thread. */
+    virtual void shutdownRendering() {}
+
+    /** Called after SimpleShell reports the newly created surface ID. */
+    virtual void simpleShellSurfaceIdAssigned() {}
+
     /**
      * Checks if required wayland interfaces are present.
      *
@@ -237,9 +246,15 @@ protected:
     std::atomic<bool> m_forceRender{false};
 
     /** Current surface id. */
-    uint32_t m_currentSurfaceId;
+    uint32_t m_currentSurfaceId{0};
+    bool m_currentSurfaceIdValid{false};
 
 private:
+    bool initializeRendering();
+
+    bool m_renderingInitialized{false};
+    bool m_renderingFailed{false};
+
     /**
      * Seat related data.
      */

@@ -105,7 +105,10 @@ void TtmlEngineImpl::start()
 
     std::lock_guard<std::mutex> lock{m_mutex};
     clear();
-    m_renderer->show();
+    if (!m_muted)
+    {
+        m_renderer->show();
+    }
 }
 
 void TtmlEngineImpl::stop()
@@ -159,6 +162,7 @@ void TtmlEngineImpl::mute()
 {
     m_logger.osdebug("mute received");
     std::lock_guard<std::mutex> lock{m_mutex};
+    m_muted = true;
     m_renderer->hide();
 }
 
@@ -166,6 +170,7 @@ void TtmlEngineImpl::unmute()
 {
     m_logger.osdebug("unmute received");
     std::lock_guard<std::mutex> lock{m_mutex};
+    m_muted = false;
     m_renderer->show();
 }
 

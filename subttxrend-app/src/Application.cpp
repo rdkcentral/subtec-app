@@ -73,11 +73,11 @@ void Application::runAsync()
         throw std::runtime_error("error while creating source");
     }
 
-    m_logger.osinfo(__LOGGER_FUNC__, " - Starting source");
-    m_source->start(m_controller.get());
-
     m_logger.osinfo(__LOGGER_FUNC__, " - Starting render thread");
     m_controller->startAsync();
+
+    m_logger.osinfo(__LOGGER_FUNC__, " - Starting source");
+    m_source->start(m_controller.get());
 
     m_logger.osinfo( __LOGGER_FUNC__, " - application started");
 }

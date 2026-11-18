@@ -38,6 +38,9 @@ class PixelArgb8888;
 
 /**
  * Rendering backend using wayland-egl.
+ *
+ * The native surface and EGL resources are created on first visible content
+ * and retained until the display loop shuts down.
  */
 class WaylandBackendEgl : public WaylandBackend
 {
@@ -56,6 +59,12 @@ public:
     virtual ~WaylandBackendEgl();
 
 protected:
+    bool deferRendering() const override { return true; }
+
+    void shutdownRendering() override;
+
+    void simpleShellSurfaceIdAssigned() override;
+
     /** @copydoc WaylandBackend::initRendering */
     virtual bool initRendering() override;
 
@@ -150,6 +159,9 @@ private:
 
     /** EGL display object. */
     EGLDisplay m_eglDisplay;
+
+    bool m_eglInitialized{false};
+    bool m_contentVisible{false};
 
     /** Wayland GL window. */
     wl_egl_window* m_eglWindow;

@@ -158,6 +158,11 @@ void TtmlController::mute(bool m)
     }
 }
 
+void TtmlController::debugUnmute()
+{
+    m_ttmlEngine->unmute();
+}
+
 } // namespace ctrl
 } // namespace subttxrend
 

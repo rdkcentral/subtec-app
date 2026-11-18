@@ -20,6 +20,8 @@
 #pragma once
 
 #include <cstdint>
+#include <array>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <condition_variable>
@@ -87,6 +89,8 @@ class Controller : private common::NonCopyable,
             gfx::WindowPtr gfxWindow);
     // clang-format on
 
+    ~Controller();
+
     /**
      * Perform initialization.
      *
@@ -132,6 +136,14 @@ class Controller : private common::NonCopyable,
     virtual void onStreamBroken() override;
 
 private:
+    struct DebugFileState
+    {
+        bool exists{false};
+        std::int64_t modifiedSeconds{0};
+        std::int64_t modifiedNanoseconds{0};
+        int error{0};
+    };
+
     /**
      * Performs data processing.
      *
@@ -327,6 +339,11 @@ private:
     bool isDataQueued() const;
 
     void processLoop();
+    void startDebugFileMonitor();
+    void stopDebugFileMonitor();
+    void debugFileMonitorLoop(std::array<DebugFileState, 2> initialStates);
+    void processDebugUnmuteRequest();
+    DebugFileState readDebugFileState(const char* path) const;
 
     ctrl::Configuration const& m_config;
 
@@ -343,6 +360,10 @@ private:
 
     /** Rendering thread. */
     std::thread m_renderThread;
+    std::thread m_debugFileMonitorThread;
+    std::atomic<bool> m_stopDebugFileMonitor{false};
+    std::atomic<bool> m_debugUnmuteRequested{false};
+    std::atomic<bool> m_debugActivationPending{false};
     std::mutex m_renderMutex;
     std::condition_variable m_renderCond;
     bool m_quitRenderThread{false};
@@ -355,6 +376,7 @@ private:
     mutable std::mutex m_mutex;
     std::condition_variable m_cond;
     bool m_inuse{false};
+    bool m_debugOutputEnabled{false};
     std::shared_ptr<gfx::PrerenderedFontCache> m_fontCache;
 
     std::unique_ptr<common::AsListener> m_asLstnr;

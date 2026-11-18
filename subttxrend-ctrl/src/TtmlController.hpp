@@ -65,6 +65,8 @@ class TtmlController final : public ControllerInterface
     void processTimestamp(const protocol::Packet& dataPacket) override;
     void processInfo(const protocol::Packet& packet) override;
     void mute(bool muted) override;
+    bool isDebugUnmuteTarget() const override { return true; }
+    void debugUnmute() override;
     bool wantsData(protocol::PacketChannelSpecific const& packet) const override;
 
     void flush() override;

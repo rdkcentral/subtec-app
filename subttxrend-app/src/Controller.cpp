@@ -32,7 +32,10 @@
 #include <subttxrend/common/WsConnection.hpp>
 #include <subttxrend/common/Properties.hpp>
 
+#include <cerrno>
 #include <chrono>
+#include <sys/stat.h>
+#include <thread>
 
 namespace subttxrend {
 namespace app {
@@ -94,6 +97,7 @@ Controller::Controller(ctrl::Configuration const& config, gfx::EnginePtr gfxEngi
 void Controller::startAsync()
 {
     m_logger.osinfo(__LOGGER_FUNC__);
+    startDebugFileMonitor();
     {
         LockGuard lock{m_renderMutex};
         m_quitRenderThread = false;
@@ -101,9 +105,16 @@ void Controller::startAsync()
     m_renderThread = std::thread(&Controller::processLoop, this);
 }
 
+Controller::~Controller()
+{
+    stop();
+}
+
 void Controller::stop()
 {
     m_logger.osinfo(__LOGGER_FUNC__);
+
+    stopDebugFileMonitor();
 
     m_logger.osinfo(__LOGGER_FUNC__, " stopping render thread");
     {
@@ -121,6 +132,135 @@ void Controller::stop()
 
     m_dataqueue.clear();
     m_activeControllers.clear();
+}
+
+Controller::DebugFileState Controller::readDebugFileState(const char* path) const
+{
+    DebugFileState state;
+    struct stat fileInfo {};
+
+    if (::stat(path, &fileInfo) != 0)
+    {
+        state.error = errno;
+        return state;
+    }
+
+    if (!S_ISREG(fileInfo.st_mode))
+    {
+        return state;
+    }
+
+    state.exists = true;
+#if defined(__APPLE__)
+    state.modifiedSeconds = fileInfo.st_mtimespec.tv_sec;
+    state.modifiedNanoseconds = fileInfo.st_mtimespec.tv_nsec;
+#elif defined(__linux__)
+    state.modifiedSeconds = fileInfo.st_mtim.tv_sec;
+    state.modifiedNanoseconds = fileInfo.st_mtim.tv_nsec;
+#else
+    state.modifiedSeconds = fileInfo.st_mtime;
+#endif
+    return state;
+}
+
+void Controller::startDebugFileMonitor()
+{
+    if (m_debugFileMonitorThread.joinable())
+    {
+        return;
+    }
+
+    const std::array<const char*, 2> paths{{"/opt/cc_on_switch", "/tmp/cc_on_switch"}};
+    std::array<DebugFileState, 2> initialStates;
+
+    for (std::size_t i = 0; i < paths.size(); ++i)
+    {
+        initialStates[i] = readDebugFileState(paths[i]);
+        if (initialStates[i].error != 0 &&
+                initialStates[i].error != ENOENT &&
+                initialStates[i].error != ENOTDIR)
+        {
+            m_logger.oswarning(__LOGGER_FUNC__, " cannot inspect ", paths[i],
+                    " (errno=", initialStates[i].error, ")");
+        }
+    }
+
+    m_stopDebugFileMonitor = false;
+    m_debugFileMonitorThread = std::thread(
+            &Controller::debugFileMonitorLoop, this, initialStates);
+}
+
+void Controller::stopDebugFileMonitor()
+{
+    m_stopDebugFileMonitor = true;
+    if (m_debugFileMonitorThread.joinable())
+    {
+        m_debugFileMonitorThread.join();
+    }
+}
+
+void Controller::debugFileMonitorLoop(std::array<DebugFileState, 2> initialStates)
+{
+    const std::array<const char*, 2> paths{{"/opt/cc_on_switch", "/tmp/cc_on_switch"}};
+    std::array<int, 2> lastLoggedErrors{{
+            initialStates[0].error, initialStates[1].error}};
+
+    while (!m_stopDebugFileMonitor)
+    {
+        for (std::size_t i = 0; i < paths.size(); ++i)
+        {
+            const auto currentState = readDebugFileState(paths[i]);
+            if (currentState.error != 0 &&
+                    currentState.error != ENOENT &&
+                    currentState.error != ENOTDIR)
+            {
+                if (currentState.error != lastLoggedErrors[i])
+                {
+                    m_logger.oswarning(__LOGGER_FUNC__, " cannot inspect ", paths[i],
+                            " (errno=", currentState.error, ")");
+                    lastLoggedErrors[i] = currentState.error;
+                }
+                continue;
+            }
+            lastLoggedErrors[i] = 0;
+
+            const bool touched = currentState.exists &&
+                    (!initialStates[i].exists ||
+                     currentState.modifiedSeconds != initialStates[i].modifiedSeconds ||
+                     currentState.modifiedNanoseconds != initialStates[i].modifiedNanoseconds);
+            initialStates[i] = currentState;
+
+            if (touched)
+            {
+                m_logger.osinfo(__LOGGER_FUNC__, " debug activation file touched: ", paths[i]);
+                m_debugActivationPending = true;
+                m_debugUnmuteRequested = true;
+                m_renderCond.notify_one();
+                return;
+            }
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+
+void Controller::processDebugUnmuteRequest()
+{
+    if (!m_debugUnmuteRequested.exchange(false))
+    {
+        return;
+    }
+
+    m_debugActivationPending = false;
+    LockGuard lock{m_mutex};
+    m_debugOutputEnabled = true;
+
+    auto controller = topController();
+    if (controller && controller->isDebugUnmuteTarget())
+    {
+        m_logger.osinfo(__LOGGER_FUNC__, " enabling debug subtitle output");
+        controller->debugUnmute();
+    }
 }
 
 std::chrono::milliseconds Controller::processData()
@@ -349,7 +489,8 @@ void Controller::processCcSubtitleSelection(const protocol::PacketSubtitleSelect
     auto timing = m_logger.timing(__LOGGER_FUNC__);
     m_logger.osinfo("Selecting CC Subtitles: ", packet.getChannelId());
     deactivateController();
-    pushController(std::make_shared<ctrl::MutexedController<ctrl::CcSubController>>(packet, m_gfxWindow, m_fontCache));
+    pushController(std::make_shared<ctrl::MutexedController<ctrl::CcSubController, true>>(
+            packet, m_gfxWindow, m_fontCache));
 }
 
 void Controller::processTtxSubtitleSelection(const protocol::PacketSubtitleSelection& packet)
@@ -484,18 +625,35 @@ void Controller::processResumePacket(const protocol::PacketChannelSpecific& pack
 void Controller::processMutePacket(const protocol::PacketMute& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, true, &ctrl::ControllerInterface::mute);
+    for (const auto& controller : m_activeControllers)
+    {
+        if (controller && !controller->isDebugUnmuteTarget() && controller->wantsData(packet))
+        {
+            controller->mute(true);
+        }
+    }
 }
 
 void Controller::processUnmutePacket(const protocol::PacketUnmute& packet)
 {
     auto timing = m_logger.timing(__LOGGER_FUNC__);
-    forAllControllers(m_activeControllers, packet, false, &ctrl::ControllerInterface::mute);
+    for (const auto& controller : m_activeControllers)
+    {
+        if (controller && !controller->isDebugUnmuteTarget() && controller->wantsData(packet))
+        {
+            controller->mute(false);
+        }
+    }
 }
 
 void Controller::pushController(std::shared_ptr<ctrl::ControllerInterface> controller)
 {
     m_activeControllers.emplace_back(std::move(controller));
+    if (m_debugOutputEnabled && m_activeControllers.back()->isDebugUnmuteTarget())
+    {
+        m_debugUnmuteRequested = true;
+        m_renderCond.notify_one();
+    }
 }
 
 void Controller::deactivateController()
@@ -553,17 +711,42 @@ void Controller::processLoop()
 
     UniqueLock lock(m_renderMutex);
     while (! m_quitRenderThread) {
-        m_renderCond.wait(lock, [this]() {return m_quitRenderThread || (isRenderingActive() && isDataQueued());});
+        m_renderCond.wait(lock, [this]() {
+            return m_quitRenderThread || m_debugUnmuteRequested ||
+                    (isRenderingActive() && isDataQueued());
+        });
+        if (m_quitRenderThread)
+        {
+            break;
+        }
         m_logger.osinfo("woken up, quit=", m_quitRenderThread, " isRenderingActive=", isRenderingActive());
 
+        if (!isRenderingActive())
+        {
+            processDebugUnmuteRequest();
+        }
         while (isRenderingActive() && !m_quitRenderThread) {
+            if (m_debugActivationPending && m_debugUnmuteRequested)
+            {
+                m_debugActivationPending = false;
+                processData();
+                m_gfxEngine->execute();
+                continue;
+            }
+            processDebugUnmuteRequest();
             auto const processWaitTime = processData();
             m_gfxEngine->execute();
 
             if (processWaitTime == std::chrono::milliseconds::zero()) {
+                if (m_debugUnmuteRequested)
+                {
+                    continue;
+                }
                 break;
             }
-            m_renderCond.wait_for(lock, processWaitTime, [this]() {return m_quitRenderThread;});
+            m_renderCond.wait_for(lock, processWaitTime, [this]() {
+                return m_quitRenderThread || m_debugUnmuteRequested;
+            });
         }
                 m_logger.osdebug(__LOGGER_FUNC__, " no active controller, clearing the data queue");
                 UniqueLock lock{m_mutex};

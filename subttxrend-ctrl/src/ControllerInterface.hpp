@@ -58,6 +58,8 @@ class ControllerInterface : private common::NonCopyable
 
     virtual void mute(bool mute) = 0;
     virtual bool wantsData(protocol::PacketChannelSpecific const& packet) const = 0;
+    virtual bool isDebugUnmuteTarget() const { return false; }
+    virtual void debugUnmute() {}
 
     virtual void processTimestamp(const protocol::Packet& ){}
     virtual void processInfo(const protocol::Packet& ){}
@@ -67,7 +69,7 @@ class ControllerInterface : private common::NonCopyable
     virtual void processSetCCAttributesPacket(const protocol::PacketSetCCAttributes&){}
 };
 
-template<class Ctrl>
+template<class Ctrl, bool DebugUnmuteTarget = false>
 class MutexedController final : public ControllerInterface
 {
   public:
@@ -105,6 +107,20 @@ class MutexedController final : public ControllerInterface
     {
         std::lock_guard<std::mutex> lock{mutex};
         controller.mute(m);
+    }
+
+    bool isDebugUnmuteTarget() const override
+    {
+        return DebugUnmuteTarget;
+    }
+
+    void debugUnmute() override
+    {
+        if (DebugUnmuteTarget)
+        {
+            std::lock_guard<std::mutex> lock{mutex};
+            controller.mute(false);
+        }
     }
 
     bool wantsData(protocol::PacketChannelSpecific const& packet) const override

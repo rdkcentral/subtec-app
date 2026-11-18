@@ -115,6 +115,33 @@ public:
      */
     virtual void startBlockingApplicationWindow() = 0;
 #endif
+
+    /**
+     * Sets the background image.
+     *
+     * The image is stretched to cover the whole output and the attached
+     * windows are composited on top of it, so transparent and translucent
+     * window content shows the image underneath.
+     *
+     * The image is only shown while at least one attached window is visible.
+     * Subtitle renderers hide their window when subtitles are muted or
+     * stopped, so the image is hidden then too, and reappears on unmute or
+     * start.
+     *
+     * The pixel format is the same as for DrawContext::drawBitmap: 32-bit
+     * ARGB in native (little endian) byte order, with straight
+     * (non-premultiplied) alpha. The image must not be modified while it is
+     * set; set a new image instead.
+     *
+     * @note Only supported by the Wayland backends; other backends ignore it.
+     *
+     * @param image
+     *      Image to show, or nullptr to remove the background image.
+     *
+     * @throws std::invalid_argument
+     *      If the image has an empty size or its stride or buffer is too small.
+     */
+    virtual void setBackgroundImage(std::shared_ptr<const Bitmap> image) = 0;
 };
 
 /**

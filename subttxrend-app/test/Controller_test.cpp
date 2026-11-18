@@ -51,6 +51,7 @@ public:
     void attach(WindowPtr window) override {}
     void detach(WindowPtr window) override {}
     FontStripPtr createFontStrip(const Size& glyphSize, std::size_t numGlyphs) override { return nullptr; }
+    void setBackgroundImage(std::shared_ptr<const Bitmap> image) override {}
 };
 
 /**

@@ -124,6 +124,7 @@ public:
     {
         return std::make_shared<MockFontStrip>(glyphSize, glyphCount);
     }
+    void setBackgroundImage(std::shared_ptr<const subttxrend::gfx::Bitmap> image) override {}
 };
 
 class MockConfigProvider : public subttxrend::common::ConfigProvider

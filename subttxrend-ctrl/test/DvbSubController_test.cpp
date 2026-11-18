@@ -46,6 +46,7 @@ public:
     FontStripPtr createFontStrip(const Size&, const std::size_t) override { return nullptr; }
     void attach(WindowPtr) override {}
     void detach(WindowPtr) override {}
+    void setBackgroundImage(std::shared_ptr<const Bitmap> image) override {}
 };
 
 // Mock Window for testing

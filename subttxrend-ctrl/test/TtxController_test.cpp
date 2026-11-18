@@ -127,6 +127,7 @@ public:
     }
     void attach(WindowPtr window) override {}
     void detach(WindowPtr window) override {}
+    void setBackgroundImage(std::shared_ptr<const Bitmap> image) override {}
 };
 
 // Mock ConfigProvider for testing

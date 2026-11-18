@@ -202,6 +202,11 @@ public:
         (void)window;
     }
 
+    void setBackgroundImage(std::shared_ptr<const subttxrend::gfx::Bitmap> image) override
+    {
+        (void)image;
+    }
+
 private:
     FontStripBehavior m_behavior;
 };

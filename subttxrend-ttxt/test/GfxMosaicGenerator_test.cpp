@@ -101,6 +101,7 @@ public:
 
     MockFontStripPtr getLastCreatedFontStrip() const { return m_lastCreatedFontStrip; }
     std::uint16_t getCreationCount() const { return m_creationCount; }
+    void setBackgroundImage(std::shared_ptr<const subttxrend::gfx::Bitmap> image) override {}
 
 private:
     MockFontStripPtr m_lastCreatedFontStrip;

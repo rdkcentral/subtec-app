@@ -70,6 +70,8 @@ public:
 
     virtual void detach(WindowPtr window) override;
 
+    virtual void setBackgroundImage(std::shared_ptr<const Bitmap> image) override;
+
 #ifdef __APPLE__
     virtual void startBlockingApplicationWindow() override;
 #endif
@@ -88,6 +90,8 @@ private:
 
     virtual void enumerateVisibleWindows(BackendWindowEnumerator& enumerator)
             override;
+
+    virtual BackgroundImage getBackgroundImage() override;
 
     virtual void focusGained() override;
 
@@ -108,6 +112,9 @@ private:
 
     /** Queue with events. */
     std::queue<KeyEvent> m_keyEventsQueue;
+
+    /** Background image drawn below all windows. */
+    BackgroundImage m_backgroundImage;
 };
 
 } // namespace gfx

@@ -122,6 +122,28 @@ if(CMAKE_BUILD_STANDALONE)
                     ${CMAKE_CURRENT_SOURCE_DIR}/../src/WebVTTConfig.cpp
                     TestRunner.cpp
                     )
+
+    add_cppunit_test(WebvttEngineImpl_test
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/WebVTTConfig.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/WebVTTRenderer.cpp
+                    WebvttEngineImpl_test_build.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/LineBuilder.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/Parser/WebVTTStyle.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/Parser/WebVTTCue.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/Parser/WebVTTDocument.cpp
+                    WebvttEngineImpl_test.cpp
+                    TestRunner.cpp
+                    )
+
+    add_cppunit_test(WebVTTRenderer_test
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/WebVTTRenderer.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/LineBuilder.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/Parser/WebVTTStyle.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/Parser/WebVTTCue.cpp
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../src/Parser/WebVTTDocument.cpp
+                    WebVTTRenderer_test.cpp
+                    TestRunner.cpp
+                    )
 else()
     add_cppunit_test(All_test
                     WebvttParser_test.cpp

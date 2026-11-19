@@ -1,0 +1,16 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:05.000 align:start position:0% size:0%
+CASE 1 short text fits on screen.
+
+00:00:05.000 --> 00:00:10.000 align:start position:0% size:0%
+CASE 2 right edge clipping with zero width overflow sample text zero width overflow sample text zero width overflow sample text zero width overflow sample text.
+
+00:00:10.000 --> 00:00:15.000 align:center position:50% size:0%
+CASE 3 centered zero width cue can overflow on both sides and look oddly anchored instead of behaving like a narrow wrapped subtitle box.
+
+00:00:15.000 --> 00:00:20.000 align:end position:100% size:0%
+CASE 4 end aligned zero width cue is anchored to the right edge and the long single line can extend leftward far beyond where a wrapped cue would normally sit on screen.
+
+00:00:20.000 --> 00:00:30.000
+NORMAL right edge clipping with zero width overflow sample text zero width overflow sample text zero width overflow sample text zero width overflow sample text.

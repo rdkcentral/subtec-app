@@ -43,6 +43,8 @@ CPPUNIT_TEST(TestEscapedCharacters);
 CPPUNIT_TEST(TestRegionHandling);
 CPPUNIT_TEST(TestRegionScrollUp);
 CPPUNIT_TEST(TestRegionLineLimit);
+CPPUNIT_TEST(TestZeroWidthCueFallback);
+CPPUNIT_TEST(TestZeroWidthRegionFallback);
 CPPUNIT_TEST(TestOpacityAndEdgeColor);
 CPPUNIT_TEST(TestUnknownStyleFallback);
 CPPUNIT_TEST_SUITE_END();
@@ -540,6 +542,58 @@ three
         CPPUNIT_ASSERT_EQUAL(std::size_t{2}, output.size());
         CPPUNIT_ASSERT_EQUAL(std::string("three\ntwo\n"), rendered);
         CPPUNIT_ASSERT(rendered.find("one") == std::string::npos);
+    }
+
+    void TestZeroWidthCueFallback() {
+        std::istringstream zero_width_cue(R"(WEBVTT
+
+00:01:00.000 --> 00:01:10.000 align:start position:0% size:0%
+1234567890
+
+)");
+        LineBuilder builder{1920, 1080};
+        Converter converter{1920, 1080};
+        auto output = buildOutputLines(builder, zero_width_cue);
+        std::string rendered = renderOutputLines(output);
+
+        CPPUNIT_ASSERT_EQUAL(std::size_t{1}, output.size());
+        CPPUNIT_ASSERT_EQUAL(std::string("1234567890\n"), rendered);
+
+        const auto &line = output.front();
+        CPPUNIT_ASSERT_EQUAL(0, converter.vwToWidthPixels(0));
+        CPPUNIT_ASSERT_EQUAL(converter.screenPaddingWidthPixels(), line.lineRectangle.m_x);
+        CPPUNIT_ASSERT(line.lineWidth > 0);
+        CPPUNIT_ASSERT(line.lineRectangle.m_w > 0);
+        CPPUNIT_ASSERT(line.lineRectangle.m_w > converter.vwToWidthPixels(0));
+    }
+
+    void TestZeroWidthRegionFallback() {
+        std::istringstream zero_width_region(R"(WEBVTT
+
+REGION
+id:region1
+width:0%
+lines:3
+regionanchor:0%,100%
+viewportanchor:10%,90%
+
+00:01:00.000 --> 00:01:10.000 region:region1 align:start position:0% size:100%
+1234567890
+)");
+        LineBuilder builder{1920, 1080};
+        Converter converter{1920, 1080};
+        auto output = buildOutputLines(builder, zero_width_region, true);
+        std::string rendered = renderOutputLines(output);
+
+        CPPUNIT_ASSERT_EQUAL(std::size_t{1}, output.size());
+        CPPUNIT_ASSERT_EQUAL(std::string("1234567890\n"), rendered);
+
+        const auto &line = output.front();
+        const auto expectedX = converter.vwToWidthPixels(1000) + converter.screenPaddingWidthPixels();
+        CPPUNIT_ASSERT_EQUAL(expectedX, line.lineRectangle.m_x);
+        CPPUNIT_ASSERT(line.lineWidth > 0);
+        CPPUNIT_ASSERT(line.lineRectangle.m_w > 0);
+        CPPUNIT_ASSERT(line.lineRectangle.m_w > converter.vwToWidthPixels(0));
     }
 
     void TestOpacityAndEdgeColor() {

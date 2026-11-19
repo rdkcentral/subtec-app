@@ -32,6 +32,8 @@ namespace gfx
 class ColorArgb
 {
 public:
+    static const ColorArgb TRANSPARENT;
+
     /**
      * Constructor.
      *
@@ -100,6 +102,12 @@ public:
                 && (lhs.m_g == rhs.m_g)
                 && (lhs.m_r == rhs.m_r)
                 && (lhs.m_a == rhs.m_a));
+    }
+
+    friend bool operator!=(const ColorArgb& lhs,
+                           const ColorArgb& rhs)
+    {
+        return !(lhs == rhs);
     }
 
 public:

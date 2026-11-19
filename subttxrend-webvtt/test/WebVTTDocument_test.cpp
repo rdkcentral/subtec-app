@@ -56,6 +56,8 @@ CPPUNIT_TEST(testCueWithUnknownRegion);
 CPPUNIT_TEST(testRegionWithInvalidFields);
 CPPUNIT_TEST(testXTimestampMapInvalidFields);
 CPPUNIT_TEST(testDuplicateCueIdentifiers);
+CPPUNIT_TEST(testTruncatedOneByteBomHeader);
+CPPUNIT_TEST(testTruncatedTwoByteBomHeader);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -482,6 +484,36 @@ Special Characters
             iss.str(bad);
             CPPUNIT_ASSERT_THROW_MESSAGE(bad, doc.checkValidWebVTTHeader(iss), InvalidCueException);
         }
+    }
+
+    void testTruncatedOneByteBomHeader()
+    {
+        std::string input(1, static_cast<char>(0xEF));
+        input += "\nWEBVTT\n\n00:00:00.000 --> 00:00:05.000\nText\n";
+        std::istringstream stream(input);
+        WebVTTDocument document;
+        CueList cues;
+
+        CPPUNIT_ASSERT_THROW(
+            std::tie(cues, std::ignore) = document.parseCueList(stream),
+            InvalidCueException);
+        CPPUNIT_ASSERT(cues.empty());
+    }
+
+    void testTruncatedTwoByteBomHeader()
+    {
+        std::string input;
+        input.push_back(static_cast<char>(0xEF));
+        input.push_back(static_cast<char>(0xBB));
+        input += "\nWEBVTT\n\n00:00:00.000 --> 00:00:05.000\nText\n";
+        std::istringstream stream(input);
+        WebVTTDocument document;
+        CueList cues;
+
+        CPPUNIT_ASSERT_THROW(
+            std::tie(cues, std::ignore) = document.parseCueList(stream),
+            InvalidCueException);
+        CPPUNIT_ASSERT(cues.empty());
     }
 
     void testXTimestampMap()

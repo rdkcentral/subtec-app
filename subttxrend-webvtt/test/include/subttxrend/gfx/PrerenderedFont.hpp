@@ -18,13 +18,11 @@
 */
 #pragma once
 
-#include <iostream>
 #include <vector>
-#include <iostream>
 #include <string>
 #include <memory>
 #include <sstream>
-#include <string>
+#include <cstdint>
 
 namespace subttxrend
 {
@@ -36,31 +34,57 @@ static constexpr int FONT_HEIGHT_PIXELS = 40;
 
 class GlyphData
 {
-    GlyphData() { std::cout << "I'm a glyph\n"; }
+public:
+    float xOffset = 0.f;
+    float advanceX = 0.f;
+    std::uint32_t glyphIndex = 0;
+    std::uint32_t codepoint = 0;
 };
 
 class TextTokenData
 {
 public:
-    TextTokenData(const std::string &str = {}) : mStr(str), isWhite(false), totalAdvanceX(str.length()*FONT_WIDTH_PIXELS), glyphs() {}
+    TextTokenData(const std::string &str = {}) : mStr(str), totalAdvanceX(static_cast<float>(str.length()*FONT_WIDTH_PIXELS)), glyphs(), isWhite(false), forceNewline(false)
+    {
+        glyphs.reserve(str.length());
+        for (std::size_t i = 0; i < str.length(); ++i)
+        {
+            GlyphData glyph;
+            glyph.xOffset = static_cast<float>(i * FONT_WIDTH_PIXELS);
+            glyph.advanceX = static_cast<float>(FONT_WIDTH_PIXELS);
+            glyph.codepoint = static_cast<std::uint32_t>(static_cast<unsigned char>(str[i]));
+            glyph.glyphIndex = glyph.codepoint;
+            glyphs.push_back(glyph);
+        }
+    }
 
     std::string mStr;
-    bool isWhite;
-    int totalAdvanceX;
+    float totalAdvanceX;
     std::vector<GlyphData> glyphs;
+    bool isWhite;
+    bool forceNewline;
 };
 
 class PrerenderedFont
 {
 public:
-    PrerenderedFont()
-    {
-        std::cout << "PrerenderedFont constr\n";
-    }
+    virtual ~PrerenderedFont() = default;
 
-    int getFontHeight() { return FONT_HEIGHT_PIXELS; }
+    virtual std::vector<TextTokenData> textToTokens(const std::string& text) = 0;
 
-    std::vector<TextTokenData> textToTokens(std::string text)
+    virtual std::int32_t getFontHeight() const = 0;
+
+    virtual std::int32_t getFontDescender() const = 0;
+
+    virtual std::int32_t getFontAscender() const = 0;
+
+    virtual std::int32_t getMaxAdvance() const = 0;
+};
+
+class MockPrerenderedFont : public PrerenderedFont
+{
+public:
+    std::vector<TextTokenData> textToTokens(const std::string& text) override
     {
         std::istringstream iss(text);
         std::vector<TextTokenData> tokens;
@@ -75,20 +99,30 @@ public:
 
         return tokens;
     }
+
+    std::int32_t getFontHeight() const override { return FONT_HEIGHT_PIXELS; }
+
+    std::int32_t getFontDescender() const override { return -8; }
+
+    std::int32_t getFontAscender() const override { return FONT_HEIGHT_PIXELS - 8; }
+
+    std::int32_t getMaxAdvance() const override { return FONT_WIDTH_PIXELS; }
 };
 
 class PrerenderedFontCache
 {
 public:
-    std::shared_ptr<PrerenderedFont> getFont(const std::string & fontFamily, int height, int force = true)
+    std::shared_ptr<PrerenderedFont> getFont(const std::string & fontFamily, int height, bool strictHeight = false, bool italics = false)
     {
-        std::cout << "Returning font " << fontFamily << " height " << height << "\n";
-        return std::make_shared<PrerenderedFont>();
+        (void)fontFamily;
+        (void)height;
+        (void)strictHeight;
+        (void)italics;
+        return std::make_shared<MockPrerenderedFont>();
     }
 
     void clear()
     {
-        std::cout << "Clearing the font cache\n";
     }
 };
 }

@@ -30,6 +30,14 @@ namespace subttxrend
 namespace common
 {
 
+struct Timing
+{
+    explicit Timing(const std::string& text = std::string())
+    {
+        (void)text;
+    }
+};
+
 enum class LoggerLevel : std::uint32_t
 {
     /** Logging level - FATAL. */
@@ -55,8 +63,19 @@ class Logger
 {
 public:
     Logger(const std::string& component, const std::string& element, void* ctx = nullptr) 
-    { 
-        //std::cout << "Logger constr for " << component << " " << element << "\n"; 
+    {
+        //std::cout << "Logger constr for " << component << " " << element << "\n";
+    }
+
+    Timing timing(const std::string& text) const
+    {
+        return Timing(text);
+    }
+
+    Timing timing(const std::string& text, LoggerLevel level) const
+    {
+        (void)level;
+        return Timing(text);
     }
     
     template <typename T>

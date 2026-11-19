@@ -35,6 +35,8 @@ class ParserTest : public CppUnit::TestFixture
 {
 CPPUNIT_TEST_SUITE(ParserTest);
     CPPUNIT_TEST(testParseSimpleText);
+    CPPUNIT_TEST(testParseMultipleBreaks);
+    CPPUNIT_TEST(testParseConsecutiveBreaks);
     CPPUNIT_TEST(testParseImageDocument);
     CPPUNIT_TEST(testParseEmptyDocument);
     CPPUNIT_TEST(testParseWithoutTtRoot);
@@ -78,6 +80,38 @@ protected:
         CPPUNIT_ASSERT_EQUAL(std::string("hello parser"), chunk.m_text);
         CPPUNIT_ASSERT_EQUAL(std::string("monospace"), chunk.m_style.getFontFamily());
         CPPUNIT_ASSERT(chunk.m_style.getTextAlign() == StyleSet::TextAlign::RIGHT);
+    }
+
+    void testParseMultipleBreaks()
+    {
+        Parser parser;
+        const auto timeline = parseDocument(parser,
+            makeTextDocument("00:00:00.000", "00:00:01.000",
+                             "<span>first</span><br/><span>middle</span><br/><span>last</span>"));
+
+        const auto& lines = assertSingleEntity(assertSingleDocument(timeline)).m_textLines;
+        CPPUNIT_ASSERT_EQUAL(std::size_t(3), lines.size());
+        CPPUNIT_ASSERT_EQUAL(std::size_t(1), lines[0].size());
+        CPPUNIT_ASSERT_EQUAL(std::size_t(1), lines[1].size());
+        CPPUNIT_ASSERT_EQUAL(std::size_t(1), lines[2].size());
+        CPPUNIT_ASSERT_EQUAL(std::string("first"), lines[0][0].m_text);
+        CPPUNIT_ASSERT_EQUAL(std::string("middle"), lines[1][0].m_text);
+        CPPUNIT_ASSERT_EQUAL(std::string("last"), lines[2][0].m_text);
+    }
+
+    void testParseConsecutiveBreaks()
+    {
+        Parser parser;
+        const auto timeline = parseDocument(parser,
+            makeTextDocument("00:00:00.000", "00:00:01.000", "first<br/><br/>last"));
+
+        const auto& lines = assertSingleEntity(assertSingleDocument(timeline)).m_textLines;
+        CPPUNIT_ASSERT_EQUAL(std::size_t(3), lines.size());
+        CPPUNIT_ASSERT_EQUAL(std::size_t(1), lines[0].size());
+        CPPUNIT_ASSERT(lines[1].empty());
+        CPPUNIT_ASSERT_EQUAL(std::size_t(1), lines[2].size());
+        CPPUNIT_ASSERT_EQUAL(std::string("first"), lines[0][0].m_text);
+        CPPUNIT_ASSERT_EQUAL(std::string("last"), lines[2][0].m_text);
     }
 
     void testParseImageDocument()

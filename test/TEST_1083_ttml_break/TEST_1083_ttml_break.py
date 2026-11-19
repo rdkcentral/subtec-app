@@ -60,9 +60,8 @@ def test_1083():
         'parseAttributes adding tts:fontFamily=proportionalSansSerif']
     assert monitor_log_for_sequence(subtec_copy_path, sequence), "Logs for test_1083 missing"
 
-    # Case 5 validates two successive <br/> transitions with three visible lines.
-    # A truly blank middle line is not observable from the info-level display log,
-    # so this L2 test keeps the middle line visible and verifies line preservation.
+    # The display log verifies text content/order, not line boundaries.
+    # ParserTest covers separate lines and consecutive breaks with a blank line.
     sequence = [
         'displaying: [00:00:00.000-00:00:05.000]: [BR01 direct before br] [BR01 validate direct after br]',
         'displaying: [00:00:06.000-00:00:10.000]: [BR02 pretty print before br] [BR02 validate trimmed indent after br]',

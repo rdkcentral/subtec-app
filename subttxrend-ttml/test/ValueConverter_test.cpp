@@ -42,10 +42,12 @@ CPPUNIT_TEST_SUITE(ValueConverterTest);
     CPPUNIT_TEST(testSizeToPixelsPercent);
     CPPUNIT_TEST(testSizeToPixelsPixel);
     CPPUNIT_TEST(testSizeToPixelsCell);
-    CPPUNIT_TEST(testSizeToPixelsClampAboveThreshold);
     CPPUNIT_TEST(testSizeToPixelsAtThreshold);
     CPPUNIT_TEST(testSizeToPixelsNegativePercent);
     CPPUNIT_TEST(testSizeToPixelsInvalidType);
+    CPPUNIT_TEST(testPixelSizeClampedToMax);
+    CPPUNIT_TEST(testPixelSizeBelowMaxUnclamped);
+    CPPUNIT_TEST(testPixelSizeAtMaxUnclamped);
 CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -248,16 +250,6 @@ protected:
         CPPUNIT_ASSERT_EQUAL(25, pixelSize);
     }
 
-    void testSizeToPixelsClampAboveThreshold()
-    {
-        ValueConverter converter;
-        converter.setSourceSize({200, 300});
-
-        const auto pixelSize = converter.sizeToPixels(percent(5000), 100);
-
-        CPPUNIT_ASSERT_EQUAL(20, pixelSize);
-    }
-
     void testSizeToPixelsAtThreshold()
     {
         ValueConverter converter;
@@ -321,6 +313,44 @@ protected:
         CPPUNIT_ASSERT_EQUAL(y, rectangle.m_y);
         CPPUNIT_ASSERT_EQUAL(width, rectangle.m_w);
         CPPUNIT_ASSERT_EQUAL(height, rectangle.m_h);
+    }
+
+    // With drawingSize.m_h == 320 and DEFAULT_CELL_RESOLUTION.m_h == 15,
+    // PixelDefault == 320 / 15 == 21, so the max allowed size is
+    // lround(21 * 1.5) == 32.
+    void testPixelSizeClampedToMax()
+    {
+        ValueConverter converter;
+        subttxrend::gfx::Size size{640, 320};
+        converter.setSourceSize(size);
+
+        // Requesting a pixel size well above the max must be trimmed to the max,
+        // not to PixelDefault as the pre-fix code incorrectly did.
+        int result = converter.sizeToPixels(DomainValue{DomainValue::Type::PIXEL, 40}, 0);
+
+        CPPUNIT_ASSERT_EQUAL(32, result);
+    }
+
+    void testPixelSizeBelowMaxUnclamped()
+    {
+        ValueConverter converter;
+        subttxrend::gfx::Size size{640, 320};
+        converter.setSourceSize(size);
+
+        int result = converter.sizeToPixels(DomainValue{DomainValue::Type::PIXEL, 25}, 0);
+
+        CPPUNIT_ASSERT_EQUAL(25, result);
+    }
+
+    void testPixelSizeAtMaxUnclamped()
+    {
+        ValueConverter converter;
+        subttxrend::gfx::Size size{640, 320};
+        converter.setSourceSize(size);
+
+        int result = converter.sizeToPixels(DomainValue{DomainValue::Type::PIXEL, 32}, 0);
+
+        CPPUNIT_ASSERT_EQUAL(32, result);
     }
 };
 

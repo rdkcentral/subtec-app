@@ -109,6 +109,19 @@ WindowsMap toWindowsMap(uint8_t wm)
     return retval;
 }
 
+size_t utf8GlyphCount(const std::string &str)
+{
+    const int NUL_CHAR = 0b10000000;
+    const int NUL_CHAR_MASK = 0b11000000;
+
+    size_t count = 0;
+    for (auto ch : str)
+    {
+        count += (ch & NUL_CHAR_MASK) != NUL_CHAR;
+    }
+    return count;
+}
+
 void setOpacity(uint32_t &color, uint8_t opacity)
 {
     color &= 0x00ffffff;

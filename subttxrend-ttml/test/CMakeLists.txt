@@ -119,6 +119,7 @@ add_cppunit_test(AttributeHandlers_test
 add_cppunit_test(ValueConverter_Test
                  ValueConverter_test.cpp
                  TestRunner.cpp
+                 Logger.cpp
                  ../src/ValueConverter.cpp
                  ../src/Parser/AttributeHandlers.cpp
                  )

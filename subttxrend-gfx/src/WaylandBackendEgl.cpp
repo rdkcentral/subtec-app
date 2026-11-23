@@ -49,22 +49,30 @@ GLchar VERTEX_SHADER_SOURCE[] = ""
         "} \n";
 
 // The shader swaps pixel format from BGRA (little endian ARGB) to RGBA.
+// Textures hold straight alpha; colours are premultiplied before compositing
+// windows (text over window background) over the optional background image.
 GLchar FRAGMENT_SHADER_SOURCE[] = ""
         "precision mediump float; \n"
         "uniform sampler2D uTexture; \n"
         "uniform sampler2D uBgTexture; \n"
+        "uniform sampler2D uImageTexture; \n"
+        "uniform float uImageEnabled; \n"
         "varying vec2 vTexCoordinate; \n"
         "void main() \n"
         "{ \n"
         " vec4 textColor = texture2D( uTexture, vTexCoordinate ).bgra; \n"
         " vec4 backgroundColor = texture2D( uBgTexture, vTexCoordinate ).bgra; \n"
+        " vec4 imageColor = texture2D( uImageTexture, vTexCoordinate ).bgra; \n"
         " textColor.rgb *= textColor.a; \n"
         " backgroundColor.rgb *= backgroundColor.a; \n"
-        " gl_FragColor = textColor + backgroundColor*(1.0-textColor.a); \n"
+        " imageColor.rgb *= imageColor.a; \n"
+        " vec4 windowColor = textColor + backgroundColor*(1.0-textColor.a); \n"
+        " gl_FragColor = windowColor + imageColor*(1.0-windowColor.a) * uImageEnabled; \n"
         "} \n";
 
 const int TEXT_TEXTURE = 0;
 const int BACKGROUND_TEXTURE = 1;
+const int IMAGE_TEXTURE_UNIT = 2;
 } // namespace <anonymous>
 
 //------------------------------------------
@@ -78,6 +86,9 @@ WaylandBackendEgl::WaylandBackendEgl(BackendListener* listener) :
         m_eglWindow(nullptr),
         m_eglSurface(nullptr),
         m_textureUniformHandle(-1),
+        m_textureBgUniformHandle(-1),
+        m_textureImageUniformHandle(-1),
+        m_imageEnabledUniformHandle(-1),
         m_positionAttribHandle(-1),
         m_textureCoordinateHandle(-1),
         m_clearBufferSize(0),
@@ -250,6 +261,8 @@ bool WaylandBackendEgl::initRendering()
 
     m_textureUniformHandle = glGetUniformLocation(m_program.get(), "uTexture");
     m_textureBgUniformHandle = glGetUniformLocation(m_program.get(), "uBgTexture");
+    m_textureImageUniformHandle = glGetUniformLocation(m_program.get(), "uImageTexture");
+    m_imageEnabledUniformHandle = glGetUniformLocation(m_program.get(), "uImageEnabled");
     m_positionAttribHandle = glGetAttribLocation(m_program.get(), "aPosition");
     m_textureCoordinateHandle = glGetAttribLocation(m_program.get(),
             "aTexCoordinate");
@@ -404,10 +417,89 @@ bool WaylandBackendEgl::drawOnTexture(const Size& contentSize)
     return true;
 }
 
-void WaylandBackendEgl::drawTexturedObject(const Size& contentSize)
+bool WaylandBackendEgl::updateImageTexture(const BackgroundImage& background)
 {
-    g_logger.trace("%s - size=%dx%d", __func__, contentSize.m_w,
-            contentSize.m_h);
+    if (!background.m_image)
+    {
+        if (m_imageTexture)
+        {
+            g_logger.info("%s - background image removed", __func__);
+            m_imageTexture.reset();
+        }
+        m_imageGeneration = background.m_generation;
+        m_imageValid = false;
+        return false;
+    }
+
+    if (background.m_generation == m_imageGeneration)
+    {
+        return m_imageValid;
+    }
+
+    m_imageGeneration = background.m_generation;
+    m_imageValid = false;
+
+    const auto& image = *background.m_image;
+
+    g_logger.info("%s - uploading background image %dx%d", __func__,
+            image.m_width, image.m_height);
+
+    if (!m_imageTexture)
+    {
+        m_imageTexture = glcpp::TexturePtr(glcpp::GlUtils::glGenTexture());
+        if (!m_imageTexture)
+        {
+            g_logger.error("%s - texture not created, error=%d", __func__,
+                    glGetError());
+            return false;
+        }
+    }
+
+    glActiveTexture(GL_TEXTURE0 + IMAGE_TEXTURE_UNIT);
+    glBindTexture(GL_TEXTURE_2D, m_imageTexture.get());
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGetError(); // clear error
+
+    const auto rowBytes = static_cast<std::uint32_t>(image.m_width) * 4;
+    if (image.m_stride == rowBytes)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.m_width, image.m_height,
+                0, GL_RGBA, GL_UNSIGNED_BYTE, image.m_buffer.data());
+    }
+    else
+    {
+        // GLES2 has no GL_UNPACK_ROW_LENGTH, so padded rows are uploaded one by one
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.m_width, image.m_height,
+                0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        for (std::int32_t y = 0; y < image.m_height; ++y)
+        {
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y, image.m_width, 1, GL_RGBA,
+                    GL_UNSIGNED_BYTE, image.m_buffer.data() + y * image.m_stride);
+        }
+    }
+
+    if (checkForGlError())
+    {
+        g_logger.error("%s - cannot upload background image of size %dx%d",
+                __func__, image.m_width, image.m_height);
+        m_imageTexture.reset();
+        return false;
+    }
+
+    m_imageValid = true;
+    return true;
+}
+
+void WaylandBackendEgl::drawTexturedObject(const Size& contentSize,
+                                           bool drawImage)
+{
+    g_logger.trace("%s - size=%dx%d image=%d", __func__,
+            contentSize.m_w, contentSize.m_h, drawImage);
 
     if (!m_textures[TEXT_TEXTURE])
     {
@@ -417,6 +509,11 @@ void WaylandBackendEgl::drawTexturedObject(const Size& contentSize)
     if (!m_textures[BACKGROUND_TEXTURE])
     {
         g_logger.info("%s - background texture not available, skipping", __func__);
+        return;
+    }
+    if (drawImage && !m_imageTexture)
+    {
+        g_logger.info("%s - image texture not available, skipping", __func__);
         return;
     }
 
@@ -440,16 +537,21 @@ void WaylandBackendEgl::drawTexturedObject(const Size& contentSize)
     // Set the active texture unit to texture unit 0.
     glActiveTexture(GL_TEXTURE0);
 
-    // Bind the texture to this unit.
+    // Bind the textures to their units.
     glBindTexture(GL_TEXTURE_2D, m_textures[TEXT_TEXTURE].get());
 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_textures[BACKGROUND_TEXTURE].get());
 
+    glActiveTexture(GL_TEXTURE0 + IMAGE_TEXTURE_UNIT);
+    glBindTexture(GL_TEXTURE_2D, m_imageTexture.get());
+
     // Tell the texture uniform sampler to use this texture in the shader
     // by binding to texture unit 0.
     glUniform1i(m_textureUniformHandle, 0);
     glUniform1i(m_textureBgUniformHandle, 1);
+    glUniform1i(m_textureImageUniformHandle, IMAGE_TEXTURE_UNIT);
+    glUniform1f(m_imageEnabledUniformHandle, drawImage ? 1.0f : 0.0f);
 
     // Load the vertex data
     glVertexAttribPointer(m_positionAttribHandle, 3, GL_FLOAT, GL_FALSE, 0,
@@ -495,6 +597,12 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
 
     const bool anythingToDraw = (contentSize.m_w > 0) || (contentSize.m_h > 0);
 
+    // The image is kept up to date while hidden, so it shows at once when a window becomes visible.
+    // It is only drawn together with visible windows, so it is hidden while subtitles are muted
+    // or stopped.
+    const bool imageAvailable = updateImageTexture(getListener()->getBackgroundImage());
+    const bool imageToDraw = anythingToDraw && imageAvailable;
+
     // clear with transparent color
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -530,7 +638,7 @@ void WaylandBackendEgl::redraw(const waylandcpp::Surface1::Ptr& surface)
             }
         }
 
-        drawTexturedObject(contentSize);
+        drawTexturedObject(contentSize, imageToDraw);
     }
     else
     {

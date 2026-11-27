@@ -122,9 +122,16 @@ public:
      * @param attributes
      *      Initial attributes.
      */
-    WebVTTAttributes operator=(const WebVTTAttributes &attributes)
+    WebVTTAttributes& operator=(const WebVTTAttributes &attributes)
     {
-        return WebVTTAttributes(attributes);
+        if (this != &attributes)
+        {
+            std::lock(m_mutex, attributes.m_mutex);
+            std::lock_guard<std::mutex> lock1(m_mutex, std::adopt_lock);
+            std::lock_guard<std::mutex> lock2(attributes.m_mutex, std::adopt_lock);
+            m_attributes = attributes.m_attributes;
+        }
+        return *this;
     }
 
     /**
@@ -192,10 +199,17 @@ public:
      */
     void update(const WebVTTAttributes &attributes)
     {
-        std::lock_guard<std::mutex> lock1(attributes.m_mutex);
-        for (auto &attribute : attributes.m_attributes)
+        if (this == &attributes)
         {
-            std::lock_guard<std::mutex> lock2(m_mutex);
+            return;
+        }
+
+        std::lock(m_mutex, attributes.m_mutex);
+        std::lock_guard<std::mutex> lock1(m_mutex, std::adopt_lock);
+        std::lock_guard<std::mutex> lock2(attributes.m_mutex, std::adopt_lock);
+
+        for (const auto &attribute : attributes.m_attributes)
+        {
             m_attributes[attribute.first] = attribute.second;
         }
     }

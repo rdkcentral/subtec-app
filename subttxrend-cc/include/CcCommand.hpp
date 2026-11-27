@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <array>
+#include <string>
 
 namespace subttxrend
 {
@@ -398,6 +399,12 @@ Command getCommand(CommandCode code);
 using WindowsMap = std::array<bool, MAX_WINDOWS>;
 WindowsMap toWindowsMap(uint8_t wm);
 void setOpacity(uint32_t &color, uint8_t opacity);
+
+/**
+ * Counts the number of UTF-8 encoded characters (glyphs) in a string,
+ * i.e. the byte count excluding continuation bytes.
+ */
+size_t utf8GlyphCount(const std::string &str);
 
 } // namespace cc
 } // namespace subttxrend

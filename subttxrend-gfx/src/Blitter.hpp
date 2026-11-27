@@ -422,25 +422,26 @@ inline void Blitter::fillRectangle(DstPixmapType& dstPixmap,
                                    const Rectangle& dstRect,
                                    DstPixelType value)
 {
-    int width = dstRect.m_w;
-    int safeX = dstPixmap.getWidth()/10;
-
-    if (!checkRectangle(dstPixmap, dstRect))
+    if ((dstRect.m_w <= 0) || (dstRect.m_h <= 0))
     {
-	if ((dstRect.m_w > dstPixmap.getWidth()) || (dstRect.m_x > (dstPixmap.getWidth() - dstRect.m_w)))
-	    width = dstPixmap.getWidth() - safeX - dstRect.m_x;
-        else
-            return;
+        return;
     }
 
-    const int lx = dstRect.m_x + width;
-    const int ly = dstRect.m_y + dstRect.m_h;
+    const int cx0 = std::max(0, dstRect.m_x);
+    const int cy0 = std::max(0, dstRect.m_y);
+    const int cx1 = std::min(dstRect.m_x + dstRect.m_w, dstPixmap.getWidth());
+    const int cy1 = std::min(dstRect.m_y + dstRect.m_h, dstPixmap.getHeight());
 
-    for (int cy = dstRect.m_y; cy < ly; ++cy)
+    if ((cx0 >= cx1) || (cy0 >= cy1))
     {
-        auto line = dstPixmap.getLine(cy) + dstRect.m_x;
+        return;
+    }
 
-        for (int cx = dstRect.m_x; cx < lx; ++cx)
+    for (int cy = cy0; cy < cy1; ++cy)
+    {
+        auto line = dstPixmap.getLine(cy) + cx0;
+
+        for (int cx = cx0; cx < cx1; ++cx)
         {
             *line = value;
             ++line;

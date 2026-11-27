@@ -137,6 +137,17 @@ public:
         }
     }
 
+    void updateWindowDefinition(const WindowDefinition &wd) override {
+        CallRecord rec;
+        rec.method = "updateWindowDefinition";
+        rec.windowDef = wd;
+        calls.push_back(rec);
+        currentWindowDef = wd;
+        if (wd.id < definedWindows.size()) {
+            windowDefs[wd.id] = wd;
+        }
+    }
+
     bool activePenAttributes(PenAttributes &penAttributes) override {
         penAttributes = currentPenAttrs;
         return true;
@@ -695,7 +706,8 @@ public:
                               addParity(0x11), addParity(0x40));
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("setCurrentWindow"));
-        CPPUNIT_ASSERT(mock->wasMethodCalled("defineWindow"));
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("defineWindow"));
+        CPPUNIT_ASSERT(mock->wasMethodCalled("updateWindowDefinition"));
     }
 
     void testProcess608Data_PAC_Row15()
@@ -922,6 +934,8 @@ public:
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("defineWindow"));
         CPPUNIT_ASSERT(mock->wasMethodCalled("setCurrentWindow"));
+
+        CPPUNIT_ASSERT(mock->wasMethodCalled("updateWindowDefinition"));
     }
 
     void testStateTransition_IdleToPopOn1()
@@ -990,7 +1004,8 @@ public:
                               addParity(0x11), addParity(0x40)); // PAC row 1
 
         CPPUNIT_ASSERT(mock->wasMethodCalled("clearWindows"));
-        CPPUNIT_ASSERT(mock->wasMethodCalled("defineWindow"));
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("defineWindow"));
+        CPPUNIT_ASSERT(mock->wasMethodCalled("updateWindowDefinition"));
     }
 
     void testStateTransition_PopOn1ToPopOn2()
@@ -1102,7 +1117,8 @@ public:
         parser->process608Data(CaptionChannel1, CcData::CEA_608_FIELD_1,
                               addParity(0x11), addParity(0x40)); // Row 1
 
-        CPPUNIT_ASSERT(mock->wasMethodCalled("defineWindow"));
+        CPPUNIT_ASSERT(!mock->wasMethodCalled("defineWindow"));
+        CPPUNIT_ASSERT(mock->wasMethodCalled("updateWindowDefinition"));
     }
 
     void testStyleAttributes_MidrowColorChange()
